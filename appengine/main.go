@@ -1,8 +1,6 @@
 package main
 
 import (
-	"archive/zip"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -19,13 +17,19 @@ import (
 
 // --- Data structures ---
 
+type File struct {
+	Name    string `json:"name"`
+	Content string `json:"content"`
+}
+
 type App struct {
-	AppID         string   `json:"appId"`
-	Version       string   `json:"version"`
-	Runtime       string   `json:"runtime"`
-	Tools         []string `json:"tools"`
-	ArtifactURI   string   `json:"artifactUri"`
-	SourceLanguage string  `json:"sourceLanguage,omitempty"`
+	AppID          string   `json:"appId"`
+	Version        string   `json:"version"`
+	Runtime        string   `json:"runtime"`
+	Tools          []string `json:"tools"`
+	ArtifactURI    string   `json:"artifactUri"`
+	SourceLanguage string   `json:"sourceLanguage,omitempty"`
+	Files          []File   `json:"files,omitempty"`
 }
 
 const registryFilePath = "app_registry.json"
@@ -101,7 +105,7 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 	allocateFunc := instance.GetFunc(store, "allocate")
 	deallocateFunc := instance.GetFunc(store, "deallocate")
 	getResultPtrFunc := instance.GetFunc(store, "get_result_ptr")
-	
+
 	if allocateFunc == nil || deallocateFunc == nil || getResultPtrFunc == nil {
 		http.Error(w, "module missing required functions (allocate, deallocate, get_result_ptr)", http.StatusInternalServerError)
 		return
@@ -166,64 +170,7 @@ type SubmitAppRequest struct {
 }
 
 type SubmitAppSrcRequest struct {
-	Spec           App    `json:"spec"`
-	SourceZipData  string `json:"sourceZipData"`
-}
-
-func submitAppHandler(w http.ResponseWriter, r *http.Request) {
-	var req SubmitAppRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-
-	// Decode base64 WASM data
-	wasmData, err := base64.StdEncoding.DecodeString(req.ArtifactData)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to decode base64 artifact data: %v", err), http.StatusBadRequest)
-		return
-	}
-
-	// Create app-specific directory structure
-	appDir := filepath.Join("artifacts", req.Spec.AppID)
-	filename := fmt.Sprintf("%s.wasm", req.Spec.Version)
-	artifactPath := filepath.Join(appDir, filename)
-
-	// Check if app version already exists
-	if _, err := os.Stat(artifactPath); err == nil {
-		http.Error(w, fmt.Sprintf("app %s version %s already exists", req.Spec.AppID, req.Spec.Version), http.StatusConflict)
-		return
-	}
-
-	// Create app directory if it doesn't exist
-	if err := os.MkdirAll(appDir, 0755); err != nil {
-		http.Error(w, fmt.Sprintf("failed to create app directory: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Save WASM file to app directory
-	if err := os.WriteFile(artifactPath, wasmData, 0644); err != nil {
-		http.Error(w, fmt.Sprintf("failed to save artifact: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	registryMutex.Lock()
-	registry[req.Spec.AppID] = &App{
-		AppID:       req.Spec.AppID,
-		Version:     req.Spec.Version,
-		Runtime:     req.Spec.Runtime,
-		Tools:       req.Spec.Tools,
-		ArtifactURI: artifactPath,
-	}
-	registryMutex.Unlock()
-
-	// Save registry to file
-	if err := saveRegistry(); err != nil {
-		log.Printf("Warning: failed to save registry: %v", err)
-	}
-
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{"status": "app submitted"})
+	Spec App `json:"spec"`
 }
 
 func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
@@ -239,10 +186,9 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode base64 zip data
-	zipData, err := base64.StdEncoding.DecodeString(req.SourceZipData)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("failed to decode base64 zip data: %v", err), http.StatusBadRequest)
+	// Validate that files are provided
+	if len(req.Spec.Files) == 0 {
+		http.Error(w, "no source files provided", http.StatusBadRequest)
 		return
 	}
 
@@ -250,7 +196,7 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	artifactsDir := filepath.Join("artifacts", req.Spec.AppID)
 	wasmFilename := fmt.Sprintf("%s.wasm", req.Spec.Version)
 	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
-	
+
 	if _, err := os.Stat(finalWasmPath); err == nil {
 		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", req.Spec.AppID, req.Spec.Version), http.StatusConflict)
 		return
@@ -258,7 +204,7 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Create temporary build directory structure
 	buildDir := filepath.Join("build", req.Spec.AppID, req.Spec.Version)
-	
+
 	// Clear build directory if it exists (allow resubmission for build issues)
 	if _, err := os.Stat(buildDir); err == nil {
 		if err := os.RemoveAll(buildDir); err != nil {
@@ -273,11 +219,11 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Extract zip file to build directory
-	if err := extractZipToDir(zipData, buildDir); err != nil {
+	// Create files from JSON spec
+	if err := createFilesFromSpec(req.Spec.Files, buildDir); err != nil {
 		// Clean up on error
 		os.RemoveAll(buildDir)
-		http.Error(w, fmt.Sprintf("failed to extract source code: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("failed to create source files: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -293,12 +239,13 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	// Register the app in the registry with the compiled WASM path
 	registryMutex.Lock()
 	registry[req.Spec.AppID] = &App{
-		AppID:         req.Spec.AppID,
-		Version:       req.Spec.Version,
-		Runtime:       req.Spec.Runtime,
-		Tools:         req.Spec.Tools,
-		ArtifactURI:   wasmPath,
+		AppID:          req.Spec.AppID,
+		Version:        req.Spec.Version,
+		Runtime:        req.Spec.Runtime,
+		Tools:          req.Spec.Tools,
+		ArtifactURI:    wasmPath,
 		SourceLanguage: req.Spec.SourceLanguage,
+		Files:          req.Spec.Files,
 	}
 	registryMutex.Unlock()
 
@@ -309,35 +256,19 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "app source submitted and compiled",
+		"status":   "app source submitted and compiled",
 		"wasmPath": wasmPath,
 	})
 }
 
-func extractZipToDir(zipData []byte, destDir string) error {
-	// Create a reader from the zip data
-	reader := strings.NewReader(string(zipData))
-	zipReader, err := zip.NewReader(reader, int64(len(zipData)))
-	if err != nil {
-		return fmt.Errorf("failed to create zip reader: %v", err)
-	}
-
-	// Extract files
-	for _, file := range zipReader.File {
+func createFilesFromSpec(files []File, destDir string) error {
+	for _, file := range files {
 		// Create the full file path
 		destPath := filepath.Join(destDir, file.Name)
-		
+
 		// Ensure the file path is within the destination directory (security check)
 		if !strings.HasPrefix(destPath, filepath.Clean(destDir)+string(os.PathSeparator)) {
-			return fmt.Errorf("invalid file path in zip: %s", file.Name)
-		}
-
-		if file.FileInfo().IsDir() {
-			// Create directory
-			if err := os.MkdirAll(destPath, file.FileInfo().Mode()); err != nil {
-				return fmt.Errorf("failed to create directory %s: %v", destPath, err)
-			}
-			continue
+			return fmt.Errorf("invalid file path: %s", file.Name)
 		}
 
 		// Create parent directory if it doesn't exist
@@ -345,23 +276,16 @@ func extractZipToDir(zipData []byte, destDir string) error {
 			return fmt.Errorf("failed to create parent directory for %s: %v", destPath, err)
 		}
 
-		// Open file in zip
-		fileReader, err := file.Open()
-		if err != nil {
-			return fmt.Errorf("failed to open file %s in zip: %v", file.Name, err)
-		}
-		defer fileReader.Close()
-
 		// Create destination file
-		destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.FileInfo().Mode())
+		destFile, err := os.Create(destPath)
 		if err != nil {
-			return fmt.Errorf("failed to create destination file %s: %v", destPath, err)
+			return fmt.Errorf("failed to create file %s: %v", destPath, err)
 		}
 		defer destFile.Close()
 
-		// Copy file contents
-		if _, err := io.Copy(destFile, fileReader); err != nil {
-			return fmt.Errorf("failed to copy file contents for %s: %v", file.Name, err)
+		// Write file contents
+		if _, err := destFile.WriteString(file.Content); err != nil {
+			return fmt.Errorf("failed to write contents to file %s: %v", file.Name, err)
 		}
 	}
 
@@ -391,7 +315,7 @@ func buildRustToWasm(sourceBuildDir string) (string, error) {
 	// Using cargo build with wasm32-unknown-unknown target
 	cmd := exec.Command("cargo", "build", "--target", "wasm32-unknown-unknown", "--release")
 	cmd.Dir = sourceBuildDir
-	
+
 	// Capture both stdout and stderr
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -401,15 +325,15 @@ func buildRustToWasm(sourceBuildDir string) (string, error) {
 	// Find the compiled WASM file in the target directory
 	// The WASM file should be at target/wasm32-unknown-unknown/release/<project_name>.wasm
 	targetDir := filepath.Join(sourceBuildDir, "target", "wasm32-unknown-unknown", "release")
-	
+
 	// Read Cargo.toml to get the project name
 	projectName, err := getProjectNameFromCargo(cargoPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get project name: %v", err)
 	}
-	
+
 	compiledWasmPath := filepath.Join(targetDir, projectName+".wasm")
-	
+
 	// Check if the compiled WASM file exists
 	if _, err := os.Stat(compiledWasmPath); os.IsNotExist(err) {
 		return "", fmt.Errorf("compiled WASM file not found at %s", compiledWasmPath)
@@ -506,7 +430,6 @@ func saveRegistry() error {
 	return nil
 }
 
-
 // --- Main ---
 
 func main() {
@@ -517,7 +440,6 @@ func main() {
 
 	http.HandleFunc("/list_apps", listAppsHandler)
 	http.HandleFunc("/run_tool", runToolHandler)
-	http.HandleFunc("/submit_app", submitAppHandler)
 	http.HandleFunc("/submit_app_src", submitAppSrcHandler)
 
 	port := "8080"

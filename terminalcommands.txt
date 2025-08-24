@@ -1,32 +1,25 @@
-base64 -i /Users/ericmaibach/Documents/repos/Arcadia/rustwasmexample/echo/target/wasm32-unknown-unknown/release/echo.wasm | tr -d '\n' | jq -Rs '{"spec": {"appId": "echo", "version": "1.0.0", "runtime": "wasm", "tools": ["echo"]}, "artifactData": .}' | curl -X POST -H "Content-Type: application/json" -d @- http://localhost:8080/submit_app
-
 # Command 1: Navigate to the project directory
 cd /Users/ericmaibach/Documents/repos/Arcadia
 
-# Command 2: Navigate to the Rust app directory and create the zip file
-cd rustwasmexample/echo
-zip -r ../../echo-src.zip src/ Cargo.toml Cargo.lock -x "target/*" "pkg/*"
-
-# Command 3: Go back to the main directory
-cd ../..
-
-# Command 4: Create the base64 encoded zip data for the API call
-base64 -i echo-src.zip > echo-src-base64.txt
-
-# Command 5: Submit to the API using curl with the base64 data
+# Command 2: Submit the Rust app source to the API with inline files
 curl -X POST http://localhost:8080/submit_app_src \
 -H "Content-Type: application/json" \
--d "{
-    \"spec\": {
-    \"appId\": \"echo\",
-    \"version\": \"1.0.0-src\",
-    \"runtime\": \"wasm\",
-    \"tools\": [\"echo\"],
-    \"sourceLanguage\": \"rust\"
-    },
-    \"sourceZipData\": \"$(cat echo-src-base64.txt | tr -d '\n')\"
-}"
-
-# Command 6: Clean up temporary files
-rm echo-src.zip
-rm echo-src-base64.txt
+-d '{
+    "spec": {
+        "appId": "echo",
+        "version": "1.0.0-src",
+        "runtime": "wasm",
+        "tools": ["echo"],
+        "sourceLanguage": "rust",
+        "files": [
+            {
+                "name": "Cargo.toml",
+                "content": "[package]\nname = \"echo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\n"
+            },
+            {
+                "name": "src/lib.rs", 
+                "content": "use std::alloc::{alloc, dealloc, Layout};\nuse std::ptr;\n\nstatic mut RESULT_PTR: *mut u8 = ptr::null_mut();\nstatic mut RESULT_LEN: usize = 0;\n\n#[no_mangle]\npub extern \"C\" fn allocate(len: usize) -> *mut u8 {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { alloc(layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn deallocate(ptr: *mut u8, len: usize) {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { dealloc(ptr, layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn run(input_ptr: *const u8, input_len: usize) -> usize {\n    let input = unsafe {\n        let slice = std::slice::from_raw_parts(input_ptr, input_len);\n        std::str::from_utf8_unchecked(slice)\n    };\n    \n    let output = format!(\"echo: {}\", input);\n    let output_bytes = output.into_bytes();\n    let output_len = output_bytes.len();\n    \n    unsafe {\n        if !RESULT_PTR.is_null() {\n            deallocate(RESULT_PTR, RESULT_LEN);\n        }\n        \n        RESULT_PTR = allocate(output_len);\n        RESULT_LEN = output_len;\n        \n        ptr::copy_nonoverlapping(output_bytes.as_ptr(), RESULT_PTR, output_len);\n        \n        output_len\n    }\n}\n\n#[no_mangle]\npub extern \"C\" fn get_result_ptr() -> *const u8 {\n    unsafe { RESULT_PTR }\n}\n"
+            }
+        ]
+    }
+}'
