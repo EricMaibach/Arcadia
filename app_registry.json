@@ -1,0 +1,12 @@
+{
+  "echo": {
+    "appId": "echo",
+    "version": "1.0.0-src",
+    "runtime": "wasm",
+    "tools": [
+      "echo"
+    ],
+    "artifactUri": "artifacts/echo/1.0.0-src.wasm",
+    "sourceLanguage": "rust"
+  }
+}

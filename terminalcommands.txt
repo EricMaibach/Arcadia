@@ -1,0 +1,32 @@
+base64 -i /Users/ericmaibach/Documents/repos/Arcadia/rustwasmexample/echo/target/wasm32-unknown-unknown/release/echo.wasm | tr -d '\n' | jq -Rs '{"spec": {"appId": "echo", "version": "1.0.0", "runtime": "wasm", "tools": ["echo"]}, "artifactData": .}' | curl -X POST -H "Content-Type: application/json" -d @- http://localhost:8080/submit_app
+
+# Command 1: Navigate to the project directory
+cd /Users/ericmaibach/Documents/repos/Arcadia
+
+# Command 2: Navigate to the Rust app directory and create the zip file
+cd rustwasmexample/echo
+zip -r ../../echo-src.zip src/ Cargo.toml Cargo.lock -x "target/*" "pkg/*"
+
+# Command 3: Go back to the main directory
+cd ../..
+
+# Command 4: Create the base64 encoded zip data for the API call
+base64 -i echo-src.zip > echo-src-base64.txt
+
+# Command 5: Submit to the API using curl with the base64 data
+curl -X POST http://localhost:8080/submit_app_src \
+-H "Content-Type: application/json" \
+-d "{
+    \"spec\": {
+    \"appId\": \"echo\",
+    \"version\": \"1.0.0-src\",
+    \"runtime\": \"wasm\",
+    \"tools\": [\"echo\"],
+    \"sourceLanguage\": \"rust\"
+    },
+    \"sourceZipData\": \"$(cat echo-src-base64.txt | tr -d '\n')\"
+}"
+
+# Command 6: Clean up temporary files
+rm echo-src.zip
+rm echo-src-base64.txt
