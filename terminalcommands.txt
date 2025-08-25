@@ -1,7 +1,7 @@
 # Command 1: Navigate to the project directory
 cd /Users/ericmaibach/Documents/repos/Arcadia
 
-# Command 2: Submit the Rust app source to the API with inline files
+# Command 2: Submit the Rust app source to the API with Base64 encoded files
 curl -X POST http://localhost:8080/submit_app_src \
 -H "Content-Type: application/json" \
 -d '{
@@ -14,12 +14,20 @@ curl -X POST http://localhost:8080/submit_app_src \
         "files": [
             {
                 "name": "Cargo.toml",
-                "content": "[package]\nname = \"echo\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]\n\n[dependencies]\n"
+                "content": "W3BhY2thZ2VdCm5hbWUgPSAiZWNobyIKdmVyc2lvbiA9ICIwLjEuMCIKZWRpdGlvbiA9ICIyMDIxIgoKW2xpYl0KY3JhdGUtdHlwZSA9IFsiY2R5bGliIl0KCltkZXBlbmRlbmNpZXNdCgo=",
+                "encoding": "base64"
             },
             {
                 "name": "src/lib.rs", 
-                "content": "use std::alloc::{alloc, dealloc, Layout};\nuse std::ptr;\n\nstatic mut RESULT_PTR: *mut u8 = ptr::null_mut();\nstatic mut RESULT_LEN: usize = 0;\n\n#[no_mangle]\npub extern \"C\" fn allocate(len: usize) -> *mut u8 {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { alloc(layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn deallocate(ptr: *mut u8, len: usize) {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { dealloc(ptr, layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn run(input_ptr: *const u8, input_len: usize) -> usize {\n    let input = unsafe {\n        let slice = std::slice::from_raw_parts(input_ptr, input_len);\n        std::str::from_utf8_unchecked(slice)\n    };\n    \n    let output = format!(\"echo: {}\", input);\n    let output_bytes = output.into_bytes();\n    let output_len = output_bytes.len();\n    \n    unsafe {\n        if !RESULT_PTR.is_null() {\n            deallocate(RESULT_PTR, RESULT_LEN);\n        }\n        \n        RESULT_PTR = allocate(output_len);\n        RESULT_LEN = output_len;\n        \n        ptr::copy_nonoverlapping(output_bytes.as_ptr(), RESULT_PTR, output_len);\n        \n        output_len\n    }\n}\n\n#[no_mangle]\npub extern \"C\" fn get_result_ptr() -> *const u8 {\n    unsafe { RESULT_PTR }\n}\n"
+                "content": "dXNlIHN0ZDo6YWxsb2M6OnthbGxvYywgZGVhbGxvYywgTGF5b3V0fTsKdXNlIHN0ZDo6cHRyOwoKc3RhdGljIG11dCBSRVNVTFRfUFRSOiAqbXV0IHU4ID0gcHRyOjpudWxsX211dCgpOwpzdGF0aWMgbXV0IFJFU1VMVF9MRU46IHVzaXplID0gMDsKCiNbbm9fbWFuZ2xlXQpwdWIgZXh0ZXJuICJDIiBmbiBhbGxvY2F0ZShsZW46IHVzaXplKSAtPiAqbXV0IHU4IHsKICAgIGxldCBsYXlvdXQgPSBMYXlvdXQ6OmZyb21fc2l6ZV9hbGlnbihsZW4sIDEpLnVud3JhcCgpOwogICAgdW5zYWZlIHsgYWxsb2MobGF5b3V0KSB9Cn0KCiNbbm9fbWFuZ2xlXQpwdWIgZXh0ZXJuICJDIiBmbiBkZWFsbG9jYXRlKHB0cjogKm11dCB1OCwgbGVuOiB1c2l6ZSkgewogICAgbGV0IGxheW91dCA9IExheW91dDo6ZnJvbV9zaXplX2FsaWduKGxlbiwgMSkudW53cmFwKCk7CiAgICB1bnNhZmUgeyBkZWFsbG9jKHB0ciwgbGF5b3V0KSB9Cn0KCiNbbm9fbWFuZ2xlXQpwdWIgZXh0ZXJuICJDIiBmbiBydW4oaW5wdXRfcHRyOiAqY29uc3QgdTgsIGlucHV0X2xlbjogdXNpemUpIC0+IHVzaXplIHsKICAgIGxldCBpbnB1dCA9IHVuc2FmZSB7CiAgICAgICAgbGV0IHNsaWNlID0gc3RkOjpzbGljZTo6ZnJvbV9yYXdfcGFydHMoaW5wdXRfcHRyLCBpbnB1dF9sZW4pOwogICAgICAgIHN0ZDo6c3RyOjpmcm9tX3V0ZjhfdW5jaGVja2VkKHNsaWNlKQogICAgfTsKICAgIAogICAgbGV0IG91dHB1dCA9IGZvcm1hdCEoImVjaG86IHt9IiwgaW5wdXQpOwogICAgbGV0IG91dHB1dF9ieXRlcyA9IG91dHB1dC5pbnRvX2J5dGVzKCk7CiAgICBsZXQgb3V0cHV0X2xlbiA9IG91dHB1dF9ieXRlcy5sZW4oKTsKICAgIAogICAgdW5zYWZlIHsKICAgICAgICBpZiAhUkVTVUxUX1BUUi5pc19udWxsKCkgewogICAgICAgICAgICBkZWFsbG9jYXRlKFJFU1VMVF9QVFIsIFJFU1VMVF9MRU4pOwogICAgICAgIH0KICAgICAgICAKICAgICAgICBSRVNVTFRfUFRSID0gYWxsb2NhdGUob3V0cHV0X2xlbik7CiAgICAgICAgUkVTVUxUX0xFTiA9IG91dHB1dF9sZW47CiAgICAgICAgCiAgICAgICAgcHRyOjpjb3B5X25vbm92ZXJsYXBwaW5nKG91dHB1dF9ieXRlcy5hc19wdHIoKSwgUkVTVUxUX1BUUiwgb3V0cHV0X2xlbik7CiAgICAgICAgCiAgICAgICAgb3V0cHV0X2xlbgogICAgfQp9CgojW25vX21hbmdsZV0KcHViIGV4dGVybiAiQyIgZm4gZ2V0X3Jlc3VsdF9wdHIoKSAtPiAqY29uc3QgdTggewogICAgdW5zYWZlIHsgUkVTVUxUX1BUUiB9Cn0K",
+                "encoding": "base64"
             }
         ]
     }
 }'
+
+# Alternative: If you want to generate the Base64 content dynamically
+# echo "# Generate Base64 encoded Cargo.toml:"
+# base64 -i rustwasmexample/echo/Cargo.toml
+# echo "# Generate Base64 encoded src/lib.rs:"
+# base64 -i rustwasmexample/echo/src/lib.rs

@@ -1,0 +1,24 @@
+{
+  "hello": {
+    "appId": "hello",
+    "version": "1.0",
+    "runtime": "wasm",
+    "tools": [
+      "greet"
+    ],
+    "artifactUri": "artifacts/hello/1.0.wasm",
+    "sourceLanguage": "rust",
+    "files": [
+      {
+        "name": "Cargo.toml",
+        "content": "[package]\nname = \"hello\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\ncrate-type = [\"cdylib\"]",
+        "encoding": "plain"
+      },
+      {
+        "name": "src/lib.rs",
+        "content": "use std::alloc::{alloc, dealloc, Layout};\nuse std::ptr;\n\nstatic mut RESULT_PTR: *mut u8 = ptr::null_mut();\nstatic mut RESULT_LEN: usize = 0;\n\n#[no_mangle]\npub extern \"C\" fn allocate(len: usize) -\u003e *mut u8 {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { alloc(layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn deallocate(ptr: *mut u8, len: usize) {\n    let layout = Layout::from_size_align(len, 1).unwrap();\n    unsafe { dealloc(ptr, layout) }\n}\n\n#[no_mangle]\npub extern \"C\" fn run(input_ptr: *const u8, input_len: usize) -\u003e usize {\n    let input = unsafe {\n        let slice = std::slice::from_raw_parts(input_ptr, input_len);\n        std::str::from_utf8_unchecked(slice)\n    };\n    \n    let output = format!(\"Hello {}\", input);\n    let output_bytes = output.into_bytes();\n    let output_len = output_bytes.len();\n    \n    unsafe {\n        if !RESULT_PTR.is_null() {\n            deallocate(RESULT_PTR, RESULT_LEN);\n        }\n        RESULT_PTR = allocate(output_len);\n        RESULT_LEN = output_len;\n        ptr::copy_nonoverlapping(output_bytes.as_ptr(), RESULT_PTR, output_len);\n        output_len\n    }\n}\n\n#[no_mangle]\npub extern \"C\" fn get_result_ptr() -\u003e *const u8 {\n    unsafe { RESULT_PTR }\n}",
+        "encoding": "plain"
+      }
+    ]
+  }
+}

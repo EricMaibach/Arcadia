@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -18,8 +19,9 @@ import (
 // --- Data structures ---
 
 type File struct {
-	Name    string `json:"name"`
-	Content string `json:"content"`
+	Name     string `json:"name"`
+	Content  string `json:"content"`
+	Encoding string `json:"encoding,omitempty"` // "base64" or "plain"
 }
 
 type App struct {
@@ -283,8 +285,22 @@ func createFilesFromSpec(files []File, destDir string) error {
 		}
 		defer destFile.Close()
 
+		// Decode content based on encoding
+		var content string
+		if file.Encoding == "base64" {
+			// Decode Base64 content
+			decodedBytes, err := base64.StdEncoding.DecodeString(file.Content)
+			if err != nil {
+				return fmt.Errorf("failed to decode Base64 content for file %s: %v", file.Name, err)
+			}
+			content = string(decodedBytes)
+		} else {
+			// Plain text content (default)
+			content = file.Content
+		}
+
 		// Write file contents
-		if _, err := destFile.WriteString(file.Content); err != nil {
+		if _, err := destFile.WriteString(content); err != nil {
 			return fmt.Errorf("failed to write contents to file %s: %v", file.Name, err)
 		}
 	}
