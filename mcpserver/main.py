@@ -315,7 +315,33 @@ async def handle_submit_app_source(
         json=payload,
         headers={"Content-Type": "application/json"}
     )
-    response.raise_for_status()
+    
+    # Check for HTTP errors and provide detailed error information
+    if not response.is_success:
+        error_text = f"Application Submission Failed:\n"
+        error_text += f"HTTP Status: {response.status_code} {response.reason_phrase}\n"
+        
+        try:
+            # Try to parse error response as JSON
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                if error_data.get('error'):
+                    error_text += f"Error: {error_data['error']}\n"
+                if error_data.get('message'):
+                    error_text += f"Message: {error_data['message']}\n"
+                if error_data.get('details'):
+                    error_text += f"Details: {error_data['details']}\n"
+                # Include any other fields from the error response
+                for key, value in error_data.items():
+                    if key not in ['error', 'message', 'details']:
+                        error_text += f"{key}: {value}\n"
+            else:
+                error_text += f"Error Response: {error_data}\n"
+        except Exception:
+            # If JSON parsing fails, include the raw response text
+            error_text += f"Response Text: {response.text}\n"
+        
+        return [types.TextContent(type="text", text=error_text)]
     
     result = response.json()
     
