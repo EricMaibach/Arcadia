@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"sync"
 
 	"github.com/bytecodealliance/wasmtime-go"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // --- Data structures ---
@@ -40,6 +42,8 @@ var (
 	registry      = make(map[string]*App)
 	registryMutex sync.RWMutex
 	wasmEngine    = wasmtime.NewEngine()
+	db            *sql.DB
+	dbMutex       sync.RWMutex
 )
 
 // --- REST Handlers ---
@@ -91,6 +95,20 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	linker := wasmtime.NewLinker(wasmEngine)
+
+	// Define database host functions that WASM can call
+	linker.DefineFunc(store, "env", "db_query", func(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) int32 {
+		return dbQuery(caller, queryPtr, queryLen, resultPtrPtr)
+	})
+
+	linker.DefineFunc(store, "env", "db_exec", func(caller *wasmtime.Caller, stmtPtr, stmtLen int32) int32 {
+		return dbExec(caller, stmtPtr, stmtLen)
+	})
+
+	linker.DefineFunc(store, "env", "db_prepared_query", func(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr int32) int32 {
+		return dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
+	})
+
 	instance, err := linker.Instantiate(store, module)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("failed to instantiate module: %v", err), http.StatusInternalServerError)
@@ -401,6 +419,219 @@ func copyFile(src, dst string) error {
 	return err
 }
 
+// --- Database Host Functions for WASM ---
+
+// dbQuery executes a SQL query and returns JSON results
+func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) int32 {
+	// Get memory instance
+	memory := caller.GetExport("memory").Memory()
+	data := memory.UnsafeData(caller)
+
+	// Read query string from WASM memory
+	queryBytes := data[queryPtr : queryPtr+queryLen]
+	query := string(queryBytes)
+
+	dbMutex.RLock()
+	defer dbMutex.RUnlock()
+
+	if db == nil {
+		return -1 // Database not initialized
+	}
+
+	// Execute query
+	rows, err := db.Query(query)
+	if err != nil {
+		log.Printf("Database query error: %v", err)
+		return -2 // Query error
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return -3 // Column error
+	}
+
+	// Collect results
+	var results []map[string]interface{}
+	for rows.Next() {
+		// Create a slice to hold column values
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			log.Printf("Row scan error: %v", err)
+			continue
+		}
+
+		// Convert to map
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	// Marshal results to JSON
+	jsonBytes, err := json.Marshal(results)
+	if err != nil {
+		return -4 // JSON marshal error
+	}
+
+	// Allocate memory in WASM for result
+	allocateFunc := caller.GetExport("allocate").Func()
+	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
+	if err != nil {
+		return -5 // Allocation error
+	}
+	resultPtr := resultLenResult.(int32)
+
+	// Copy result to WASM memory
+	copy(data[resultPtr:resultPtr+int32(len(jsonBytes))], jsonBytes)
+
+	// Store result pointer in the provided location
+	resultPtrPtrBytes := data[resultPtrPtr : resultPtrPtr+4]
+	resultPtrPtrBytes[0] = byte(resultPtr)
+	resultPtrPtrBytes[1] = byte(resultPtr >> 8)
+	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
+	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
+
+	return int32(len(jsonBytes)) // Return result length
+}
+
+// dbExec executes a SQL statement (INSERT, UPDATE, DELETE)
+func dbExec(caller *wasmtime.Caller, stmtPtr, stmtLen int32) int32 {
+	// Get memory instance
+	memory := caller.GetExport("memory").Memory()
+	data := memory.UnsafeData(caller)
+
+	// Read statement string from WASM memory
+	stmtBytes := data[stmtPtr : stmtPtr+stmtLen]
+	stmt := string(stmtBytes)
+
+	dbMutex.Lock()
+	defer dbMutex.Unlock()
+
+	if db == nil {
+		return -1 // Database not initialized
+	}
+
+	// Execute statement
+	result, err := db.Exec(stmt)
+	if err != nil {
+		log.Printf("Database exec error: %v", err)
+		return -2 // Execution error
+	}
+
+	// Return number of affected rows
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return -3 // Could not get affected rows
+	}
+
+	return int32(rowsAffected)
+}
+
+// dbPreparedQuery executes a prepared statement with parameters
+func dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr int32) int32 {
+	// Get memory instance
+	memory := caller.GetExport("memory").Memory()
+	data := memory.UnsafeData(caller)
+
+	// Read statement string
+	stmtBytes := data[stmtPtr : stmtPtr+stmtLen]
+	stmt := string(stmtBytes)
+
+	// Read parameters JSON
+	paramsBytes := data[paramsPtr : paramsPtr+paramsLen]
+	var params []interface{}
+	if paramsLen > 0 {
+		if err := json.Unmarshal(paramsBytes, &params); err != nil {
+			return -1 // Parameter parsing error
+		}
+	}
+
+	dbMutex.RLock()
+	defer dbMutex.RUnlock()
+
+	if db == nil {
+		return -2 // Database not initialized
+	}
+
+	// Execute prepared statement
+	rows, err := db.Query(stmt, params...)
+	if err != nil {
+		log.Printf("Database prepared query error: %v", err)
+		return -3 // Query error
+	}
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return -4 // Column error
+	}
+
+	// Collect results (same as dbQuery)
+	var results []map[string]interface{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			continue
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	// Marshal results to JSON
+	jsonBytes, err := json.Marshal(results)
+	if err != nil {
+		return -5 // JSON marshal error
+	}
+
+	// Allocate memory in WASM for result
+	allocateFunc := caller.GetExport("allocate").Func()
+	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
+	if err != nil {
+		return -6 // Allocation error
+	}
+	resultPtr := resultLenResult.(int32)
+
+	// Copy result to WASM memory
+	copy(data[resultPtr:resultPtr+int32(len(jsonBytes))], jsonBytes)
+
+	// Store result pointer
+	resultPtrPtrBytes := data[resultPtrPtr : resultPtrPtr+4]
+	resultPtrPtrBytes[0] = byte(resultPtr)
+	resultPtrPtrBytes[1] = byte(resultPtr >> 8)
+	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
+	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
+
+	return int32(len(jsonBytes))
+}
+
 func loadRegistry() error {
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
@@ -446,9 +677,111 @@ func saveRegistry() error {
 	return nil
 }
 
+// --- Database Management ---
+
+func initDatabase() error {
+	var err error
+
+	// Create data directory if it doesn't exist
+	if err := os.MkdirAll("data", 0755); err != nil {
+		return fmt.Errorf("failed to create data directory: %v", err)
+	}
+
+	// Open SQLite database
+	db, err = sql.Open("sqlite3", "data/arcadia.db")
+	if err != nil {
+		return fmt.Errorf("failed to open database: %v", err)
+	}
+
+	// Test the connection
+	if err := db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %v", err)
+	}
+
+	// Enable WAL mode for better concurrency
+	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("Warning: failed to enable WAL mode: %v", err)
+	}
+
+	// Enable foreign keys
+	if _, err := db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
+		log.Printf("Warning: failed to enable foreign keys: %v", err)
+	}
+
+	// Create default tables for app data storage
+	if err := createDefaultTables(); err != nil {
+		return fmt.Errorf("failed to create default tables: %v", err)
+	}
+
+	log.Println("Database initialized successfully")
+	return nil
+}
+
+func createDefaultTables() error {
+	queries := []string{
+		// App data table - for general key-value storage per app
+		`CREATE TABLE IF NOT EXISTS app_data (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			app_id TEXT NOT NULL,
+			key TEXT NOT NULL,
+			value TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			UNIQUE(app_id, key)
+		);`,
+
+		// App logs table - for application logging
+		`CREATE TABLE IF NOT EXISTS app_logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			app_id TEXT NOT NULL,
+			level TEXT NOT NULL,
+			message TEXT NOT NULL,
+			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+
+		// Sessions table - for user session management
+		`CREATE TABLE IF NOT EXISTS sessions (
+			id TEXT PRIMARY KEY,
+			app_id TEXT NOT NULL,
+			user_data TEXT,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			expires_at DATETIME,
+			last_accessed DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+
+		// Create indexes for better performance
+		`CREATE INDEX IF NOT EXISTS idx_app_data_app_id ON app_data(app_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_logs_app_id ON app_logs(app_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_logs_timestamp ON app_logs(timestamp);`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_app_id ON sessions(app_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);`,
+	}
+
+	for _, query := range queries {
+		if _, err := db.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute query: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func closeDatabase() {
+	if db != nil {
+		db.Close()
+		log.Println("Database connection closed")
+	}
+}
+
 // --- Main ---
 
 func main() {
+	// Initialize database
+	if err := initDatabase(); err != nil {
+		log.Fatalf("Failed to initialize database: %v", err)
+	}
+	defer closeDatabase()
+
 	// Load registry from file on startup
 	if err := loadRegistry(); err != nil {
 		log.Fatalf("Failed to load registry: %v", err)

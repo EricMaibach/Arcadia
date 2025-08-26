@@ -159,6 +159,96 @@ pub extern "C" fn get_result_ptr() -> *const u8 {
 }
 ```
 
+DATABASE ACCESS:
+Your WASM application has access to a SQLite database through host functions. The Go runtime provides these database functions that your Rust code can call:
+
+AVAILABLE DATABASE HOST FUNCTIONS:
+1. `db_query(query_ptr: *const u8, query_len: usize, result_ptr_ptr: *mut *const u8) -> i32`
+   - Executes SELECT queries and returns JSON results
+   - Returns result length on success, negative error code on failure
+   - Result JSON is allocated in WASM memory and pointer stored at result_ptr_ptr
+
+2. `db_exec(stmt_ptr: *const u8, stmt_len: usize) -> i32`
+   - Executes INSERT/UPDATE/DELETE statements
+   - Returns number of affected rows on success, negative error code on failure
+
+3. `db_prepared_query(stmt_ptr: *const u8, stmt_len: usize, params_ptr: *const u8, params_len: usize, result_ptr_ptr: *mut *const u8) -> i32`
+   - Executes prepared statements with JSON parameters
+   - Returns result length on success, negative error code on failure
+
+DATABASE SCHEMA:
+The runtime provides these default tables:
+- `app_data`: Key-value storage per app (app_id, key, value, timestamps)
+- `app_logs`: Application logging (app_id, level, message, timestamp) 
+- `sessions`: User session management (id, app_id, user_data, timestamps)
+
+You can also create custom tables using db_exec with CREATE TABLE statements.
+
+DATABASE USAGE EXAMPLE:
+```rust
+// Declare external database functions
+extern "C" {
+    fn db_query(query_ptr: *const u8, query_len: usize, result_ptr_ptr: *mut *const u8) -> i32;
+    fn db_exec(stmt_ptr: *const u8, stmt_len: usize) -> i32;
+}
+
+// Helper function to execute a query
+fn execute_query(query: &str) -> Result<String, i32> {
+    let query_bytes = query.as_bytes();
+    let mut result_ptr: *const u8 = std::ptr::null();
+    
+    let result = unsafe {
+        db_query(
+            query_bytes.as_ptr(),
+            query_bytes.len(),
+            &mut result_ptr as *mut *const u8,
+        )
+    };
+    
+    if result < 0 {
+        return Err(result); // Return error code
+    }
+    
+    // Read JSON result from allocated memory
+    let json_result = unsafe {
+        let slice = std::slice::from_raw_parts(result_ptr, result as usize);
+        String::from_utf8_unchecked(slice.to_vec())
+    };
+    
+    // Don't forget to deallocate the result memory
+    unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    
+    Ok(json_result)
+}
+
+// Example usage in your run function
+fn example_database_usage(app_id: &str) {
+    // Insert data
+    let insert_sql = format!("INSERT OR REPLACE INTO app_data (app_id, key, value) VALUES ('{}', 'user_count', '42')", app_id);
+    let rows_affected = unsafe { db_exec(insert_sql.as_ptr(), insert_sql.len()) };
+    
+    // Query data
+    let query_sql = format!("SELECT key, value FROM app_data WHERE app_id = '{}'", app_id);
+    match execute_query(&query_sql) {
+        Ok(json_result) => {
+            // json_result contains array of {key: "user_count", value: "42"}
+            println!("Query result: {}", json_result);
+        },
+        Err(error_code) => {
+            println!("Query failed with error: {}", error_code);
+        }
+    }
+}
+```
+
+ERROR CODES:
+- -1: Database not initialized
+- -2: Query/execution error  
+- -3: Column/result processing error
+- -4: JSON marshaling error
+- -5: Memory allocation error
+- -6: Parameter parsing error
+
 The application will be compiled using `cargo build --target wasm32-unknown-unknown --release` and registered for tool execution.""", 
             inputSchema={
                 "type": "object",
