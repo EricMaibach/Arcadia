@@ -33,7 +33,7 @@ go.work.sum
 
 
 # App Engine working files
-#./appengine/artifacts
-#./appengine/build
-#./appengine/data
-#./appengine/app_registry.json
+appengine/artifacts
+appengine/build
+appengine/data
+appengine/app_registry.json
