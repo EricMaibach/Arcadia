@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,9 +20,8 @@ import (
 // --- Data structures ---
 
 type File struct {
-	Name     string `json:"name"`
-	Content  string `json:"content"`
-	Encoding string `json:"encoding,omitempty"` // "base64" or "plain"
+	Name    string `json:"name"`
+	Content string `json:"content"`
 }
 
 type App struct {
@@ -184,46 +182,37 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(output)
 }
 
-type SubmitAppRequest struct {
-	Spec         App    `json:"spec"`
-	ArtifactData string `json:"artifactData"`
-}
-
-type SubmitAppSrcRequest struct {
-	Spec App `json:"spec"`
-}
-
 func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
-	var req SubmitAppSrcRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var app App
+	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Validate source language
-	if strings.ToLower(req.Spec.SourceLanguage) != "rust" {
+	if strings.ToLower(app.SourceLanguage) != "rust" {
 		http.Error(w, "only Rust source code is supported", http.StatusBadRequest)
 		return
 	}
 
 	// Validate that files are provided
-	if len(req.Spec.Files) == 0 {
+	if len(app.Files) == 0 {
 		http.Error(w, "no source files provided", http.StatusBadRequest)
 		return
 	}
 
 	// Check if compiled WASM already exists in artifacts
-	artifactsDir := filepath.Join("artifacts", req.Spec.AppID)
-	wasmFilename := fmt.Sprintf("%s.wasm", req.Spec.Version)
+	artifactsDir := filepath.Join("artifacts", app.AppID)
+	wasmFilename := fmt.Sprintf("%s.wasm", app.Version)
 	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
 
 	if _, err := os.Stat(finalWasmPath); err == nil {
-		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", req.Spec.AppID, req.Spec.Version), http.StatusConflict)
+		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", app.AppID, app.Version), http.StatusConflict)
 		return
 	}
 
 	// Create temporary build directory structure
-	buildDir := filepath.Join("build", req.Spec.AppID, req.Spec.Version)
+	buildDir := filepath.Join("build", app.AppID, app.Version)
 
 	// Clear build directory if it exists (allow resubmission for build issues)
 	if _, err := os.Stat(buildDir); err == nil {
@@ -240,7 +229,7 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create files from JSON spec
-	if err := createFilesFromSpec(req.Spec.Files, buildDir); err != nil {
+	if err := createFilesFromSpec(app.Files, buildDir); err != nil {
 		// Clean up on error
 		os.RemoveAll(buildDir)
 		http.Error(w, fmt.Sprintf("failed to create source files: %v", err), http.StatusInternalServerError)
@@ -258,14 +247,14 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Register the app in the registry with the compiled WASM path
 	registryMutex.Lock()
-	registry[req.Spec.AppID] = &App{
-		AppID:          req.Spec.AppID,
-		Version:        req.Spec.Version,
-		Runtime:        req.Spec.Runtime,
-		Tools:          req.Spec.Tools,
+	registry[app.AppID] = &App{
+		AppID:          app.AppID,
+		Version:        app.Version,
+		Runtime:        app.Runtime,
+		Tools:          app.Tools,
 		ArtifactURI:    wasmPath,
-		SourceLanguage: req.Spec.SourceLanguage,
-		Files:          req.Spec.Files,
+		SourceLanguage: app.SourceLanguage,
+		Files:          app.Files,
 	}
 	registryMutex.Unlock()
 
@@ -303,22 +292,8 @@ func createFilesFromSpec(files []File, destDir string) error {
 		}
 		defer destFile.Close()
 
-		// Decode content based on encoding
-		var content string
-		if file.Encoding == "base64" {
-			// Decode Base64 content
-			decodedBytes, err := base64.StdEncoding.DecodeString(file.Content)
-			if err != nil {
-				return fmt.Errorf("failed to decode Base64 content for file %s: %v", file.Name, err)
-			}
-			content = string(decodedBytes)
-		} else {
-			// Plain text content (default)
-			content = file.Content
-		}
-
-		// Write file contents
-		if _, err := destFile.WriteString(content); err != nil {
+		// Write file contents as raw text
+		if _, err := destFile.WriteString(file.Content); err != nil {
 			return fmt.Errorf("failed to write contents to file %s: %v", file.Name, err)
 		}
 	}

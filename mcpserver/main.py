@@ -4,7 +4,6 @@ MCP Server that exposes the Arcadia App Engine REST APIs.
 """
 
 import asyncio
-import json
 import logging
 import os
 from typing import Any, Dict, List
@@ -72,41 +71,49 @@ async def handle_list_tools() -> List[types.Tool]:
         ),
         types.Tool(
             name="submit_app_source",
-            description="""Submit source code to compile and register a new application. Currently only the Rust programming language is supported. The application will be compiled into a server-side WASM application that runs on a Golang runtime.
+            description="""Submit Rust source code to compile and register a new WASM application.
 
-REQUIRED WASM INTERFACE:
-Your Rust application MUST export these exact C functions for the WASM runtime to work:
+QUICK START:
+Provide these required fields:
+- appId: Unique app identifier (e.g., "my-app")  
+- version: App version (e.g., "1.0.0")
+- runtime: Must be "wasm"
+- tools: Array of tool names your app provides (e.g., ["calculator"])
+- sourceLanguage: Must be "rust"
+- files: Array of source files with "name" and "content" fields
 
-1. `allocate(len: usize) -> *mut u8` - Allocate memory in WASM
-2. `deallocate(ptr: *mut u8, len: usize)` - Deallocate memory in WASM  
-3. `run(input_ptr: *const u8, input_len: usize) -> usize` - Main execution function that takes JSON input as pointer/length and returns result length
-4. `get_result_ptr() -> *const u8` - Returns pointer to result data
+CRITICAL RUST REQUIREMENTS:
+Your Rust app MUST export these C functions:
+- `allocate(len: usize) -> *mut u8`
+- `deallocate(ptr: *mut u8, len: usize)` 
+- `run(input_ptr: *const u8, input_len: usize) -> usize`
+- `get_result_ptr() -> *const u8`
 
-RUST PROJECT STRUCTURE:
-- Must include a `Cargo.toml` with `crate-type = ["cdylib"]` in [lib] section
-- Must have a `src/lib.rs` file (not main.rs) containing the exported functions
-- The exported functions must use `#[no_mangle]` and `pub extern "C"`
+Each function needs `#[no_mangle]` and `pub extern "C"`.
 
-ENCODING REQUIREMENTS TO AVOID JSON ESCAPING ISSUES:
-- STRONGLY RECOMMENDED: Base64 encode all file contents to prevent JSON escaping problems
-- Set "encoding": "base64" for each file when using Base64 (this is the default)  
-- This completely eliminates shell special characters (!@#$%^&*) causing JSON parsing errors
-- Plain text is supported but may cause issues with special characters
+REQUIRED PROJECT STRUCTURE:
+- `Cargo.toml` with `crate-type = ["cdylib"]` in [lib] section
+- `src/lib.rs` (not main.rs) with the exported functions
 
-EXAMPLES:
-Base64 encoded (RECOMMENDED):
-{
-  "name": "src/lib.rs",
-  "content": "dXNlIHN0ZDo6YWxsb2M6Ont7YWxsb2MsIGRlYWxsb2MsIExheW91dH07",
-  "encoding": "base64"
-}
+FILE ENCODING:
+Files must be raw text with proper JSON escaping:
+- Newlines: \\n
+- Quotes: \\"  
+- Backslashes: \\\\
 
-Plain text (use with caution):
-{
-  "name": "Cargo.toml", 
-  "content": "[package]\\nname = \\"hello\\"\\nversion = \\"0.1.0\\"",
-  "encoding": "plain"
-}
+BASIC EXAMPLE:
+```
+files: [
+  {
+    "name": "Cargo.toml",
+    "content": "[package]\\nname = \\"hello\\"\\nversion = \\"0.1.0\\"\\n\\n[lib]\\ncrate-type = [\\"cdylib\\"]"
+  },
+  {
+    "name": "src/lib.rs", 
+    "content": "use std::alloc::{alloc, dealloc, Layout};\\n\\n#[no_mangle]\\npub extern \\"C\\" fn allocate(len: usize) -> *mut u8 { ... }"
+  }
+]
+```
 
 EXAMPLE MINIMAL IMPLEMENTATION (with safe JSON escaping):
 ```rust
@@ -253,49 +260,41 @@ The application will be compiled using `cargo build --target wasm32-unknown-unkn
             inputSchema={
                 "type": "object",
                 "properties": {
-                    "spec": {
-                        "type": "object",
-                        "description": "Application specification that matches the Go server's SubmitAppSrcRequest.Spec struct",
-                        "properties": {
-                            "appId": {
-                                "type": "string",
-                                "description": "Unique identifier for the application (camelCase, NOT app_id)"
+                    "appId": {
+                        "type": "string",
+                        "description": "Unique identifier for the application (camelCase, NOT app_id)"
+                    },
+                    "version": {
+                        "type": "string", 
+                        "description": "Version of the application"
+                    },
+                    "runtime": {
+                        "type": "string",
+                        "description": "Runtime for the application (must be 'wasm')"
+                    },
+                    "tools": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "List of tool names this application provides"
+                    },
+                    "sourceLanguage": {
+                        "type": "string",
+                        "description": "Source language - must be 'rust' (camelCase, NOT source_language)"
+                    },
+                    "files": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "description": "File name with path"},
+                                "content": {"type": "string", "description": "File contents as raw text"}
                             },
-                            "version": {
-                                "type": "string", 
-                                "description": "Version of the application"
-                            },
-                            "runtime": {
-                                "type": "string",
-                                "description": "Runtime for the application (must be 'wasm')"
-                            },
-                            "tools": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "List of tool names this application provides"
-                            },
-                            "sourceLanguage": {
-                                "type": "string",
-                                "description": "Source language - must be 'rust' (camelCase, NOT source_language)"
-                            },
-                            "files": {
-                                "type": "array",
-                                "items": {
-                                    "type": "object",
-                                    "properties": {
-                                        "name": {"type": "string", "description": "File name with path"},
-                                        "content": {"type": "string", "description": "File contents (Base64 encoded recommended to avoid JSON escaping issues)"},
-                                        "encoding": {"type": "string", "description": "Content encoding format", "enum": ["base64", "plain"], "default": "base64"}
-                                    },
-                                    "required": ["name", "content"]
-                                },
-                                "description": "Source files for the application"
-                            }
+                            "required": ["name", "content"]
                         },
-                        "required": ["appId", "version", "runtime", "tools", "sourceLanguage", "files"]
+                        "description": "Source files for the application"
                     }
                 },
-                "required": ["spec"]
+                "required": ["appId", "version", "runtime", "tools", "sourceLanguage", "files"]
             }
         )
     ]
@@ -395,10 +394,17 @@ async def handle_submit_app_source(
     arguments: Dict[str, Any]
 ) -> List[types.TextContent]:
     """Handle the submit_app_source tool."""
-    # The arguments now contain the spec directly
-    payload = {
-        "spec": arguments["spec"]
-    }
+    # Validate that all files are raw text only
+    if "files" in arguments:
+        for file in arguments["files"]:
+            if "encoding" in file:
+                return [types.TextContent(
+                    type="text", 
+                    text="Error: Files must be submitted as raw text only. The 'encoding' field is not supported."
+                )]
+    
+    # Send the app data directly
+    payload = arguments
     
     response = await client.post(
         f"{app_engine_url}/submit_app_src",
