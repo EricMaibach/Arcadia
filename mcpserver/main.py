@@ -41,6 +41,7 @@ async def handle_list_tools() -> List[types.Tool]:
     return [
         types.Tool(
             name="list_apps",
+            title="List Apps",
             description="List all registered applications in the Arcadia App Engine",
             inputSchema={
                 "type": "object",
@@ -48,7 +49,8 @@ async def handle_list_tools() -> List[types.Tool]:
             }
         ),
         types.Tool(
-            name="run_tool", 
+            name="run_app", 
+            title="Run App",
             description="Execute a tool from a registered application",
             inputSchema={
                 "type": "object",
@@ -70,199 +72,125 @@ async def handle_list_tools() -> List[types.Tool]:
             }
         ),
         types.Tool(
-            name="submit_app_source",
-            description="""Submit Rust source code to compile and register a new WASM application.
+            name="create_app",
+            title="Create App",
+            description="""Submit a Rust trait implementation to compile and register a new WASM application.
 
-QUICK START:
-Provide these required fields:
-- appId: Unique app identifier (e.g., "my-app")  
-- version: App version (e.g., "1.0.0")
-- runtime: Must be "wasm"
-- tools: Array of tool names your app provides (e.g., ["calculator"])
-- sourceLanguage: Must be "rust"
-- files: Array of source files with "name" and "content" fields
+Implement the ArcadiaApp trait and the system automatically handles all WASM boilerplate, memory management, and database integration.
 
-CRITICAL RUST REQUIREMENTS:
-Your Rust app MUST export these C functions:
-- `allocate(len: usize) -> *mut u8`
-- `deallocate(ptr: *mut u8, len: usize)` 
-- `run(input_ptr: *const u8, input_len: usize) -> usize`
-- `get_result_ptr() -> *const u8`
-
-Each function needs `#[no_mangle]` and `pub extern "C"`.
-
-REQUIRED PROJECT STRUCTURE:
-- `Cargo.toml` with `crate-type = ["cdylib"]` in [lib] section
-- `src/lib.rs` (not main.rs) with the exported functions
-
-FILE ENCODING:
-Files must be raw text with proper JSON escaping:
-- Newlines: \\n
-- Quotes: \\"  
-- Backslashes: \\\\
-
-BASIC EXAMPLE:
-```
-files: [
-  {
-    "name": "Cargo.toml",
-    "content": "[package]\\nname = \\"hello\\"\\nversion = \\"0.1.0\\"\\n\\n[lib]\\ncrate-type = [\\"cdylib\\"]"
-  },
-  {
-    "name": "src/lib.rs", 
-    "content": "use std::alloc::{alloc, dealloc, Layout};\\n\\n#[no_mangle]\\npub extern \\"C\\" fn allocate(len: usize) -> *mut u8 { ... }"
-  }
-]
+REQUIRED JSON FORMAT:
+```json
+{
+    "appId": "my-counter-app",
+    "version": "1.0.0", 
+    "runtime": "wasm",
+    "tools": [
+        {"name": "increment", "inputFormat": "{}"},
+        {"name": "get_count", "inputFormat": "{\"user_id\": \"string\"}"}
+    ],
+    "appSrc": "/* Your Rust code here */"
+}
 ```
 
-EXAMPLE MINIMAL IMPLEMENTATION (with safe JSON escaping):
+REQUIRED METHODS:
+- `fn initialize(&mut self, db: &DatabaseConnection) -> Result<(), String>` (optional)
+- `fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection) -> Result<serde_json::Value, String>` (required)
+- `fn get_available_tools(&self) -> Vec<&'static str>` (required)
+
+REQUIRED FACTORY FUNCTION:
+- `pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync>` (required) - Factory function to create your app instance
+
+EXAMPLE COUNTER APP:
 ```rust
-use std::alloc::{alloc, dealloc, Layout};
-use std::ptr;
+use serde_json::json;
 
-static mut RESULT_PTR: *mut u8 = ptr::null_mut();
-static mut RESULT_LEN: usize = 0;
-
-#[no_mangle]
-pub extern "C" fn allocate(len: usize) -> *mut u8 {
-    let layout = Layout::from_size_align(len, 1).unwrap();
-    unsafe { alloc(layout) }
+struct CounterApp {
+    count: i64,
 }
 
-#[no_mangle]
-pub extern "C" fn deallocate(ptr: *mut u8, len: usize) {
-    let layout = Layout::from_size_align(len, 1).unwrap();
-    unsafe { dealloc(ptr, layout) }
-}
-
-#[no_mangle]
-pub extern "C" fn run(input_ptr: *const u8, input_len: usize) -> usize {
-    // Read input JSON from memory
-    let input = unsafe {
-        let slice = std::slice::from_raw_parts(input_ptr, input_len);
-        std::str::from_utf8_unchecked(slice)
-    };
-    
-    // Process input and create output
-    let output = format!("Processed: {}", input);
-    let output_bytes = output.into_bytes();
-    let output_len = output_bytes.len();
-    
-    // Store result in global memory - using is_null() check instead of !
-    unsafe {
-        if RESULT_PTR.is_null() == false {
-            deallocate(RESULT_PTR, RESULT_LEN);
-        }
-        RESULT_PTR = allocate(output_len);
-        RESULT_LEN = output_len;
-        ptr::copy_nonoverlapping(output_bytes.as_ptr(), RESULT_PTR, output_len);
-        output_len
+impl CounterApp {
+    fn new() -> Self {
+        Self { count: 0 }
     }
 }
 
-#[no_mangle]
-pub extern "C" fn get_result_ptr() -> *const u8 {
-    unsafe { RESULT_PTR }
+impl ArcadiaApp for CounterApp {
+    fn initialize(&mut self, db: &DatabaseConnection) -> Result<(), String> {
+        db.execute("CREATE TABLE IF NOT EXISTS counter_state (id INTEGER PRIMARY KEY, count INTEGER)")?;
+        
+        let rows = db.query("SELECT count FROM counter_state WHERE id = 1")?;
+        if let Some(row) = rows.first() {
+            self.count = row["count"].as_i64().unwrap_or(0);
+        }
+        
+        Ok(())
+    }
+    
+    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection) -> Result<serde_json::Value, String> {
+        match tool_name {
+            "increment" => {
+                // Expects empty JSON object: {}
+                self.count += 1;
+                db.execute(&format!("INSERT OR REPLACE INTO counter_state (id, count) VALUES (1, {})", self.count))?;
+                Ok(json!({ "count": self.count }))
+            },
+            "get_count" => {
+                // Expects JSON with user_id: {"user_id": "string"}
+                let user_id = data.and_then(|d| d.get("user_id"))
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("anonymous");
+                Ok(json!({ "count": self.count, "user": user_id }))
+            },
+            _ => Err(format!("Unknown tool: {}", tool_name))
+        }
+    }
+    
+    fn get_available_tools(&self) -> Vec<&'static str> {
+        vec!["increment", "get_count"]
+    }
+}
+
+pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync> {
+    Box::new(CounterApp::new())
 }
 ```
+
+INPUT FORMAT SPECIFICATIONS:
+The inputFormat field should describe the exact JSON structure each tool expects as input:
+
+EXAMPLES:
+- `"{}"` - Tool expects an empty JSON object (no parameters)
+- `"{\"name\": \"string\"}"` - Tool expects JSON with a name field
+- `"{\"amount\": \"number\", \"currency\": \"string\"}"` - Tool expects amount and currency fields
+- `"{\"items\": [\"string\"], \"limit\": \"number?\"}"` - Tool expects array of items, optional limit
+- `"{\"query\": \"string\", \"filters\": {\"status\": \"string?\"}}"` - Tool expects nested objects
+
+FORMAT GUIDELINES:
+- Use actual JSON structure examples, not just "json"
+- Mark optional fields with "?" (e.g., "field_name?")
+- Use descriptive type names: "string", "number", "boolean", "array", "object"
+- Show nested structures when needed
+- Keep it concise but complete
 
 DATABASE ACCESS:
-Your WASM application has access to a SQLite database through host functions. The Go runtime provides these database functions that your Rust code can call:
+The DatabaseConnection provides these methods:
+- `query(&self, sql: &str) -> Result<Vec<serde_json::Value>, String>` - Execute SELECT queries
+- `execute(&self, sql: &str) -> Result<i32, String>` - Execute INSERT/UPDATE/DELETE statements
+- `prepared_query(&self, sql: &str, params: &[serde_json::Value]) -> Result<Vec<serde_json::Value>, String>` - Execute prepared statements
 
-AVAILABLE DATABASE HOST FUNCTIONS:
-1. `db_query(query_ptr: *const u8, query_len: usize, result_ptr_ptr: *mut *const u8) -> i32`
-   - Executes SELECT queries and returns JSON results
-   - Returns result length on success, negative error code on failure
-   - Result JSON is allocated in WASM memory and pointer stored at result_ptr_ptr
-
-2. `db_exec(stmt_ptr: *const u8, stmt_len: usize) -> i32`
-   - Executes INSERT/UPDATE/DELETE statements
-   - Returns number of affected rows on success, negative error code on failure
-
-3. `db_prepared_query(stmt_ptr: *const u8, stmt_len: usize, params_ptr: *const u8, params_len: usize, result_ptr_ptr: *mut *const u8) -> i32`
-   - Executes prepared statements with JSON parameters
-   - Returns result length on success, negative error code on failure
-
-DATABASE SCHEMA:
-The runtime provides these default tables:
-- `app_data`: Key-value storage per app (app_id, key, value, timestamps)
-- `app_logs`: Application logging (app_id, level, message, timestamp) 
-- `sessions`: User session management (id, app_id, user_data, timestamps)
-
-You can also create custom tables using db_exec with CREATE TABLE statements.
-
-DATABASE USAGE EXAMPLE:
-```rust
-// Declare external database functions
-extern "C" {
-    fn db_query(query_ptr: *const u8, query_len: usize, result_ptr_ptr: *mut *const u8) -> i32;
-    fn db_exec(stmt_ptr: *const u8, stmt_len: usize) -> i32;
-}
-
-// Helper function to execute a query
-fn execute_query(query: &str) -> Result<String, i32> {
-    let query_bytes = query.as_bytes();
-    let mut result_ptr: *const u8 = std::ptr::null();
-    
-    let result = unsafe {
-        db_query(
-            query_bytes.as_ptr(),
-            query_bytes.len(),
-            &mut result_ptr as *mut *const u8,
-        )
-    };
-    
-    if result < 0 {
-        return Err(result); // Return error code
-    }
-    
-    // Read JSON result from allocated memory
-    let json_result = unsafe {
-        let slice = std::slice::from_raw_parts(result_ptr, result as usize);
-        String::from_utf8_unchecked(slice.to_vec())
-    };
-    
-    // Don't forget to deallocate the result memory
-    unsafe { deallocate(result_ptr as *mut u8, result as usize) };
-    
-    Ok(json_result)
-}
-
-// Example usage in your run function
-fn example_database_usage(app_id: &str) {
-    // Insert data
-    let insert_sql = format!("INSERT OR REPLACE INTO app_data (app_id, key, value) VALUES ('{}', 'user_count', '42')", app_id);
-    let rows_affected = unsafe { db_exec(insert_sql.as_ptr(), insert_sql.len()) };
-    
-    // Query data
-    let query_sql = format!("SELECT key, value FROM app_data WHERE app_id = '{}'", app_id);
-    match execute_query(&query_sql) {
-        Ok(json_result) => {
-            // json_result contains array of {key: "user_count", value: "42"}
-            println!("Query result: {}", json_result);
-        },
-        Err(error_code) => {
-            println!("Query failed with error: {}", error_code);
-        }
-    }
-}
-```
-
-ERROR CODES:
-- -1: Database not initialized
-- -2: Query/execution error  
-- -3: Column/result processing error
-- -4: JSON marshaling error
-- -5: Memory allocation error
-- -6: Parameter parsing error
-
-The application will be compiled using `cargo build --target wasm32-unknown-unknown --release` and registered for tool execution.""", 
+BENEFITS:
+- No WASM boilerplate required
+- Automatic memory management
+- Built-in database integration
+- Type-safe JSON handling
+- Easy testing and development
+- Input format specification for better API documentation""",
             inputSchema={
                 "type": "object",
                 "properties": {
                     "appId": {
                         "type": "string",
-                        "description": "Unique identifier for the application (camelCase, NOT app_id)"
+                        "description": "Unique identifier for the application"
                     },
                     "version": {
                         "type": "string", 
@@ -274,27 +202,28 @@ The application will be compiled using `cargo build --target wasm32-unknown-unkn
                     },
                     "tools": {
                         "type": "array",
-                        "items": {"type": "string"},
-                        "description": "List of tool names this application provides"
-                    },
-                    "sourceLanguage": {
-                        "type": "string",
-                        "description": "Source language - must be 'rust' (camelCase, NOT source_language)"
-                    },
-                    "files": {
-                        "type": "array",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "name": {"type": "string", "description": "File name with path"},
-                                "content": {"type": "string", "description": "File contents as raw text"}
+                                "name": {
+                                    "type": "string",
+                                    "description": "The name of the tool"
+                                },
+                                "inputFormat": {
+                                    "type": "string", 
+                                    "description": "The expected JSON structure for this tool's input. Examples: '{}' for no input, '{\"name\": \"string\"}' for a name field, '{\"amount\": \"number\", \"currency\": \"string\"}' for multiple fields"
+                                }
                             },
-                            "required": ["name", "content"]
+                            "required": ["name", "inputFormat"]
                         },
-                        "description": "Source files for the application"
+                        "description": "List of tools this application provides with their input format specifications"
+                    },
+                    "appSrc": {
+                        "type": "string",
+                        "description": "Rust code implementing the ArcadiaApp trait (including struct definition, impl blocks, and create_app factory function)"
                     }
                 },
-                "required": ["appId", "version", "runtime", "tools", "sourceLanguage", "files"]
+                "required": ["appId", "version", "runtime", "tools", "appSrc"]
             }
         )
     ]
@@ -313,8 +242,10 @@ async def handle_call_tool(
         async with httpx.AsyncClient(timeout=30.0) as client:
             if name == "list_apps":
                 return await handle_list_apps(client, app_engine_url)
-            elif name == "run_tool":
+            elif name == "run_app":
                 return await handle_run_tool(client, app_engine_url, arguments)
+            elif name == "create_app":
+                return await handle_submit_app_trait(client, app_engine_url, arguments)
             elif name == "submit_app_source":
                 return await handle_submit_app_source(client, app_engine_url, arguments)
             else:
@@ -349,7 +280,23 @@ async def handle_list_apps(
         result += f"App ID: {app.get('appId', 'Unknown')}\n"
         result += f"Version: {app.get('version', 'Unknown')}\n"
         result += f"Runtime: {app.get('runtime', 'Unknown')}\n"
-        result += f"Tools: {', '.join(app.get('tools', []))}\n"
+        
+        # Format tools with input format information
+        tools = app.get('tools', [])
+        if tools:
+            result += "Tools:\n"
+            for tool in tools:
+                if isinstance(tool, dict):
+                    # New format: {name: "tool_name", inputFormat: "json"}
+                    tool_name = tool.get('name', 'Unknown')
+                    input_format = tool.get('inputFormat', 'Unknown')
+                    result += f"  • {tool_name} (input: {input_format})\n"
+                else:
+                    # Legacy format: just tool name as string
+                    result += f"  • {tool} (input: unknown)\n"
+        else:
+            result += "Tools: None\n"
+        
         result += f"Source Language: {app.get('sourceLanguage', 'Unknown')}\n"
         result += f"Artifact: {app.get('artifactUri', 'Unknown')}\n"
         if app.get('files'):
@@ -384,6 +331,61 @@ async def handle_run_tool(
     output_text = f"Tool Execution Result:\n"
     output_text += f"Status: {result.get('status', 'Unknown')}\n"
     output_text += f"Output: {result.get('output', 'No output')}\n"
+    
+    return [types.TextContent(type="text", text=output_text)]
+
+
+async def handle_submit_app_trait(
+    client: httpx.AsyncClient,
+    app_engine_url: str, 
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the submit_app_trait tool."""
+    # Send the trait data directly to the new endpoint
+    payload = arguments
+    
+    response = await client.post(
+        f"{app_engine_url}/submit_app_src",
+        json=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    # Check for HTTP errors and provide detailed error information
+    if not response.is_success:
+        error_text = f"Trait Application Submission Failed:\n"
+        error_text += f"HTTP Status: {response.status_code} {response.reason_phrase}\n"
+        
+        try:
+            # Try to parse error response as JSON
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                if error_data.get('error'):
+                    error_text += f"Error: {error_data['error']}\n"
+                if error_data.get('message'):
+                    error_text += f"Message: {error_data['message']}\n"
+                if error_data.get('details'):
+                    error_text += f"Details: {error_data['details']}\n"
+                # Include any other fields from the error response
+                for key, value in error_data.items():
+                    if key not in ['error', 'message', 'details']:
+                        error_text += f"{key}: {value}\n"
+            else:
+                error_text += f"Error Response: {error_data}\n"
+        except Exception:
+            # If JSON parsing fails, include the raw response text
+            error_text += f"Response Text: {response.text}\n"
+        
+        return [types.TextContent(type="text", text=error_text)]
+    
+    result = response.json()
+    
+    # Format the response
+    output_text = f"Trait Application Submission Result:\n"
+    output_text += f"Status: {result.get('status', 'Unknown')}\n"
+    if result.get('wasmPath'):
+        output_text += f"WASM Path: {result['wasmPath']}\n"
+    output_text += f"\nYour trait implementation has been compiled and registered successfully!\n"
+    output_text += f"You can now use run_tool with appId: {arguments.get('appId', 'unknown')}\n"
     
     return [types.TextContent(type="text", text=output_text)]
 

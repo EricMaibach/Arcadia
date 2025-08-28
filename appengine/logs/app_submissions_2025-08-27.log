@@ -1,0 +1,45 @@
+[APP_SUBMISSION] 2025/08/27 20:56:02.869052 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/27 20:57:22.241937 === NEW APP SUBMISSION REQUEST [session_1756342642241932000] ===
+[APP_SUBMISSION] 2025/08/27 20:57:22.243213 [session_1756342642241932000] Client IP: [::1]:49158
+[APP_SUBMISSION] 2025/08/27 20:57:22.243438 [session_1756342642241932000] Request Method: POST
+[APP_SUBMISSION] 2025/08/27 20:57:22.243476 [session_1756342642241932000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/08/27 20:57:22.243500 [session_1756342642241932000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/27 20:57:22.243522 [session_1756342642241932000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/27 20:57:22.243544 [session_1756342642241932000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/08/27 20:57:22.244604 [session_1756342642241932000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 10265,
+  "appSrcPreview": "use serde_json::{json, Value};\n\nstruct FoodTrackerApp;\n\nimpl FoodTrackerApp {\n    fn new() -\u003e Self {...",
+  "runtime": "wasm",
+  "tools": [
+    "add_food",
+    "get_foods",
+    "get_daily_summary",
+    "delete_food",
+    "update_food",
+    "search_foods"
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/08/27 20:57:22.244707 [session_1756342642241932000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/08/27 20:57:22.244729 [session_1756342642241932000] Validation passed - AppID: food-tracker, Version: 1.0.0, Tools: [add_food get_foods get_daily_summary delete_food update_food search_foods]
+[APP_SUBMISSION] 2025/08/27 20:57:22.244759 [session_1756342642241932000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/08/27 20:57:22.244779 [session_1756342642241932000] Checking path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/27 20:57:22.245019 [session_1756342642241932000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/08/27 20:57:22.245037 [session_1756342642241932000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/08/27 20:57:22.245050 [session_1756342642241932000] Build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/08/27 20:57:22.245074 [session_1756342642241932000] Creating build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/08/27 20:57:22.245593 [session_1756342642241932000] Build directory created successfully
+[APP_SUBMISSION] 2025/08/27 20:57:22.245608 [session_1756342642241932000] STEP 5: Generating Rust project from trait implementation
+[APP_SUBMISSION] 2025/08/27 20:57:22.246649 [session_1756342642241932000] Rust project generation completed in 1.032291ms
+[APP_SUBMISSION] 2025/08/27 20:57:22.246672 [session_1756342642241932000] STEP 6: Compiling Rust to WASM
+[APP_SUBMISSION] 2025/08/27 20:57:28.799398 [session_1756342642241932000] WASM compilation completed in 6.552663959s
+[APP_SUBMISSION] 2025/08/27 20:57:28.799515 [session_1756342642241932000] Compiled WASM path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/27 20:57:28.799521 [session_1756342642241932000] STEP 7: Registering app in registry
+[APP_SUBMISSION] 2025/08/27 20:57:28.799531 [session_1756342642241932000] App registered successfully. Registry now contains 1 apps
+[APP_SUBMISSION] 2025/08/27 20:57:28.799538 [session_1756342642241932000] STEP 8: Saving registry to file
+[APP_SUBMISSION] 2025/08/27 20:57:28.799659 [session_1756342642241932000] Registry saved successfully
+[APP_SUBMISSION] 2025/08/27 20:57:28.799665 [session_1756342642241932000] STEP 9: Sending success response
+[APP_SUBMISSION] 2025/08/27 20:57:28.799691 [session_1756342642241932000] Response: {"status":"app trait implementation submitted and compiled","wasmPath":"artifacts/food-tracker/1.0.0.wasm"}
+[APP_SUBMISSION] 2025/08/27 20:57:28.799705 [session_1756342642241932000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/27 20:57:28.799710 [session_1756342642241932000] Total processing time: 6.552984125s

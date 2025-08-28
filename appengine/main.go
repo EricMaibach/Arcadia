@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
 	_ "github.com/mattn/go-sqlite3"
@@ -24,14 +25,19 @@ type File struct {
 	Content string `json:"content"`
 }
 
+type ToolInfo struct {
+	Name        string `json:"name"`
+	InputFormat string `json:"inputFormat"`
+}
+
 type App struct {
-	AppID          string   `json:"appId"`
-	Version        string   `json:"version"`
-	Runtime        string   `json:"runtime"`
-	Tools          []string `json:"tools"`
-	ArtifactURI    string   `json:"artifactUri"`
-	SourceLanguage string   `json:"sourceLanguage,omitempty"`
-	Files          []File   `json:"files,omitempty"`
+	AppID          string     `json:"appId"`
+	Version        string     `json:"version"`
+	Runtime        string     `json:"runtime"`
+	Tools          []ToolInfo `json:"tools"`
+	ArtifactURI    string     `json:"artifactUri"`
+	SourceLanguage string     `json:"sourceLanguage,omitempty"`
+	Files          []File     `json:"files,omitempty"`
 }
 
 const registryFilePath = "app_registry.json"
@@ -42,7 +48,46 @@ var (
 	wasmEngine    = wasmtime.NewEngine()
 	db            *sql.DB
 	dbMutex       sync.RWMutex
+	appLogger     *log.Logger
+	logFile       *os.File
 )
+
+// --- Logging Setup ---
+
+func initAppLogger() error {
+	// Create logs directory if it doesn't exist
+	if err := os.MkdirAll("logs", 0755); err != nil {
+		return fmt.Errorf("failed to create logs directory: %v", err)
+	}
+
+	// Create log file with timestamp
+	logFileName := fmt.Sprintf("logs/app_submissions_%s.log", time.Now().Format("2006-01-02"))
+	var err error
+	logFile, err = os.OpenFile(logFileName, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %v", err)
+	}
+
+	// Create logger that writes to both file and stdout
+	appLogger = log.New(io.MultiWriter(os.Stdout, logFile), "[APP_SUBMISSION] ", log.LstdFlags|log.Lmicroseconds)
+
+	appLogger.Println("=== App Submission Logger Initialized ===")
+	return nil
+}
+
+func closeAppLogger() {
+	if logFile != nil {
+		appLogger.Println("=== App Submission Logger Closing ===")
+		logFile.Close()
+	}
+}
+
+// Safe logging helper
+func logAppSubmission(format string, args ...interface{}) {
+	if appLogger != nil {
+		appLogger.Printf(format, args...)
+	}
+}
 
 // --- REST Handlers ---
 
@@ -64,34 +109,80 @@ type RunToolRequest struct {
 }
 
 func runToolHandler(w http.ResponseWriter, r *http.Request) {
+	sessionID := fmt.Sprintf("tool_session_%d", time.Now().UnixNano())
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
+
+	logAppSubmission("=== NEW TOOL EXECUTION REQUEST [%s] ===", sessionID)
+	logAppSubmission("[%s] Client IP: %s", sessionID, clientIP)
+	logAppSubmission("[%s] Request Method: %s", sessionID, r.Method)
+	logAppSubmission("[%s] Request URL: %s", sessionID, r.URL.String())
+	logAppSubmission("[%s] User-Agent: %s", sessionID, r.Header.Get("User-Agent"))
+	logAppSubmission("[%s] Content-Type: %s", sessionID, r.Header.Get("Content-Type"))
+
+	logAppSubmission("[%s] STEP 1: Parsing tool execution request", sessionID)
 	var req RunToolRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to decode request body: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid JSON", sessionID)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
+	logAppSubmission("[%s] Parsed request - AppID: %s, ToolName: %s, InputLength: %d", sessionID, req.AppID, req.ToolName, len(req.Input))
+
+	logAppSubmission("[%s] STEP 2: Looking up app in registry", sessionID)
 	registryMutex.RLock()
 	app, ok := registry[req.AppID]
 	registryMutex.RUnlock()
 	if !ok {
+		logAppSubmission("[%s] ERROR: App not found in registry: %s", sessionID, req.AppID)
+		logAppSubmission("[%s] RESPONSE: HTTP 404 - App not found", sessionID)
 		http.Error(w, "app not found", http.StatusNotFound)
 		return
 	}
+	logAppSubmission("[%s] App found - Version: %s, Runtime: %s, ArtifactURI: %s", sessionID, app.Version, app.Runtime, app.ArtifactURI)
 
-	// Load WASM module
+	// Validate that the requested tool exists in the app
+	toolFound := false
+	for _, tool := range app.Tools {
+		if tool.Name == req.ToolName {
+			toolFound = true
+			logAppSubmission("[%s] Tool '%s' found with input format: %s", sessionID, req.ToolName, tool.InputFormat)
+			break
+		}
+	}
+	if !toolFound {
+		logAppSubmission("[%s] ERROR: Tool '%s' not found in app. Available tools: %v", sessionID, req.ToolName, app.Tools)
+		logAppSubmission("[%s] RESPONSE: HTTP 404 - Tool not found", sessionID)
+		http.Error(w, fmt.Sprintf("tool '%s' not found in app", req.ToolName), http.StatusNotFound)
+		return
+	}
+
+	logAppSubmission("[%s] STEP 3: Loading WASM module from: %s", sessionID, app.ArtifactURI)
 	wasmBytes, err := os.ReadFile(app.ArtifactURI)
 	if err != nil {
+		logAppSubmission("[%s] ERROR: Failed to load WASM artifact: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Artifact load failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to load artifact: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] WASM module loaded successfully (%d bytes)", sessionID, len(wasmBytes))
 
+	logAppSubmission("[%s] STEP 4: Compiling WASM module", sessionID)
 	store := wasmtime.NewStore(wasmEngine)
 	module, err := wasmtime.NewModule(wasmEngine, wasmBytes)
 	if err != nil {
+		logAppSubmission("[%s] ERROR: Failed to compile WASM module: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Module compilation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to compile module: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] WASM module compiled successfully", sessionID)
 
+	logAppSubmission("[%s] STEP 5: Setting up WASM linker and host functions", sessionID)
 	linker := wasmtime.NewLinker(wasmEngine)
 
 	// Define database host functions that WASM can call
@@ -107,14 +198,21 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 		return dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
 	})
 
+	logAppSubmission("[%s] STEP 6: Instantiating WASM module", sessionID)
 	instance, err := linker.Instantiate(store, module)
 	if err != nil {
+		logAppSubmission("[%s] ERROR: Failed to instantiate WASM module: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Module instantiation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to instantiate module: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] WASM module instantiated successfully", sessionID)
 
+	logAppSubmission("[%s] STEP 7: Verifying required WASM functions", sessionID)
 	runFunc := instance.GetFunc(store, "run")
 	if runFunc == nil {
+		logAppSubmission("[%s] ERROR: WASM module does not export 'run' function", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Missing run function", sessionID)
 		http.Error(w, "module does not export 'run' function", http.StatusInternalServerError)
 		return
 	}
@@ -125,149 +223,364 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 	getResultPtrFunc := instance.GetFunc(store, "get_result_ptr")
 
 	if allocateFunc == nil || deallocateFunc == nil || getResultPtrFunc == nil {
+		logAppSubmission("[%s] ERROR: WASM module missing required functions (allocate, deallocate, get_result_ptr)", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Missing required functions", sessionID)
 		http.Error(w, "module missing required functions (allocate, deallocate, get_result_ptr)", http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] All required WASM functions found", sessionID)
 
-	// Prepare input string
-	inputBytes, _ := json.Marshal(req.Input)
+	logAppSubmission("[%s] STEP 8: Preparing input for WASM execution", sessionID)
+	// Prepare input string - transform to the format WASM expects
+	wasmInput := map[string]interface{}{
+		"tool": req.ToolName,
+		"data": req.Input,
+	}
+	inputBytes, _ := json.Marshal(wasmInput)
 	inputStr := string(inputBytes)
 	inputLen := len(inputStr)
+	logAppSubmission("[%s] Input prepared - Tool: %s, InputLength: %d, Input: %s", sessionID, req.ToolName, inputLen, inputStr)
 
 	// Allocate memory in WASM for input
+	logAppSubmission("[%s] Allocating WASM memory for input (%d bytes)", sessionID, inputLen)
 	inputPtrResult, err := allocateFunc.Call(store, inputLen)
 	if err != nil {
+		logAppSubmission("[%s] ERROR: Failed to allocate WASM input memory: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Memory allocation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to allocate input memory: %v", err), http.StatusInternalServerError)
 		return
 	}
 	inputPtr := inputPtrResult.(int32)
+	logAppSubmission("[%s] Input memory allocated at pointer: %d", sessionID, inputPtr)
 
 	// Get WASM memory and copy input string
+	logAppSubmission("[%s] Copying input data to WASM memory", sessionID)
 	memory := instance.GetExport(store, "memory").Memory()
 	data := memory.UnsafeData(store)
 	copy(data[inputPtr:inputPtr+int32(inputLen)], []byte(inputStr))
 
 	// Call WASM 'run' function with pointer and length
+	logAppSubmission("[%s] STEP 9: Executing WASM 'run' function", sessionID)
+	startTime := time.Now()
 	resultLenResult, err := runFunc.Call(store, inputPtr, inputLen)
+	executionTime := time.Since(startTime)
 	if err != nil {
 		// Clean up allocated memory
 		deallocateFunc.Call(store, inputPtr, inputLen)
+		logAppSubmission("[%s] ERROR: WASM execution failed after %v: %v", sessionID, executionTime, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Execution failed", sessionID)
 		http.Error(w, fmt.Sprintf("execution failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 	resultLen := resultLenResult.(int32)
+	logAppSubmission("[%s] WASM execution completed successfully in %v, result length: %d", sessionID, executionTime, resultLen)
 
+	logAppSubmission("[%s] STEP 10: Retrieving execution results", sessionID)
 	// Get result pointer
 	resultPtrResult, err := getResultPtrFunc.Call(store)
 	if err != nil {
 		deallocateFunc.Call(store, inputPtr, inputLen)
+		logAppSubmission("[%s] ERROR: Failed to get result pointer: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Result retrieval failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to get result pointer: %v", err), http.StatusInternalServerError)
 		return
 	}
 	resultPtr := resultPtrResult.(int32)
+	logAppSubmission("[%s] Result pointer: %d", sessionID, resultPtr)
 
 	// Read result from WASM memory
 	resultBytes := make([]byte, resultLen)
 	copy(resultBytes, data[resultPtr:resultPtr+resultLen])
 	resultStr := string(resultBytes)
+	logAppSubmission("[%s] Result retrieved (%d bytes), result is: %s", sessionID, len(resultBytes), resultStr)
 
 	// Clean up allocated input memory
+	logAppSubmission("[%s] Cleaning up allocated input memory", sessionID)
 	deallocateFunc.Call(store, inputPtr, inputLen)
 
 	// Return output
+	logAppSubmission("[%s] STEP 11: Sending success response", sessionID)
 	output := map[string]interface{}{
 		"output": resultStr,
 		"status": "success",
 	}
+
+	outputJSON, _ := json.Marshal(output)
+	logAppSubmission("[%s] Response prepared (%d bytes)", sessionID, len(outputJSON))
+
 	json.NewEncoder(w).Encode(output)
+	logAppSubmission("[%s] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===", sessionID)
+	logAppSubmission("[%s] Total execution time: %v", sessionID, time.Since(startTime))
+}
+
+type AppRequest struct {
+	AppID   string     `json:"appId"`
+	Version string     `json:"version"`
+	Runtime string     `json:"runtime"`
+	Tools   []ToolInfo `json:"tools"`
+	AppSrc  string     `json:"appSrc"`
 }
 
 func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
-	var app App
-	if err := json.NewDecoder(r.Body).Decode(&app); err != nil {
+	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
+
+	logAppSubmission("=== NEW APP SUBMISSION REQUEST [%s] ===", sessionID)
+	logAppSubmission("[%s] Client IP: %s", sessionID, clientIP)
+	logAppSubmission("[%s] Request Method: %s", sessionID, r.Method)
+	logAppSubmission("[%s] Request URL: %s", sessionID, r.URL.String())
+	logAppSubmission("[%s] User-Agent: %s", sessionID, r.Header.Get("User-Agent"))
+	logAppSubmission("[%s] Content-Type: %s", sessionID, r.Header.Get("Content-Type"))
+
+	// Step 1: Parse and validate request
+	logAppSubmission("[%s] STEP 1: Parsing request body", sessionID)
+	var req AppRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to decode request body: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid JSON", sessionID)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	// Validate source language
-	if strings.ToLower(app.SourceLanguage) != "rust" {
-		http.Error(w, "only Rust source code is supported", http.StatusBadRequest)
+	// Log the parsed request (sanitized)
+	reqJSON, _ := json.MarshalIndent(map[string]interface{}{
+		"appId":        req.AppID,
+		"version":      req.Version,
+		"runtime":      req.Runtime,
+		"tools":        req.Tools,
+		"appSrcLength": len(req.AppSrc),
+		"appSrcPreview": func() string {
+			if len(req.AppSrc) > 100 {
+				return req.AppSrc[:100] + "..."
+			}
+			return req.AppSrc
+		}(),
+	}, "", "  ")
+	logAppSubmission("[%s] Parsed request: %s", sessionID, string(reqJSON))
+
+	// Step 2: Validate required fields
+	logAppSubmission("[%s] STEP 2: Validating request fields", sessionID)
+	if strings.TrimSpace(req.AppSrc) == "" {
+		logAppSubmission("[%s] ERROR: AppSrc field is empty or whitespace only", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing app source", sessionID)
+		http.Error(w, "trait implementation is required", http.StatusBadRequest)
 		return
 	}
 
-	// Validate that files are provided
-	if len(app.Files) == 0 {
-		http.Error(w, "no source files provided", http.StatusBadRequest)
+	if req.AppID == "" {
+		logAppSubmission("[%s] ERROR: AppID field is empty", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing AppID", sessionID)
+		http.Error(w, "appId is required", http.StatusBadRequest)
 		return
 	}
 
-	// Check if compiled WASM already exists in artifacts
-	artifactsDir := filepath.Join("artifacts", app.AppID)
-	wasmFilename := fmt.Sprintf("%s.wasm", app.Version)
-	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
-
-	if _, err := os.Stat(finalWasmPath); err == nil {
-		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", app.AppID, app.Version), http.StatusConflict)
+	if req.Version == "" {
+		logAppSubmission("[%s] ERROR: Version field is empty", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing Version", sessionID)
+		http.Error(w, "version is required", http.StatusBadRequest)
 		return
 	}
 
-	// Create temporary build directory structure
-	buildDir := filepath.Join("build", app.AppID, app.Version)
+	if len(req.Tools) == 0 {
+		logAppSubmission("[%s] ERROR: Tools array is empty", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing tools", sessionID)
+		http.Error(w, "at least one tool is required", http.StatusBadRequest)
+		return
+	}
 
-	// Clear build directory if it exists (allow resubmission for build issues)
-	if _, err := os.Stat(buildDir); err == nil {
-		if err := os.RemoveAll(buildDir); err != nil {
-			http.Error(w, fmt.Sprintf("failed to clear existing build directory: %v", err), http.StatusInternalServerError)
+	// Validate each tool has both name and input format
+	for i, tool := range req.Tools {
+		if strings.TrimSpace(tool.Name) == "" {
+			logAppSubmission("[%s] ERROR: Tool %d has empty name", sessionID, i)
+			logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid tool name", sessionID)
+			http.Error(w, fmt.Sprintf("tool %d: name is required", i), http.StatusBadRequest)
+			return
+		}
+		if strings.TrimSpace(tool.InputFormat) == "" {
+			logAppSubmission("[%s] ERROR: Tool %d (%s) has empty input format", sessionID, i, tool.Name)
+			logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid tool input format", sessionID)
+			http.Error(w, fmt.Sprintf("tool %d (%s): inputFormat is required", i, tool.Name), http.StatusBadRequest)
 			return
 		}
 	}
 
+	logAppSubmission("[%s] Validation passed - AppID: %s, Version: %s, Tools: %v", sessionID, req.AppID, req.Version, req.Tools)
+
+	// Step 3: Check for existing compiled WASM
+	logAppSubmission("[%s] STEP 3: Checking for existing compiled WASM", sessionID)
+	artifactsDir := filepath.Join("artifacts", req.AppID)
+	wasmFilename := fmt.Sprintf("%s.wasm", req.Version)
+	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
+	logAppSubmission("[%s] Checking path: %s", sessionID, finalWasmPath)
+
+	if _, err := os.Stat(finalWasmPath); err == nil {
+		logAppSubmission("[%s] ERROR: WASM file already exists at %s", sessionID, finalWasmPath)
+		logAppSubmission("[%s] RESPONSE: HTTP 409 - Conflict", sessionID)
+		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", req.AppID, req.Version), http.StatusConflict)
+		return
+	}
+	logAppSubmission("[%s] No existing WASM found - proceeding with compilation", sessionID)
+
+	// Step 4: Prepare build directory
+	logAppSubmission("[%s] STEP 4: Setting up build directory", sessionID)
+	buildDir := filepath.Join("build", req.AppID, req.Version)
+	logAppSubmission("[%s] Build directory: %s", sessionID, buildDir)
+
+	// Clear build directory if it exists
+	if _, err := os.Stat(buildDir); err == nil {
+		logAppSubmission("[%s] Existing build directory found, removing: %s", sessionID, buildDir)
+		if err := os.RemoveAll(buildDir); err != nil {
+			logAppSubmission("[%s] ERROR: Failed to remove existing build directory: %v", sessionID, err)
+			logAppSubmission("[%s] RESPONSE: HTTP 500 - Build directory cleanup failed", sessionID)
+			http.Error(w, fmt.Sprintf("failed to clear existing build directory: %v", err), http.StatusInternalServerError)
+			return
+		}
+		logAppSubmission("[%s] Successfully removed existing build directory", sessionID)
+	}
+
 	// Create build directory
+	logAppSubmission("[%s] Creating build directory: %s", sessionID, buildDir)
 	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to create build directory: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Build directory creation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to create build directory: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] Build directory created successfully", sessionID)
 
-	// Create files from JSON spec
-	if err := createFilesFromSpec(app.Files, buildDir); err != nil {
-		// Clean up on error
+	// Step 5: Generate Rust project
+	logAppSubmission("[%s] STEP 5: Generating Rust project from trait implementation", sessionID)
+	startTime := time.Now()
+	if err := generateRustProjectFromTrait(req, buildDir); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to generate Rust project: %v", sessionID, err)
+		logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
 		os.RemoveAll(buildDir)
-		http.Error(w, fmt.Sprintf("failed to create source files: %v", err), http.StatusInternalServerError)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Rust project generation failed", sessionID)
+		http.Error(w, fmt.Sprintf("failed to generate Rust project: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] Rust project generation completed in %v", sessionID, time.Since(startTime))
 
-	// Compile the Rust source code to WASM
+	// Step 6: Compile to WASM
+	logAppSubmission("[%s] STEP 6: Compiling Rust to WASM", sessionID)
+	startTime = time.Now()
 	wasmPath, err := buildRustToWasm(buildDir)
 	if err != nil {
-		// Clean up on error
+		logAppSubmission("[%s] ERROR: Failed to compile Rust to WASM: %v", sessionID, err)
+		logAppSubmission("[%s] Build directory contents before cleanup:", sessionID)
+
+		// Log build directory contents for debugging
+		if entries, dirErr := os.ReadDir(buildDir); dirErr == nil {
+			for _, entry := range entries {
+				logAppSubmission("[%s]   - %s (dir: %t)", sessionID, entry.Name(), entry.IsDir())
+			}
+		}
+
+		logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
 		os.RemoveAll(buildDir)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - WASM compilation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to compile Rust to WASM: %v", err), http.StatusInternalServerError)
 		return
 	}
+	logAppSubmission("[%s] WASM compilation completed in %v", sessionID, time.Since(startTime))
+	logAppSubmission("[%s] Compiled WASM path: %s", sessionID, wasmPath)
 
-	// Register the app in the registry with the compiled WASM path
+	// Step 7: Register app in registry
+	logAppSubmission("[%s] STEP 7: Registering app in registry", sessionID)
 	registryMutex.Lock()
-	registry[app.AppID] = &App{
-		AppID:          app.AppID,
-		Version:        app.Version,
-		Runtime:        app.Runtime,
-		Tools:          app.Tools,
+	registry[req.AppID] = &App{
+		AppID:          req.AppID,
+		Version:        req.Version,
+		Runtime:        req.Runtime,
+		Tools:          req.Tools,
 		ArtifactURI:    wasmPath,
-		SourceLanguage: app.SourceLanguage,
-		Files:          app.Files,
+		SourceLanguage: "rust",
+		Files: []File{
+			{
+				Name:    "src/lib.rs",
+				Content: "Generated from trait implementation",
+			},
+		},
 	}
+	registrySize := len(registry)
 	registryMutex.Unlock()
+	logAppSubmission("[%s] App registered successfully. Registry now contains %d apps", sessionID, registrySize)
 
-	// Save registry to file
+	// Step 8: Save registry to file
+	logAppSubmission("[%s] STEP 8: Saving registry to file", sessionID)
 	if err := saveRegistry(); err != nil {
+		logAppSubmission("[%s] WARNING: Failed to save registry to file: %v", sessionID, err)
 		log.Printf("Warning: failed to save registry: %v", err)
+	} else {
+		logAppSubmission("[%s] Registry saved successfully", sessionID)
 	}
+
+	// Step 9: Send success response
+	logAppSubmission("[%s] STEP 9: Sending success response", sessionID)
+	response := map[string]string{
+		"status":   "app trait implementation submitted and compiled",
+		"wasmPath": wasmPath,
+	}
+	responseJSON, _ := json.Marshal(response)
+	logAppSubmission("[%s] Response: %s", sessionID, string(responseJSON))
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"status":   "app source submitted and compiled",
-		"wasmPath": wasmPath,
-	})
+	json.NewEncoder(w).Encode(response)
+
+	logAppSubmission("[%s] === APP SUBMISSION COMPLETED SUCCESSFULLY ===", sessionID)
+	logAppSubmission("[%s] Total processing time: %v", sessionID, time.Since(startTime))
+}
+
+func generateRustProjectFromTrait(req AppRequest, buildDir string) error {
+	// Read the wrapper template
+	templatePath := filepath.Join("wasm_wrapper_template.rs")
+	templateContent, err := os.ReadFile(templatePath)
+	if err != nil {
+		return fmt.Errorf("failed to read wrapper template: %v", err)
+	}
+
+	// Inject the user's trait implementation into the template
+	injectedContent := strings.Replace(string(templateContent), "// USER_APP_IMPL_PLACEHOLDER - This will be replaced with user's trait implementation", req.AppSrc, 1)
+
+	// Create src directory
+	srcDir := filepath.Join(buildDir, "src")
+	if err := os.MkdirAll(srcDir, 0755); err != nil {
+		return fmt.Errorf("failed to create src directory: %v", err)
+	}
+
+	// Write lib.rs with injected code
+	libPath := filepath.Join(srcDir, "lib.rs")
+	if err := os.WriteFile(libPath, []byte(injectedContent), 0644); err != nil {
+		return fmt.Errorf("failed to write lib.rs: %v", err)
+	}
+
+	// Create Cargo.toml
+	cargoToml := fmt.Sprintf(`[package]
+name = "%s"
+version = "%s"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[profile.release]
+opt-level = "s"
+lto = true
+`, req.AppID, req.Version)
+
+	cargoPath := filepath.Join(buildDir, "Cargo.toml")
+	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
+		return fmt.Errorf("failed to write Cargo.toml: %v", err)
+	}
+
+	return nil
 }
 
 func createFilesFromSpec(files []File, destDir string) error {
@@ -370,6 +683,8 @@ func getProjectNameFromCargo(cargoPath string) (string, error) {
 			if len(parts) == 2 {
 				name := strings.TrimSpace(parts[1])
 				name = strings.Trim(name, `"`)
+				// Rust converts hyphens to underscores in binary names
+				name = strings.ReplaceAll(name, "-", "_")
 				return name, nil
 			}
 		}
@@ -751,6 +1066,12 @@ func closeDatabase() {
 // --- Main ---
 
 func main() {
+	// Initialize logging
+	if err := initAppLogger(); err != nil {
+		log.Fatalf("Failed to initialize app logger: %v", err)
+	}
+	defer closeAppLogger()
+
 	// Initialize database
 	if err := initDatabase(); err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
