@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { appApi, App, RunToolRequest } from '../services/api';
+import ResultDisplay from './ResultDisplay';
 
 const ToolRunner: React.FC = () => {
   const [apps, setApps] = useState<App[]>([]);
@@ -136,10 +137,7 @@ const ToolRunner: React.FC = () => {
       {error && <div className="error">Error: {error}</div>}
       
       {result && (
-        <div className="result">
-          <h3>Result:</h3>
-          <pre>{JSON.stringify(result, null, 2)}</pre>
-        </div>
+        <ResultDisplay result={result} title="Tool Execution Result" />
       )}
     </div>
   );

@@ -1,37 +1,57 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
-import AppList from './components/AppList';
-import AppSubmit from './components/AppSubmit';
-import ToolRunner from './components/ToolRunner';
-import ScheduleList from './components/ScheduleList';
-import ScheduleForm from './components/ScheduleForm';
-import ScheduledRunsList from './components/ScheduledRunsList';
+import Home from './components/Home';
+import AppPage from './components/AppPage';
+import Admin from './components/Admin';
+import { appApi, App as AppType } from './services/api';
 
 function App() {
+  const [apps, setApps] = useState<AppType[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadApps();
+  }, []);
+
+  const loadApps = async () => {
+    try {
+      const appList = await appApi.listApps();
+      setApps(appList);
+    } catch (err) {
+      console.error('Failed to load apps:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <Router>
       <div className="App">
         <header className="App-header">
-          <h1>Arcadia App Engine Admin</h1>
+          <Link to="/" className="logo-link">
+            <h1>Arcadia</h1>
+          </Link>
           <nav className="nav">
-            <Link to="/" className="nav-link">Apps</Link>
-            <Link to="/submit" className="nav-link">Submit App</Link>
-            <Link to="/run-tool" className="nav-link">Run Tool</Link>
-            <Link to="/schedules" className="nav-link">Schedules</Link>
-            <Link to="/scheduled-runs" className="nav-link">Scheduled Runs</Link>
+            <Link to="/" className="nav-link">Home</Link>
+            {!loading && apps.map((app) => (
+              <Link 
+                key={app.appId} 
+                to={`/app/${encodeURIComponent(app.appId)}`} 
+                className="nav-link app-nav-link"
+              >
+                {app.appId}
+              </Link>
+            ))}
+            <Link to="/admin" className="nav-link admin-link">Admin</Link>
           </nav>
         </header>
         
         <main className="main-content">
           <Routes>
-            <Route path="/" element={<AppList />} />
-            <Route path="/submit" element={<AppSubmit />} />
-            <Route path="/run-tool" element={<ToolRunner />} />
-            <Route path="/schedules" element={<ScheduleList />} />
-            <Route path="/schedule/new" element={<ScheduleForm />} />
-            <Route path="/schedule/edit/:id" element={<ScheduleForm />} />
-            <Route path="/scheduled-runs" element={<ScheduledRunsList />} />
+            <Route path="/" element={<Home />} />
+            <Route path="/app/:appId" element={<AppPage />} />
+            <Route path="/admin/*" element={<Admin />} />
           </Routes>
         </main>
       </div>
