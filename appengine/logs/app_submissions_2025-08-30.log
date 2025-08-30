@@ -1,0 +1,277 @@
+[APP_SUBMISSION] 2025/08/30 09:33:59.997700 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/30 14:29:16.536351 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/30 14:36:27.383222 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/30 14:38:10.422101 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/30 14:42:04.412287 === NEW APP SUBMISSION REQUEST [session_1756579324411486000] ===
+[APP_SUBMISSION] 2025/08/30 14:42:04.413643 [session_1756579324411486000] Client IP: [::1]:51883
+[APP_SUBMISSION] 2025/08/30 14:42:04.413671 [session_1756579324411486000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:42:04.413690 [session_1756579324411486000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/08/30 14:42:04.413707 [session_1756579324411486000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:42:04.413723 [session_1756579324411486000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:42:04.413738 [session_1756579324411486000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/08/30 14:42:04.414916 [session_1756579324411486000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 16245,
+  "appSrcPreview": "use serde_json::{json, Value};\nuse std::collections::HashMap;\n\nstruct FoodTrackerApp {\n    initializ...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "add_meal",
+      "inputFormat": "{\"food_name\": \"string\", \"meal\": \"string\", \"calories\": \"number\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_meals",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\", \"meal_type\": \"string?\"}"
+    },
+    {
+      "name": "get_weekly_summary",
+      "inputFormat": "{\"week_offset\": \"number?\"}"
+    },
+    {
+      "name": "delete_meal",
+      "inputFormat": "{\"meal_id\": \"number\"}"
+    },
+    {
+      "name": "update_meal",
+      "inputFormat": "{\"meal_id\": \"number\", \"food_name\": \"string?\", \"meal\": \"string?\", \"calories\": \"number?\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_nutrition_feedback",
+      "inputFormat": "{\"days\": \"number?\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/08/30 14:42:04.414980 [session_1756579324411486000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/08/30 14:42:04.414993 [session_1756579324411486000] Validation passed - AppID: food-tracker, Version: 1.0.0, Tools: [{add_meal {"food_name": "string", "meal": "string", "calories": "number", "protein": "number?", "carbs": "number?", "fat": "number?", "fiber": "number?", "sugar": "number?", "sodium": "number?", "notes": "string?"}} {get_meals {"start_date": "string?", "end_date": "string?", "meal_type": "string?"}} {get_weekly_summary {"week_offset": "number?"}} {delete_meal {"meal_id": "number"}} {update_meal {"meal_id": "number", "food_name": "string?", "meal": "string?", "calories": "number?", "protein": "number?", "carbs": "number?", "fat": "number?", "fiber": "number?", "sugar": "number?", "sodium": "number?", "notes": "string?"}} {get_nutrition_feedback {"days": "number?"}}]
+[APP_SUBMISSION] 2025/08/30 14:42:04.415179 [session_1756579324411486000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/08/30 14:42:04.415351 [session_1756579324411486000] Checking path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:42:04.415631 [session_1756579324411486000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/08/30 14:42:04.415647 [session_1756579324411486000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/08/30 14:42:04.415659 [session_1756579324411486000] Build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/08/30 14:42:04.415679 [session_1756579324411486000] Creating build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/08/30 14:42:04.416306 [session_1756579324411486000] Build directory created successfully
+[APP_SUBMISSION] 2025/08/30 14:42:04.416327 [session_1756579324411486000] STEP 5: Generating Rust project from trait implementation
+[APP_SUBMISSION] 2025/08/30 14:42:04.417278 [session_1756579324411486000] Rust project generation completed in 939.375µs
+[APP_SUBMISSION] 2025/08/30 14:42:04.417302 [session_1756579324411486000] STEP 6: Compiling Rust to WASM
+[APP_SUBMISSION] 2025/08/30 14:42:11.198006 [session_1756579324411486000] WASM compilation completed in 6.780662875s
+[APP_SUBMISSION] 2025/08/30 14:42:11.198303 [session_1756579324411486000] Compiled WASM path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:42:11.198312 [session_1756579324411486000] STEP 7: Registering app in registry
+[APP_SUBMISSION] 2025/08/30 14:42:11.198321 [session_1756579324411486000] App registered successfully. Registry now contains 1 apps
+[APP_SUBMISSION] 2025/08/30 14:42:11.198327 [session_1756579324411486000] STEP 8: Saving registry to file
+[APP_SUBMISSION] 2025/08/30 14:42:11.198659 [session_1756579324411486000] Registry saved successfully
+[APP_SUBMISSION] 2025/08/30 14:42:11.198666 [session_1756579324411486000] STEP 9: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:42:11.198698 [session_1756579324411486000] Response: {"status":"app trait implementation submitted and compiled","wasmPath":"artifacts/food-tracker/1.0.0.wasm"}
+[APP_SUBMISSION] 2025/08/30 14:42:11.198710 [session_1756579324411486000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:42:11.198714 [session_1756579324411486000] Total processing time: 6.781372791s
+[APP_SUBMISSION] 2025/08/30 14:43:28.580167 === NEW TOOL EXECUTION REQUEST [tool_session_1756579408578290000] ===
+[APP_SUBMISSION] 2025/08/30 14:43:28.580841 [tool_session_1756579408578290000] Client IP: [::1]:51894
+[APP_SUBMISSION] 2025/08/30 14:43:28.580870 [tool_session_1756579408578290000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:43:28.580886 [tool_session_1756579408578290000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 14:43:28.580899 [tool_session_1756579408578290000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:43:28.580911 [tool_session_1756579408578290000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:43:28.580922 [tool_session_1756579408578290000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 14:43:28.581015 [tool_session_1756579408578290000] Parsed request - AppID: food-tracker, ToolName: add_meal, InputLength: 259
+[APP_SUBMISSION] 2025/08/30 14:43:28.581037 [tool_session_1756579408578290000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 14:43:28.581049 [tool_session_1756579408578290000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:43:28.581061 [tool_session_1756579408578290000] Tool 'add_meal' found with input format: {"food_name": "string", "meal": "string", "calories": "number", "protein": "number?", "carbs": "number?", "fat": "number?", "fiber": "number?", "sugar": "number?", "sodium": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/08/30 14:43:28.581073 [tool_session_1756579408578290000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:43:28.581599 [tool_session_1756579408578290000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 14:43:28.581622 [tool_session_1756579408578290000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 14:43:28.634800 [tool_session_1756579408578290000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 14:43:28.634837 [tool_session_1756579408578290000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 14:43:28.636658 [tool_session_1756579408578290000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 14:43:28.636863 [tool_session_1756579408578290000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 14:43:28.636873 [tool_session_1756579408578290000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 14:43:28.636897 [tool_session_1756579408578290000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 14:43:28.636902 [tool_session_1756579408578290000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 14:43:28.636927 [tool_session_1756579408578290000] Input prepared - Tool: add_meal, InputLength: 286, Input: {"data":{"food_name":"Chipotle barbacoa bowl with black beans, brown rice, fajita veggies, and salsa","meal":"lunch","calories":620,"protein":32,"carbs":58,"fat":18,"fiber":12,"sugar":8,"sodium":1450,"notes":"Barbacoa, black beans, brown rice, fajita veggies, salsa"},"tool":"add_meal"}
+[APP_SUBMISSION] 2025/08/30 14:43:28.636932 [tool_session_1756579408578290000] Allocating WASM memory for input (286 bytes)
+[APP_SUBMISSION] 2025/08/30 14:43:28.637473 [tool_session_1756579408578290000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 14:43:28.637478 [tool_session_1756579408578290000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 14:43:28.637495 [tool_session_1756579408578290000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 14:43:28.643015 [tool_session_1756579408578290000] WASM execution completed successfully in 5.515834ms, result length: 390
+[APP_SUBMISSION] 2025/08/30 14:43:28.643026 [tool_session_1756579408578290000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 14:43:28.643033 [tool_session_1756579408578290000] Result pointer: 1116480
+[APP_SUBMISSION] 2025/08/30 14:43:28.643041 [tool_session_1756579408578290000] Result retrieved (390 bytes), result is: {"success":true,"data":{"meal":{"calories":620.0,"carbs":58.0,"date":"2025-08-30","fat":18.0,"fiber":12.0,"food_name":"Chipotle barbacoa bowl with black beans, brown rice, fajita veggies, and salsa","meal":"lunch","notes":"Barbacoa, black beans, brown rice, fajita veggies, salsa","protein":32.0,"sodium":1450.0,"sugar":8.0},"message":"Meal added successfully","success":true},"error":null}
+[APP_SUBMISSION] 2025/08/30 14:43:28.643045 [tool_session_1756579408578290000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 14:43:28.643050 [tool_session_1756579408578290000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:43:28.643058 [tool_session_1756579408578290000] Response prepared (466 bytes)
+[APP_SUBMISSION] 2025/08/30 14:43:28.643066 [tool_session_1756579408578290000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:43:28.643068 [tool_session_1756579408578290000] Total execution time: 5.568917ms
+[APP_SUBMISSION] 2025/08/30 14:44:00.010267 === NEW TOOL EXECUTION REQUEST [tool_session_1756579440010260000] ===
+[APP_SUBMISSION] 2025/08/30 14:44:00.011126 [tool_session_1756579440010260000] Client IP: [::1]:51898
+[APP_SUBMISSION] 2025/08/30 14:44:00.011182 [tool_session_1756579440010260000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:44:00.011214 [tool_session_1756579440010260000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 14:44:00.011240 [tool_session_1756579440010260000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:44:00.011263 [tool_session_1756579440010260000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:44:00.011289 [tool_session_1756579440010260000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 14:44:00.011399 [tool_session_1756579440010260000] Parsed request - AppID: food-tracker, ToolName: add_meal, InputLength: 191
+[APP_SUBMISSION] 2025/08/30 14:44:00.011428 [tool_session_1756579440010260000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 14:44:00.011450 [tool_session_1756579440010260000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:00.011472 [tool_session_1756579440010260000] Tool 'add_meal' found with input format: {"food_name": "string", "meal": "string", "calories": "number", "protein": "number?", "carbs": "number?", "fat": "number?", "fiber": "number?", "sugar": "number?", "sodium": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/08/30 14:44:00.011522 [tool_session_1756579440010260000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:00.012544 [tool_session_1756579440010260000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:00.012583 [tool_session_1756579440010260000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:00.050396 [tool_session_1756579440010260000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 14:44:00.050438 [tool_session_1756579440010260000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 14:44:00.050930 [tool_session_1756579440010260000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:00.050980 [tool_session_1756579440010260000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 14:44:00.050987 [tool_session_1756579440010260000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 14:44:00.050996 [tool_session_1756579440010260000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 14:44:00.050999 [tool_session_1756579440010260000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 14:44:00.051025 [tool_session_1756579440010260000] Input prepared - Tool: add_meal, InputLength: 218, Input: {"data":{"food_name":"Puffer pancakes with maple syrup","meal":"breakfast","calories":480,"protein":8,"carbs":65,"fat":20,"fiber":2,"sugar":28,"sodium":620,"notes":"Fluffy pancakes with maple syrup"},"tool":"add_meal"}
+[APP_SUBMISSION] 2025/08/30 14:44:00.051031 [tool_session_1756579440010260000] Allocating WASM memory for input (218 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:00.051081 [tool_session_1756579440010260000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 14:44:00.051087 [tool_session_1756579440010260000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 14:44:00.051093 [tool_session_1756579440010260000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 14:44:00.051857 [tool_session_1756579440010260000] WASM execution completed successfully in 760.125µs, result length: 322
+[APP_SUBMISSION] 2025/08/30 14:44:00.051867 [tool_session_1756579440010260000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 14:44:00.051873 [tool_session_1756579440010260000] Result pointer: 1116264
+[APP_SUBMISSION] 2025/08/30 14:44:00.051877 [tool_session_1756579440010260000] Result retrieved (322 bytes), result is: {"success":true,"data":{"meal":{"calories":480.0,"carbs":65.0,"date":"2025-08-30","fat":20.0,"fiber":2.0,"food_name":"Puffer pancakes with maple syrup","meal":"breakfast","notes":"Fluffy pancakes with maple syrup","protein":8.0,"sodium":620.0,"sugar":28.0},"message":"Meal added successfully","success":true},"error":null}
+[APP_SUBMISSION] 2025/08/30 14:44:00.051880 [tool_session_1756579440010260000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 14:44:00.051885 [tool_session_1756579440010260000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:44:00.051892 [tool_session_1756579440010260000] Response prepared (398 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:00.051905 [tool_session_1756579440010260000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:44:00.051908 [tool_session_1756579440010260000] Total execution time: 811.875µs
+[APP_SUBMISSION] 2025/08/30 14:44:39.277688 === NEW TOOL EXECUTION REQUEST [tool_session_1756579479277640000] ===
+[APP_SUBMISSION] 2025/08/30 14:44:39.277970 [tool_session_1756579479277640000] Client IP: [::1]:51904
+[APP_SUBMISSION] 2025/08/30 14:44:39.278012 [tool_session_1756579479277640000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:44:39.278038 [tool_session_1756579479277640000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 14:44:39.278061 [tool_session_1756579479277640000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:44:39.278083 [tool_session_1756579479277640000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:44:39.278151 [tool_session_1756579479277640000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 14:44:39.278231 [tool_session_1756579479277640000] Parsed request - AppID: food-tracker, ToolName: get_nutrition_feedback, InputLength: 10
+[APP_SUBMISSION] 2025/08/30 14:44:39.278265 [tool_session_1756579479277640000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 14:44:39.278282 [tool_session_1756579479277640000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:39.278300 [tool_session_1756579479277640000] Tool 'get_nutrition_feedback' found with input format: {"days": "number?"}
+[APP_SUBMISSION] 2025/08/30 14:44:39.278315 [tool_session_1756579479277640000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:39.278873 [tool_session_1756579479277640000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:39.278905 [tool_session_1756579479277640000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:39.312046 [tool_session_1756579479277640000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 14:44:39.312290 [tool_session_1756579479277640000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 14:44:39.312887 [tool_session_1756579479277640000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:39.313014 [tool_session_1756579479277640000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 14:44:39.313037 [tool_session_1756579479277640000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 14:44:39.313057 [tool_session_1756579479277640000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 14:44:39.313062 [tool_session_1756579479277640000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 14:44:39.313083 [tool_session_1756579479277640000] Input prepared - Tool: get_nutrition_feedback, InputLength: 51, Input: {"data":{"days":7},"tool":"get_nutrition_feedback"}
+[APP_SUBMISSION] 2025/08/30 14:44:39.313090 [tool_session_1756579479277640000] Allocating WASM memory for input (51 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:39.313121 [tool_session_1756579479277640000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 14:44:39.313126 [tool_session_1756579479277640000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 14:44:39.313132 [tool_session_1756579479277640000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 14:44:39.538608 [tool_session_1756579479277640000] WASM execution completed successfully in 225.472834ms, result length: 83
+[APP_SUBMISSION] 2025/08/30 14:44:39.538664 [tool_session_1756579479277640000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 14:44:39.538709 [tool_session_1756579479277640000] Result pointer: 1114312
+[APP_SUBMISSION] 2025/08/30 14:44:39.538732 [tool_session_1756579479277640000] Result retrieved (83 bytes), result is: {"success":false,"data":null,"error":"Failed to get AI feedback: Claude API error"}
+[APP_SUBMISSION] 2025/08/30 14:44:39.538750 [tool_session_1756579479277640000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 14:44:39.538779 [tool_session_1756579479277640000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:44:39.538815 [tool_session_1756579479277640000] Response prepared (123 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:39.538844 [tool_session_1756579479277640000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:44:39.538861 [tool_session_1756579479277640000] Total execution time: 225.726167ms
+[APP_SUBMISSION] 2025/08/30 14:44:42.929735 === NEW TOOL EXECUTION REQUEST [tool_session_1756579482929692000] ===
+[APP_SUBMISSION] 2025/08/30 14:44:42.929805 [tool_session_1756579482929692000] Client IP: [::1]:51906
+[APP_SUBMISSION] 2025/08/30 14:44:42.929828 [tool_session_1756579482929692000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:44:42.929938 [tool_session_1756579482929692000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 14:44:42.929977 [tool_session_1756579482929692000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:44:42.929997 [tool_session_1756579482929692000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:44:42.930013 [tool_session_1756579482929692000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 14:44:42.930161 [tool_session_1756579482929692000] Parsed request - AppID: food-tracker, ToolName: get_nutrition_feedback, InputLength: 10
+[APP_SUBMISSION] 2025/08/30 14:44:42.930204 [tool_session_1756579482929692000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 14:44:42.930227 [tool_session_1756579482929692000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:42.930245 [tool_session_1756579482929692000] Tool 'get_nutrition_feedback' found with input format: {"days": "number?"}
+[APP_SUBMISSION] 2025/08/30 14:44:42.930262 [tool_session_1756579482929692000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:42.930517 [tool_session_1756579482929692000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:42.930552 [tool_session_1756579482929692000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:42.962037 [tool_session_1756579482929692000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 14:44:42.962094 [tool_session_1756579482929692000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 14:44:42.962573 [tool_session_1756579482929692000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:42.962619 [tool_session_1756579482929692000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 14:44:42.962626 [tool_session_1756579482929692000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 14:44:42.962634 [tool_session_1756579482929692000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 14:44:42.962637 [tool_session_1756579482929692000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 14:44:42.962655 [tool_session_1756579482929692000] Input prepared - Tool: get_nutrition_feedback, InputLength: 51, Input: {"data":{"days":1},"tool":"get_nutrition_feedback"}
+[APP_SUBMISSION] 2025/08/30 14:44:42.962661 [tool_session_1756579482929692000] Allocating WASM memory for input (51 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:42.962686 [tool_session_1756579482929692000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 14:44:42.962692 [tool_session_1756579482929692000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 14:44:42.962697 [tool_session_1756579482929692000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 14:44:43.080010 [tool_session_1756579482929692000] WASM execution completed successfully in 117.309375ms, result length: 83
+[APP_SUBMISSION] 2025/08/30 14:44:43.080069 [tool_session_1756579482929692000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 14:44:43.080107 [tool_session_1756579482929692000] Result pointer: 1114312
+[APP_SUBMISSION] 2025/08/30 14:44:43.080126 [tool_session_1756579482929692000] Result retrieved (83 bytes), result is: {"success":false,"data":null,"error":"Failed to get AI feedback: Claude API error"}
+[APP_SUBMISSION] 2025/08/30 14:44:43.080141 [tool_session_1756579482929692000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 14:44:43.080162 [tool_session_1756579482929692000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:44:43.080190 [tool_session_1756579482929692000] Response prepared (123 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:43.080211 [tool_session_1756579482929692000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:44:43.080223 [tool_session_1756579482929692000] Total execution time: 117.52275ms
+[APP_SUBMISSION] 2025/08/30 14:44:48.213908 === NEW TOOL EXECUTION REQUEST [tool_session_1756579488213901000] ===
+[APP_SUBMISSION] 2025/08/30 14:44:48.214123 [tool_session_1756579488213901000] Client IP: [::1]:51907
+[APP_SUBMISSION] 2025/08/30 14:44:48.214172 [tool_session_1756579488213901000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 14:44:48.214202 [tool_session_1756579488213901000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 14:44:48.214227 [tool_session_1756579488213901000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 14:44:48.214250 [tool_session_1756579488213901000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 14:44:48.214273 [tool_session_1756579488213901000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 14:44:48.214336 [tool_session_1756579488213901000] Parsed request - AppID: food-tracker, ToolName: get_meals, InputLength: 2
+[APP_SUBMISSION] 2025/08/30 14:44:48.214365 [tool_session_1756579488213901000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 14:44:48.214387 [tool_session_1756579488213901000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:48.214409 [tool_session_1756579488213901000] Tool 'get_meals' found with input format: {"start_date": "string?", "end_date": "string?", "meal_type": "string?"}
+[APP_SUBMISSION] 2025/08/30 14:44:48.214431 [tool_session_1756579488213901000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 14:44:48.214681 [tool_session_1756579488213901000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:48.214717 [tool_session_1756579488213901000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:48.245848 [tool_session_1756579488213901000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 14:44:48.245901 [tool_session_1756579488213901000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 14:44:48.246504 [tool_session_1756579488213901000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 14:44:48.246569 [tool_session_1756579488213901000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 14:44:48.246582 [tool_session_1756579488213901000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 14:44:48.246592 [tool_session_1756579488213901000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 14:44:48.246597 [tool_session_1756579488213901000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 14:44:48.246613 [tool_session_1756579488213901000] Input prepared - Tool: get_meals, InputLength: 30, Input: {"data":{},"tool":"get_meals"}
+[APP_SUBMISSION] 2025/08/30 14:44:48.246620 [tool_session_1756579488213901000] Allocating WASM memory for input (30 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:48.246675 [tool_session_1756579488213901000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 14:44:48.246683 [tool_session_1756579488213901000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 14:44:48.246690 [tool_session_1756579488213901000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 14:44:48.246917 [tool_session_1756579488213901000] WASM execution completed successfully in 222.875µs, result length: 651
+[APP_SUBMISSION] 2025/08/30 14:44:48.246934 [tool_session_1756579488213901000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 14:44:48.246941 [tool_session_1756579488213901000] Result pointer: 1114192
+[APP_SUBMISSION] 2025/08/30 14:44:48.246945 [tool_session_1756579488213901000] Result retrieved (651 bytes), result is: {"success":true,"data":{"count":2,"meals":[{"calories":480,"carbs":65,"created_at":"2025-08-30T18:44:00Z","date":"2025-08-30","fat":20,"fiber":2,"food_name":"Puffer pancakes with maple syrup","id":2,"meal":"breakfast","notes":"Fluffy pancakes with maple syrup","protein":8,"sodium":620,"sugar":28},{"calories":620,"carbs":58,"created_at":"2025-08-30T18:43:28Z","date":"2025-08-30","fat":18,"fiber":12,"food_name":"Chipotle barbacoa bowl with black beans, brown rice, fajita veggies, and salsa","id":1,"meal":"lunch","notes":"Barbacoa, black beans, brown rice, fajita veggies, salsa","protein":32,"sodium":1450,"sugar":8}],"success":true},"error":null}
+[APP_SUBMISSION] 2025/08/30 14:44:48.246959 [tool_session_1756579488213901000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 14:44:48.246963 [tool_session_1756579488213901000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 14:44:48.246971 [tool_session_1756579488213901000] Response prepared (767 bytes)
+[APP_SUBMISSION] 2025/08/30 14:44:48.246978 [tool_session_1756579488213901000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 14:44:48.246982 [tool_session_1756579488213901000] Total execution time: 287.75µs
+[APP_SUBMISSION] 2025/08/30 15:04:56.661803 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/08/30 15:05:39.408439 === NEW TOOL EXECUTION REQUEST [tool_session_1756580739404295000] ===
+[APP_SUBMISSION] 2025/08/30 15:05:39.408995 [tool_session_1756580739404295000] Client IP: [::1]:52152
+[APP_SUBMISSION] 2025/08/30 15:05:39.409015 [tool_session_1756580739404295000] Request Method: POST
+[APP_SUBMISSION] 2025/08/30 15:05:39.409029 [tool_session_1756580739404295000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/08/30 15:05:39.409041 [tool_session_1756580739404295000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/08/30 15:05:39.409053 [tool_session_1756580739404295000] Content-Type: application/json
+[APP_SUBMISSION] 2025/08/30 15:05:39.409063 [tool_session_1756580739404295000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/08/30 15:05:39.409707 [tool_session_1756580739404295000] Parsed request - AppID: food-tracker, ToolName: get_nutrition_feedback, InputLength: 2
+[APP_SUBMISSION] 2025/08/30 15:05:39.409747 [tool_session_1756580739404295000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/08/30 15:05:39.409892 [tool_session_1756580739404295000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 15:05:39.409905 [tool_session_1756580739404295000] Tool 'get_nutrition_feedback' found with input format: {"days": "number?"}
+[APP_SUBMISSION] 2025/08/30 15:05:39.409916 [tool_session_1756580739404295000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/08/30 15:05:39.410473 [tool_session_1756580739404295000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/08/30 15:05:39.410512 [tool_session_1756580739404295000] STEP 4: Compiling WASM module
+[APP_SUBMISSION] 2025/08/30 15:05:39.450696 [tool_session_1756580739404295000] WASM module compiled successfully
+[APP_SUBMISSION] 2025/08/30 15:05:39.450750 [tool_session_1756580739404295000] STEP 5: Setting up WASM linker and host functions
+[APP_SUBMISSION] 2025/08/30 15:05:39.452078 [tool_session_1756580739404295000] STEP 6: Instantiating WASM module
+[APP_SUBMISSION] 2025/08/30 15:05:39.452158 [tool_session_1756580739404295000] WASM module instantiated successfully
+[APP_SUBMISSION] 2025/08/30 15:05:39.452168 [tool_session_1756580739404295000] STEP 7: Verifying required WASM functions
+[APP_SUBMISSION] 2025/08/30 15:05:39.452178 [tool_session_1756580739404295000] All required WASM functions found
+[APP_SUBMISSION] 2025/08/30 15:05:39.452183 [tool_session_1756580739404295000] STEP 8: Preparing input for WASM execution
+[APP_SUBMISSION] 2025/08/30 15:05:39.452216 [tool_session_1756580739404295000] Input prepared - Tool: get_nutrition_feedback, InputLength: 43, Input: {"data":{},"tool":"get_nutrition_feedback"}
+[APP_SUBMISSION] 2025/08/30 15:05:39.452223 [tool_session_1756580739404295000] Allocating WASM memory for input (43 bytes)
+[APP_SUBMISSION] 2025/08/30 15:05:39.452549 [tool_session_1756580739404295000] Input memory allocated at pointer: 1114120
+[APP_SUBMISSION] 2025/08/30 15:05:39.452563 [tool_session_1756580739404295000] Copying input data to WASM memory
+[APP_SUBMISSION] 2025/08/30 15:05:39.452599 [tool_session_1756580739404295000] STEP 9: Executing WASM 'run' function
+[APP_SUBMISSION] 2025/08/30 15:05:59.350392 [tool_session_1756580739404295000] WASM execution completed successfully in 19.8978945s, result length: 3582
+[APP_SUBMISSION] 2025/08/30 15:05:59.350729 [tool_session_1756580739404295000] STEP 10: Retrieving execution results
+[APP_SUBMISSION] 2025/08/30 15:05:59.350806 [tool_session_1756580739404295000] Result pointer: 1127184
+[APP_SUBMISSION] 2025/08/30 15:05:59.350852 [tool_session_1756580739404295000] Result retrieved (3582 bytes), result is: {"success":true,"data":{"feedback":"# Nutrition Analysis & Recommendations 🌟\n\n## Overall Assessment\n\nBased on your single day of logging, I can see some great food choices! However, this appears to be incomplete data (only 2 meals, 1100 calories total), so my feedback will focus on what you've shared while encouraging more comprehensive tracking.\n\n## 1. Overall Nutritional Balance ⚖️\n\n**Strengths:**\n- Excellent choice with the Chipotle bowl - packed with lean protein, fiber, and nutrients\n- Good variety of food groups represented\n- Brown rice over white rice shows smart whole grain choices\n\n**Areas for attention:**\n- Only 2 meals logged - you're likely missing 600-800+ calories needed for the day\n- Limited vegetable variety (great start with fajita veggies though!)\n\n## 2. Calorie Intake Appropriateness 📊\n\nAt 1100 calories total, this is **significantly below** what most adults need (typically 1,800-2,400+ calories). This suggests:\n- Missing meals/snacks in your log\n- Potential under-eating, which can slow metabolism\n- Need for additional balanced meals\n\n## 3. Macronutrient Ratios 🥗\n\n**Current breakdown:** 15% protein, 45% carbs, 31% fat, 9% other\n\n**Feedback:**\n- **Protein:** 40g is low for daily needs (aim for 80-120g) - but your Chipotle bowl shows you know how to get quality protein!\n- **Carbs:** Good balance, love the complex carbs from brown rice\n- **Fat:** Healthy ratio - right on target\n\n## 4. Specific Suggestions for Improvement ✨\n\n**Add these elements:**\n- **Breakfast upgrade:** Keep those pancakes occasionally, but add protein (Greek yogurt, nuts, or eggs on the side)\n- **Snacks:** 1-2 healthy snacks daily (apple + almond butter, carrots + hummus)\n- **Dinner:** A balanced meal with lean protein + vegetables + whole grains\n- **More vegetables:** Aim for 5+ servings daily\n\n## 5. Positive Reinforcement! 🎉\n\n**You're already doing great with:**\n- ✅ Choosing brown rice over white\n- ✅ Loading up on protein with barbacoa\n- ✅ Including vegetables (fajita veggies)\n- ✅ Choosing fresh salsa over heavier sauces\n- ✅ Starting to track your intake\n\n## 6. Practical Tips for This Week 🗓️\n\n**Daily Structure:**\n- **Breakfast:** Add protein to balance those carbs (Greek yogurt with your pancakes?)\n- **Lunch:** More bowls like Chipotle - you nailed this meal!\n- **Dinner:** Aim for similar balance as lunch\n- **Snacks:** 1-2 nutrient-dense options\n\n**Easy wins:**\n1. **Prep veggies** Sunday for easy additions all week\n2. **Keep hard-boiled eggs** ready for protein boosts\n3. **Try overnight oats** for easier balanced breakfasts\n4. **Log everything** - even beverages and small snacks\n\n**This week's goal:** Aim for 3 meals + 1-2 snacks daily, targeting 1,600-2,000+ calories total with similar protein quality to your Chipotle bowl.\n\nYou're off to a solid start - let's build on these good choices! 🚀","meals_analyzed":2,"nutrition_summary":"WEEKLY NUTRITION SUMMARY\n========================\n\nDate: 2025-08-30\n----------\n  Chipotle barbacoa bowl with black beans, brown rice, fajita veggies, and salsa (lunch): 620 cal, 32g protein, 58g carbs, 18g fat\n  Puffer pancakes with maple syrup (breakfast): 480 cal, 8g protein, 65g carbs, 20g fat\n  Daily Totals: 1100 cal, 40g protein, 123g carbs, 38g fat\n\nWEEKLY TOTALS:\nTotal Calories: 1100\nTotal Protein: 40g\nTotal Carbohydrates: 123g\nTotal Fat: 38g\nTotal Fiber: 14g\nTotal Meals Logged: 2\nAverage Calories per Meal: 550\n","period":"2025-08-24 to 2025-08-30","success":true},"error":null}
+[APP_SUBMISSION] 2025/08/30 15:05:59.351505 [tool_session_1756580739404295000] Cleaning up allocated input memory
+[APP_SUBMISSION] 2025/08/30 15:05:59.351588 [tool_session_1756580739404295000] STEP 11: Sending success response
+[APP_SUBMISSION] 2025/08/30 15:05:59.351673 [tool_session_1756580739404295000] Response prepared (3724 bytes)
+[APP_SUBMISSION] 2025/08/30 15:05:59.351804 [tool_session_1756580739404295000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/08/30 15:05:59.351830 [tool_session_1756580739404295000] Total execution time: 19.89933375s

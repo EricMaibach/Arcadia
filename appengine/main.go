@@ -129,7 +129,7 @@ func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
 
 	var lastErr error
 	for _, format := range formats {
-		if parsedTime, err := time.Parse(format, timeStr); err == nil {
+		if parsedTime, err := time.ParseInLocation(format, timeStr, time.Local); err == nil {
 			ft.Time = parsedTime
 			return nil
 		} else {
@@ -153,6 +153,144 @@ type ScheduledRun struct {
 	Error       string          `json:"error,omitempty"`
 }
 
+// --- Configuration structures ---
+
+type ClaudeConfig struct {
+	APIKey         string `json:"api_key"`
+	BaseURL        string `json:"base_url"`
+	Model          string `json:"model"`
+	MaxTokens      int    `json:"max_tokens"`
+	TimeoutSeconds int    `json:"timeout_seconds"`
+}
+
+type ServerConfig struct {
+	Port string `json:"port"`
+	Host string `json:"host"`
+}
+
+type Config struct {
+	Claude ClaudeConfig `json:"claude"`
+	Server ServerConfig `json:"server"`
+}
+
+// --- Claude API structures ---
+
+type ClaudeMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+type ClaudeRequest struct {
+	Model     string          `json:"model"`
+	MaxTokens int             `json:"max_tokens"`
+	Messages  []ClaudeMessage `json:"messages"`
+}
+
+type ClaudeResponse struct {
+	Content []struct {
+		Text string `json:"text"`
+		Type string `json:"type"`
+	} `json:"content"`
+	StopReason string `json:"stop_reason"`
+	Usage      struct {
+		InputTokens  int `json:"input_tokens"`
+		OutputTokens int `json:"output_tokens"`
+	} `json:"usage"`
+}
+
+// --- Claude Service ---
+
+type ClaudeService struct {
+	config     ClaudeConfig
+	httpClient *http.Client
+}
+
+func NewClaudeService(config ClaudeConfig) *ClaudeService {
+	return &ClaudeService{
+		config: config,
+		httpClient: &http.Client{
+			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
+		},
+	}
+}
+
+func (cs *ClaudeService) SendMessage(message string) (string, error) {
+	request := ClaudeRequest{
+		Model:     cs.config.Model,
+		MaxTokens: cs.config.MaxTokens,
+		Messages: []ClaudeMessage{
+			{
+				Role:    "user",
+				Content: message,
+			},
+		},
+	}
+
+	jsonData, err := json.Marshal(request)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", cs.config.BaseURL+"/v1/messages", strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", cs.config.APIKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := cs.httpClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Claude API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var claudeResp ClaudeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	if len(claudeResp.Content) == 0 {
+		return "", fmt.Errorf("no content in Claude response")
+	}
+
+	return claudeResp.Content[0].Text, nil
+}
+
+// --- REST API Handler for future use ---
+
+func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Message string `json:"message"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	response, err := cs.SendMessage(req.Message)
+	if err != nil {
+		log.Printf("Claude API error: %v", err)
+		http.Error(w, "Failed to get Claude response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"response": response})
+}
+
 const registryFilePath = "app_registry.json"
 
 var (
@@ -169,6 +307,10 @@ var (
 	systemDBMutex sync.RWMutex
 
 	appLogger *log.Logger
+	
+	// Configuration and Claude service
+	appConfig     Config
+	claudeService *ClaudeService
 	logFile   *os.File
 
 	// Scheduler globals
@@ -322,6 +464,11 @@ func runToolHandler(w http.ResponseWriter, r *http.Request) {
 
 	linker.DefineFunc(store, "env", "db_prepared_query", func(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr int32) int32 {
 		return dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
+	})
+
+	// Define Claude AI host function that WASM can call
+	linker.DefineFunc(store, "env", "claude_query", func(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
+		return claudeQuery(caller, messagePtr, messageLen, resultPtrPtr)
 	})
 
 	logAppSubmission("[%s] STEP 6: Instantiating WASM module", sessionID)
@@ -1452,6 +1599,67 @@ func dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, param
 	return int32(len(jsonBytes))
 }
 
+// claudeQuery sends a message to Claude AI and returns the response
+func claudeQuery(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
+	// Get memory instance
+	memory := caller.GetExport("memory").Memory()
+	data := memory.UnsafeData(caller)
+
+	// Read message string from WASM memory
+	messageBytes := data[messagePtr : messagePtr+messageLen]
+	message := string(messageBytes)
+
+	log.Printf("[WASM Claude] claudeQuery called with message: %s", message)
+
+	// Check if Claude service is available
+	if claudeService == nil {
+		log.Printf("[WASM Claude] Claude service not initialized")
+		return -1 // Claude service not initialized
+	}
+
+	// Send message to Claude
+	response, err := claudeService.SendMessage(message)
+	if err != nil {
+		log.Printf("[WASM Claude] Claude API error: %v", err)
+		return -2 // Claude API error
+	}
+
+	// Create response JSON
+	responseObj := map[string]interface{}{
+		"response": response,
+		"success":  true,
+	}
+
+	// Marshal response to JSON
+	jsonBytes, err := json.Marshal(responseObj)
+	if err != nil {
+		log.Printf("[WASM Claude] JSON marshal error: %v", err)
+		return -3 // JSON marshal error
+	}
+
+	// Allocate memory in WASM for result
+	allocateFunc := caller.GetExport("allocate").Func()
+	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
+	if err != nil {
+		log.Printf("[WASM Claude] Memory allocation error: %v", err)
+		return -4 // Allocation error
+	}
+	resultPtr := resultLenResult.(int32)
+
+	// Copy result to WASM memory
+	copy(data[resultPtr:resultPtr+int32(len(jsonBytes))], jsonBytes)
+
+	// Store result pointer in the output parameter
+	resultPtrPtrBytes := data[resultPtrPtr : resultPtrPtr+4]
+	resultPtrPtrBytes[0] = byte(resultPtr)
+	resultPtrPtrBytes[1] = byte(resultPtr >> 8)
+	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
+	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
+
+	log.Printf("[WASM Claude] Claude query completed successfully")
+	return int32(len(jsonBytes))
+}
+
 // --- Schedule Management ---
 
 func generateID() (string, error) {
@@ -1938,6 +2146,11 @@ func executeAppTool(appID, toolName string, input json.RawMessage) (string, erro
 		return dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
 	})
 
+	// Define Claude AI host function
+	linker.DefineFunc(store, "env", "claude_query", func(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
+		return claudeQuery(caller, messagePtr, messageLen, resultPtrPtr)
+	})
+
 	instance, err := linker.Instantiate(store, module)
 	if err != nil {
 		return "", fmt.Errorf("failed to instantiate WASM module: %v", err)
@@ -2246,6 +2459,53 @@ func closeDatabases() {
 	}
 }
 
+// --- Configuration Loading ---
+
+func loadConfig() error {
+	configFile := "config.json"
+	
+	// Check if config file exists
+	if _, err := os.Stat(configFile); os.IsNotExist(err) {
+		return fmt.Errorf("config file %s not found. Please create it with your Claude API configuration", configFile)
+	}
+	
+	data, err := os.ReadFile(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+	
+	if err := json.Unmarshal(data, &appConfig); err != nil {
+		return fmt.Errorf("failed to parse config file: %w", err)
+	}
+	
+	// Validate required Claude configuration
+	if appConfig.Claude.APIKey == "" || appConfig.Claude.APIKey == "your-claude-api-key-here" {
+		return fmt.Errorf("Claude API key not configured in %s", configFile)
+	}
+	
+	if appConfig.Claude.BaseURL == "" {
+		appConfig.Claude.BaseURL = "https://api.anthropic.com"
+	}
+	
+	if appConfig.Claude.Model == "" {
+		appConfig.Claude.Model = "claude-3-5-sonnet-20241022"
+	}
+	
+	if appConfig.Claude.MaxTokens == 0 {
+		appConfig.Claude.MaxTokens = 4096
+	}
+	
+	if appConfig.Claude.TimeoutSeconds == 0 {
+		appConfig.Claude.TimeoutSeconds = 30
+	}
+	
+	// Initialize Claude service
+	claudeService = NewClaudeService(appConfig.Claude)
+	
+	log.Printf("Configuration loaded successfully. Claude model: %s", appConfig.Claude.Model)
+	return nil
+}
+
 // --- Main ---
 
 func main() {
@@ -2254,6 +2514,11 @@ func main() {
 		log.Fatalf("Failed to initialize app logger: %v", err)
 	}
 	defer closeAppLogger()
+
+	// Load configuration
+	if err := loadConfig(); err != nil {
+		log.Fatalf("Failed to load configuration: %v", err)
+	}
 
 	// Initialize databases (separate app and system databases)
 	if err := initDatabases(); err != nil {
@@ -2304,7 +2569,13 @@ func main() {
 	http.HandleFunc("/update_schedule", corsHandler(updateScheduleHandler))
 	http.HandleFunc("/list_scheduled_runs", corsHandler(listScheduledRunsHandler))
 
-	port := "8080"
+	// AI Integration endpoints
+	http.HandleFunc("/claude", corsHandler(claudeService.HandleClaudeAPI))
+
+	port := appConfig.Server.Port
+	if port == "" {
+		port = "8080"
+	}
 	log.Printf("Starting Arcadia App Engine server on port %s...", port)
 	log.Printf("Available endpoints:")
 	log.Printf("  /list_apps - List all registered apps")
@@ -2316,5 +2587,6 @@ func main() {
 	log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
 	log.Printf("  /update_schedule?id=<id> - Update a schedule")
 	log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
+	log.Printf("  /claude - Send message to Claude AI (POST {\"message\": \"your message\"})")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

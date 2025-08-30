@@ -86,15 +86,16 @@ REQUIRED JSON FORMAT:
     "runtime": "wasm",
     "tools": [
         {"name": "increment", "inputFormat": "{}"},
-        {"name": "get_count", "inputFormat": "{\"user_id\": \"string\"}"}
+        {"name": "get_count", "inputFormat": "{\"user_id\": \"string\"}"},
+        {"name": "ask_about_count", "inputFormat": "{\"question\": \"string?\"}"}
     ],
     "appSrc": "/* Your Rust code here */"
 }
 ```
 
 REQUIRED METHODS:
-- `fn initialize(&mut self, db: &DatabaseConnection) -> Result<(), String>` (optional)
-- `fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection) -> Result<serde_json::Value, String>` (required)
+- `fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String>` (optional)
+- `fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String>` (required)
 - `fn get_available_tools(&self) -> Vec<&'static str>` (required)
 
 REQUIRED FACTORY FUNCTION:
@@ -115,7 +116,7 @@ impl CounterApp {
 }
 
 impl ArcadiaApp for CounterApp {
-    fn initialize(&mut self, db: &DatabaseConnection) -> Result<(), String> {
+    fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
         db.execute("CREATE TABLE IF NOT EXISTS counter_state (id INTEGER PRIMARY KEY, count INTEGER)")?;
         
         let rows = db.query("SELECT count FROM counter_state WHERE id = 1")?;
@@ -126,7 +127,7 @@ impl ArcadiaApp for CounterApp {
         Ok(())
     }
     
-    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection) -> Result<serde_json::Value, String> {
+    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String> {
         match tool_name {
             "increment" => {
                 // Expects empty JSON object: {}
@@ -144,12 +145,25 @@ impl ArcadiaApp for CounterApp {
 
                 Ok(json!({ "count": self.count, "user_id": user_id }))
             },
+            "ask_about_count" => {
+                // Example of using Claude AI to analyze the counter data
+                let question = data
+                    .as_ref()
+                    .and_then(|d| d.get("question"))
+                    .and_then(|q| q.as_str())
+                    .unwrap_or("What can you tell me about this counter?");
+                
+                let context = format!("The current count is {}. {}", self.count, question);
+                let analysis = claude.ask(&context)?;
+                
+                Ok(json!({ "count": self.count, "analysis": analysis }))
+            },
             _ => Err(format!("Unknown tool: {}", tool_name))
         }
     }
     
     fn get_available_tools(&self) -> Vec<&'static str> {
-        vec!["increment", "get_count"]
+        vec!["increment", "get_count", "ask_about_count"]
     }
 }
 
@@ -181,10 +195,29 @@ The DatabaseConnection provides these methods:
 - `execute(&self, sql: &str) -> Result<i32, String>` - Execute INSERT/UPDATE/DELETE statements
 - `prepared_query(&self, sql: &str, params: &[serde_json::Value]) -> Result<Vec<serde_json::Value>, String>` - Execute prepared statements
 
+CLAUDE AI INTEGRATION:
+The ClaudeService provides these methods:
+- `query(&self, message: &str) -> Result<String, String>` - Send any message to Claude AI
+- `ask(&self, question: &str) -> Result<String, String>` - Semantic alias for asking questions
+
+CLAUDE AI EXAMPLES:
+```rust
+// Basic Claude interaction
+let response = claude.ask("Explain this data structure")?;
+
+// Combine database and AI analysis
+let data = db.query("SELECT * FROM sales_data")?;
+let analysis = claude.query(&format!("Analyze this sales data: {:?}", data))?;
+
+// Use Claude for intelligent decision making
+let recommendation = claude.ask("Based on the current count, what should the next action be?")?;
+```
+
 BENEFITS:
 - No WASM boilerplate required
 - Automatic memory management
 - Built-in database integration
+- Claude AI integration for intelligent features
 - Type-safe JSON handling
 - Easy testing and development
 - Input format specification for better API documentation""",
@@ -256,7 +289,7 @@ BENEFITS:
                     "scheduledTime": {
                         "type": "string",
                         "format": "date-time",
-                        "description": "When to run the tool (RFC3339 with your local time zone)"
+                        "description": "When to run the tool (ISO 8601 format without a time zone configuration)"
                     },
                     "recurrence": {
                         "type": "object",

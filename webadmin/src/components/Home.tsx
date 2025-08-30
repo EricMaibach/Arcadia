@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { appApi, App } from '../services/api';
+import ArcadiaIcon from '../ArcadiaIcon.jpg';
 
 const Home: React.FC = () => {
   const [apps, setApps] = useState<App[]>([]);
@@ -30,8 +31,12 @@ const Home: React.FC = () => {
   return (
     <div className="home">
       <div className="welcome-section">
+        <div className="hero-icon">
+          <img src={ArcadiaIcon} alt="Arcadia Tree" className="hero-tree" />
+        </div>
         <h2>Welcome to Arcadia</h2>
-        <p>Select an app to work with its tools, or use the admin section to manage the platform.</p>
+        <p>A digital ecosystem where applications grow and flourish together.<br />
+        Select an app to work with its tools, or use the admin section to manage the platform.</p>
       </div>
 
       {apps.length === 0 ? (

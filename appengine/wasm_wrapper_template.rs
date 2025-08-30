@@ -1,3 +1,31 @@
+// Arcadia WASM Wrapper Template
+// This template provides database and Claude AI functionality to WASM apps.
+//
+// Example usage in your app implementation:
+// 
+// impl ArcadiaApp for MyApp {
+//     fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, 
+//                    db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String> {
+//         match tool_name {
+//             "ask_claude" => {
+//                 let message = data.unwrap()["message"].as_str().unwrap();
+//                 let response = claude.query(message)?;
+//                 Ok(serde_json::json!({"response": response}))
+//             },
+//             "analyze_data" => {
+//                 let results = db.query("SELECT * FROM my_table")?;
+//                 let analysis = claude.ask(&format!("Analyze this data: {:?}", results))?;
+//                 Ok(serde_json::json!({"analysis": analysis}))
+//             },
+//             _ => Err("Unknown tool".to_string())
+//         }
+//     }
+//     
+//     fn get_available_tools(&self) -> Vec<&'static str> {
+//         vec!["ask_claude", "analyze_data"]
+//     }
+// }
+
 use std::alloc::{alloc, dealloc, Layout};
 use std::ptr;
 use serde::{Deserialize, Serialize};
@@ -5,11 +33,15 @@ use serde::{Deserialize, Serialize};
 static mut RESULT_PTR: *mut u8 = ptr::null_mut();
 static mut RESULT_LEN: usize = 0;
 
-// External database functions available to apps
+// External functions available to apps
 extern "C" {
+    // Database functions
     fn db_query(query_ptr: *const u8, query_len: usize, result_ptr_ptr: *mut *const u8) -> i32;
     fn db_exec(stmt_ptr: *const u8, stmt_len: usize) -> i32;
     fn db_prepared_query(stmt_ptr: *const u8, stmt_len: usize, params_ptr: *const u8, params_len: usize, result_ptr_ptr: *mut *const u8) -> i32;
+    
+    // Claude AI function
+    fn claude_query(message_ptr: *const u8, message_len: usize, result_ptr_ptr: *mut *const u8) -> i32;
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -23,6 +55,12 @@ pub struct ToolResponse {
     pub success: bool,
     pub data: Option<serde_json::Value>,
     pub error: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ClaudeResponse {
+    pub response: String,
+    pub success: bool,
 }
 
 pub struct DatabaseConnection;
@@ -99,13 +137,60 @@ impl DatabaseConnection {
     }
 }
 
+pub struct ClaudeService;
+
+impl ClaudeService {
+    pub fn query(&self, message: &str) -> Result<String, String> {
+        let message_bytes = message.as_bytes();
+        let mut result_ptr: *const u8 = ptr::null();
+        
+        let result = unsafe {
+            claude_query(
+                message_bytes.as_ptr(),
+                message_bytes.len(),
+                &mut result_ptr as *mut *const u8,
+            )
+        };
+        
+        if result < 0 {
+            return Err(match result {
+                -1 => "Claude service not initialized".to_string(),
+                -2 => "Claude API error".to_string(),
+                -3 => "JSON marshal error".to_string(),
+                -4 => "Memory allocation error".to_string(),
+                _ => format!("Claude query failed with error code: {}", result),
+            });
+        }
+        
+        let json_result = unsafe {
+            let slice = std::slice::from_raw_parts(result_ptr, result as usize);
+            String::from_utf8_unchecked(slice.to_vec())
+        };
+        
+        unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+        
+        let claude_response: ClaudeResponse = serde_json::from_str(&json_result)
+            .map_err(|e| format!("JSON parsing error: {}", e))?;
+        
+        if claude_response.success {
+            Ok(claude_response.response)
+        } else {
+            Err("Claude query failed".to_string())
+        }
+    }
+    
+    pub fn ask(&self, question: &str) -> Result<String, String> {
+        self.query(question)
+    }
+}
+
 pub trait ArcadiaApp {
-    fn initialize(&mut self, db: &DatabaseConnection) -> Result<(), String> {
+    fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
         // Default implementation - apps can override if they need initialization
         Ok(())
     }
     
-    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection) -> Result<serde_json::Value, String>;
+    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String>;
     
     fn get_available_tools(&self) -> Vec<&'static str>;
 }
@@ -114,6 +199,7 @@ pub trait ArcadiaApp {
 
 static mut APP_INSTANCE: Option<Box<dyn ArcadiaApp + Send + Sync>> = None;
 static mut DB_CONNECTION: Option<DatabaseConnection> = None;
+static mut CLAUDE_SERVICE: Option<ClaudeService> = None;
 
 #[no_mangle]
 pub extern "C" fn allocate(len: usize) -> *mut u8 {
@@ -174,11 +260,16 @@ pub extern "C" fn run(input_ptr: *const u8, input_len: usize) -> usize {
             DB_CONNECTION = Some(DatabaseConnection);
         }
         
+        // Initialize Claude service if not already done
+        if CLAUDE_SERVICE.is_none() {
+            CLAUDE_SERVICE = Some(ClaudeService);
+        }
+        
         // Initialize app instance if not already done
         if APP_INSTANCE.is_none() {
             let mut app = create_app();
-            if let Some(ref db) = &DB_CONNECTION {
-                if let Err(e) = app.initialize(db) {
+            if let (Some(ref db), Some(ref claude)) = (&DB_CONNECTION, &CLAUDE_SERVICE) {
+                if let Err(e) = app.initialize(db, claude) {
                     let response = ToolResponse {
                         success: false,
                         data: None,
@@ -192,8 +283,8 @@ pub extern "C" fn run(input_ptr: *const u8, input_len: usize) -> usize {
         }
         
         // Handle the tool request
-        if let (Some(ref mut app), Some(ref db)) = (&mut APP_INSTANCE, &DB_CONNECTION) {
-            let result = app.handle_tool(&tool_request.tool, tool_request.data, db);
+        if let (Some(ref mut app), Some(ref db), Some(ref claude)) = (&mut APP_INSTANCE, &DB_CONNECTION, &CLAUDE_SERVICE) {
+            let result = app.handle_tool(&tool_request.tool, tool_request.data, db, claude);
             
             let response = match result {
                 Ok(data) => ToolResponse {
@@ -214,7 +305,7 @@ pub extern "C" fn run(input_ptr: *const u8, input_len: usize) -> usize {
             let response = ToolResponse {
                 success: false,
                 data: None,
-                error: Some("Failed to initialize app or database connection".to_string()),
+                error: Some("Failed to initialize app, database connection, or Claude service".to_string()),
             };
             let output = serde_json::to_string(&response).unwrap();
             store_result(&output)

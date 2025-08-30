@@ -5,6 +5,7 @@ import Home from './components/Home';
 import AppPage from './components/AppPage';
 import Admin from './components/Admin';
 import { appApi, App as AppType } from './services/api';
+import ArcadiaIcon from './ArcadiaIcon.jpg';
 
 function App() {
   const [apps, setApps] = useState<AppType[]>([]);
@@ -30,6 +31,7 @@ function App() {
       <div className="App">
         <header className="App-header">
           <Link to="/" className="logo-link">
+            <img src={ArcadiaIcon} alt="Arcadia Tree" className="logo-icon" />
             <h1>Arcadia</h1>
           </Link>
           <nav className="nav">
