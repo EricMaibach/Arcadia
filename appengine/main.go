@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,16 +43,139 @@ type App struct {
 	Files          []File     `json:"files,omitempty"`
 }
 
+type ScheduleType string
+
+const (
+	ScheduleTypeOneTime   ScheduleType = "one-time"
+	ScheduleTypeRecurring ScheduleType = "recurring"
+)
+
+type RecurrenceRule struct {
+	Interval   int        `json:"interval"`             // Number of units between runs
+	Unit       string     `json:"unit"`                 // "minutes", "hours", "days", "weeks", "months"
+	DaysOfWeek []int      `json:"daysOfWeek,omitempty"` // For weekly: 0=Sunday, 1=Monday, etc.
+	EndDate    *time.Time `json:"endDate,omitempty"`    // Optional end date for recurring schedules
+}
+
+type AppSchedule struct {
+	ID            string          `json:"id"`
+	AppID         string          `json:"appId"`
+	ToolName      string          `json:"toolName"`
+	Input         json.RawMessage `json:"input"`
+	ScheduleType  ScheduleType    `json:"scheduleType"`
+	ScheduledTime time.Time       `json:"scheduledTime"`
+	Recurrence    *RecurrenceRule `json:"recurrence,omitempty"`
+	IsActive      bool            `json:"isActive"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	LastRun       *time.Time      `json:"lastRun,omitempty"`
+	NextRun       *time.Time      `json:"nextRun,omitempty"`
+	RunCount      int             `json:"runCount"`
+}
+
+type ScheduleRequest struct {
+	AppID         string          `json:"appId"`
+	ToolName      string          `json:"toolName"`
+	Input         json.RawMessage `json:"input"`
+	ScheduleType  ScheduleType    `json:"scheduleType"`
+	ScheduledTime FlexibleTime    `json:"scheduledTime"`
+	Recurrence    *RecurrenceRule `json:"recurrence,omitempty"`
+}
+
+// FlexibleTime handles multiple datetime formats
+type FlexibleTime struct {
+	time.Time
+}
+
+// UnmarshalJSON implements json.Unmarshaler for flexible datetime parsing
+func (ft *FlexibleTime) UnmarshalJSON(b []byte) error {
+	if string(b) == "null" {
+		return nil
+	}
+
+	// Remove quotes from JSON string
+	timeStr := strings.Trim(string(b), `"`)
+
+	// Try multiple common time formats
+	formats := []string{
+		time.RFC3339,
+		time.RFC3339Nano,
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02T15:04:05Z0700",
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04",
+		"2006-01-02",
+		"01/02/2006 15:04:05",
+		"01/02/2006 15:04",
+		"01/02/2006",
+		"02-01-2006 15:04:05",
+		"02-01-2006 15:04",
+		"02-01-2006",
+		"Jan 2, 2006 3:04:05 PM",
+		"Jan 2, 2006 15:04:05",
+		"Jan 2, 2006 3:04 PM",
+		"Jan 2, 2006 15:04",
+		"Jan 2, 2006",
+		"January 2, 2006 3:04:05 PM",
+		"January 2, 2006 15:04:05",
+		"January 2, 2006 3:04 PM",
+		"January 2, 2006 15:04",
+		"January 2, 2006",
+		"2006/01/02 15:04:05",
+		"2006/01/02 15:04",
+		"2006/01/02",
+	}
+
+	var lastErr error
+	for _, format := range formats {
+		if parsedTime, err := time.Parse(format, timeStr); err == nil {
+			ft.Time = parsedTime
+			return nil
+		} else {
+			lastErr = err
+		}
+	}
+
+	return fmt.Errorf("unable to parse time '%s' using any supported format: %v", timeStr, lastErr)
+}
+
+type ScheduledRun struct {
+	ID          string          `json:"id"`
+	ScheduleID  string          `json:"scheduleId"`
+	AppID       string          `json:"appId"`
+	ToolName    string          `json:"toolName"`
+	Input       json.RawMessage `json:"input"`
+	StartedAt   time.Time       `json:"startedAt"`
+	CompletedAt *time.Time      `json:"completedAt,omitempty"`
+	Status      string          `json:"status"` // "running", "completed", "failed"
+	Output      string          `json:"output,omitempty"`
+	Error       string          `json:"error,omitempty"`
+}
+
 const registryFilePath = "app_registry.json"
 
 var (
 	registry      = make(map[string]*App)
 	registryMutex sync.RWMutex
 	wasmEngine    = wasmtime.NewEngine()
-	db            *sql.DB
-	dbMutex       sync.RWMutex
-	appLogger     *log.Logger
-	logFile       *os.File
+
+	// App database - available to WASM apps for their data
+	appDB      *sql.DB
+	appDBMutex sync.RWMutex
+
+	// System database - for app engine internal data (schedules, etc.)
+	systemDB      *sql.DB
+	systemDBMutex sync.RWMutex
+
+	appLogger *log.Logger
+	logFile   *os.File
+
+	// Scheduler globals
+	schedules       = make(map[string]*AppSchedule)
+	schedulesMutex  sync.RWMutex
+	schedulerCtx    context.Context
+	schedulerCancel context.CancelFunc
 )
 
 // --- Logging Setup ---
@@ -480,7 +606,7 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 		}
 
 		logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
-		os.RemoveAll(buildDir)
+		// os.RemoveAll(buildDir)
 		logAppSubmission("[%s] RESPONSE: HTTP 500 - WASM compilation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to compile Rust to WASM: %v", err), http.StatusInternalServerError)
 		return
@@ -532,6 +658,395 @@ func submitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 
 	logAppSubmission("[%s] === APP SUBMISSION COMPLETED SUCCESSFULLY ===", sessionID)
 	logAppSubmission("[%s] Total processing time: %v", sessionID, time.Since(startTime))
+}
+
+func scheduleAppRunHandler(w http.ResponseWriter, r *http.Request) {
+	sessionID := fmt.Sprintf("schedule_session_%d", time.Now().UnixNano())
+	clientIP := r.RemoteAddr
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+		clientIP = forwarded
+	}
+
+	logAppSubmission("=== NEW APP SCHEDULE REQUEST [%s] ===", sessionID)
+	logAppSubmission("[%s] Client IP: %s", sessionID, clientIP)
+	logAppSubmission("[%s] Request Method: %s", sessionID, r.Method)
+	logAppSubmission("[%s] Request URL: %s", sessionID, r.URL.String())
+	logAppSubmission("[%s] User-Agent: %s", sessionID, r.Header.Get("User-Agent"))
+	logAppSubmission("[%s] Content-Type: %s", sessionID, r.Header.Get("Content-Type"))
+
+	logAppSubmission("[%s] STEP 1: Parsing schedule request", sessionID)
+	var req ScheduleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to decode request body: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid JSON", sessionID)
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	logAppSubmission("[%s] Parsed request - AppID: %s, ToolName: %s, ScheduleType: %s", sessionID, req.AppID, req.ToolName, req.ScheduleType)
+
+	// Step 2: Validate request fields
+	logAppSubmission("[%s] STEP 2: Validating schedule request", sessionID)
+	if req.AppID == "" {
+		logAppSubmission("[%s] ERROR: AppID is required", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing AppID", sessionID)
+		http.Error(w, "appId is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.ToolName == "" {
+		logAppSubmission("[%s] ERROR: ToolName is required", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing ToolName", sessionID)
+		http.Error(w, "toolName is required", http.StatusBadRequest)
+		return
+	}
+
+	if req.ScheduleType != ScheduleTypeOneTime && req.ScheduleType != ScheduleTypeRecurring {
+		logAppSubmission("[%s] ERROR: Invalid schedule type: %s", sessionID, req.ScheduleType)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid schedule type", sessionID)
+		http.Error(w, "scheduleType must be 'one-time' or 'recurring'", http.StatusBadRequest)
+		return
+	}
+
+	if req.ScheduledTime.Time.IsZero() {
+		logAppSubmission("[%s] ERROR: ScheduledTime is required", sessionID)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing ScheduledTime", sessionID)
+		http.Error(w, "scheduledTime is required", http.StatusBadRequest)
+		return
+	}
+
+	// Validate scheduled time is in the future
+	if req.ScheduledTime.Time.Before(time.Now()) {
+		logAppSubmission("[%s] ERROR: ScheduledTime is in the past: %v", sessionID, req.ScheduledTime.Time)
+		logAppSubmission("[%s] RESPONSE: HTTP 400 - Past scheduled time", sessionID)
+		http.Error(w, "scheduledTime must be in the future", http.StatusBadRequest)
+		return
+	}
+
+	// Validate recurrence for recurring schedules
+	if req.ScheduleType == ScheduleTypeRecurring {
+		if req.Recurrence == nil {
+			logAppSubmission("[%s] ERROR: Recurrence is required for recurring schedules", sessionID)
+			logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing recurrence", sessionID)
+			http.Error(w, "recurrence is required for recurring schedules", http.StatusBadRequest)
+			return
+		}
+		if err := validateRecurrence(req.Recurrence); err != nil {
+			logAppSubmission("[%s] ERROR: Invalid recurrence: %v", sessionID, err)
+			logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid recurrence", sessionID)
+			http.Error(w, fmt.Sprintf("invalid recurrence: %v", err), http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Step 3: Verify app exists and tool is valid
+	logAppSubmission("[%s] STEP 3: Verifying app and tool exist", sessionID)
+	registryMutex.RLock()
+	app, ok := registry[req.AppID]
+	registryMutex.RUnlock()
+	if !ok {
+		logAppSubmission("[%s] ERROR: App not found in registry: %s", sessionID, req.AppID)
+		logAppSubmission("[%s] RESPONSE: HTTP 404 - App not found", sessionID)
+		http.Error(w, "app not found", http.StatusNotFound)
+		return
+	}
+
+	// Validate that the requested tool exists in the app
+	toolFound := false
+	for _, tool := range app.Tools {
+		if tool.Name == req.ToolName {
+			toolFound = true
+			logAppSubmission("[%s] Tool '%s' found in app", sessionID, req.ToolName)
+			break
+		}
+	}
+	if !toolFound {
+		logAppSubmission("[%s] ERROR: Tool '%s' not found in app. Available tools: %v", sessionID, req.ToolName, app.Tools)
+		logAppSubmission("[%s] RESPONSE: HTTP 404 - Tool not found", sessionID)
+		http.Error(w, fmt.Sprintf("tool '%s' not found in app", req.ToolName), http.StatusNotFound)
+		return
+	}
+
+	// Step 4: Generate schedule ID and create schedule
+	logAppSubmission("[%s] STEP 4: Creating schedule", sessionID)
+	scheduleID, err := generateID()
+	if err != nil {
+		logAppSubmission("[%s] ERROR: Failed to generate schedule ID: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - ID generation failed", sessionID)
+		http.Error(w, "failed to generate schedule ID", http.StatusInternalServerError)
+		return
+	}
+
+	now := time.Now()
+	schedule := &AppSchedule{
+		ID:            scheduleID,
+		AppID:         req.AppID,
+		ToolName:      req.ToolName,
+		Input:         req.Input,
+		ScheduleType:  req.ScheduleType,
+		ScheduledTime: req.ScheduledTime.Time,
+		Recurrence:    req.Recurrence,
+		IsActive:      true,
+		CreatedAt:     now,
+		RunCount:      0,
+	}
+
+	// Calculate next run time
+	nextRun := req.ScheduledTime.Time
+	schedule.NextRun = &nextRun
+
+	// Step 5: Store schedule in database
+	logAppSubmission("[%s] STEP 5: Storing schedule in database", sessionID)
+	if err := saveScheduleToDatabase(schedule); err != nil {
+		logAppSubmission("[%s] ERROR: Failed to save schedule to database: %v", sessionID, err)
+		logAppSubmission("[%s] RESPONSE: HTTP 500 - Database save failed", sessionID)
+		http.Error(w, fmt.Sprintf("failed to save schedule: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Step 6: Store schedule in memory
+	schedulesMutex.Lock()
+	schedules[scheduleID] = schedule
+	scheduleCount := len(schedules)
+	schedulesMutex.Unlock()
+	logAppSubmission("[%s] Schedule stored in memory. Total schedules: %d", sessionID, scheduleCount)
+
+	// Step 7: Send response
+	logAppSubmission("[%s] STEP 6: Sending success response", sessionID)
+	response := map[string]interface{}{
+		"status":     "schedule created successfully",
+		"scheduleId": scheduleID,
+		"nextRun":    schedule.NextRun,
+	}
+
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(response)
+	logAppSubmission("[%s] === APP SCHEDULE CREATED SUCCESSFULLY ===", sessionID)
+}
+
+func listSchedulesHandler(w http.ResponseWriter, r *http.Request) {
+	appIdFilter := r.URL.Query().Get("appId")
+
+	schedulesMutex.RLock()
+	defer schedulesMutex.RUnlock()
+
+	scheduleList := []*AppSchedule{}
+	for _, schedule := range schedules {
+		// Apply app ID filter if specified
+		if appIdFilter != "" && schedule.AppID != appIdFilter {
+			continue
+		}
+		scheduleList = append(scheduleList, schedule)
+	}
+
+	json.NewEncoder(w).Encode(scheduleList)
+}
+
+func getScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	scheduleID := r.URL.Query().Get("id")
+	if scheduleID == "" {
+		http.Error(w, "schedule id is required", http.StatusBadRequest)
+		return
+	}
+
+	schedulesMutex.RLock()
+	schedule, exists := schedules[scheduleID]
+	schedulesMutex.RUnlock()
+
+	if !exists {
+		http.Error(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+
+	json.NewEncoder(w).Encode(schedule)
+}
+
+func deleteScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	scheduleID := r.URL.Query().Get("id")
+	if scheduleID == "" {
+		http.Error(w, "schedule id is required", http.StatusBadRequest)
+		return
+	}
+
+	schedulesMutex.Lock()
+	schedule, exists := schedules[scheduleID]
+	if !exists {
+		schedulesMutex.Unlock()
+		http.Error(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+
+	// Mark as inactive in database
+	schedule.IsActive = false
+	delete(schedules, scheduleID)
+	schedulesMutex.Unlock()
+
+	// Update in database
+	if err := deactivateScheduleInDatabase(scheduleID); err != nil {
+		log.Printf("Failed to deactivate schedule in database: %v", err)
+		http.Error(w, "failed to delete schedule", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]string{
+		"status": "schedule deleted successfully",
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func updateScheduleHandler(w http.ResponseWriter, r *http.Request) {
+	scheduleID := r.URL.Query().Get("id")
+	if scheduleID == "" {
+		http.Error(w, "schedule id is required", http.StatusBadRequest)
+		return
+	}
+
+	var updateReq struct {
+		IsActive      *bool           `json:"isActive,omitempty"`
+		ScheduledTime *time.Time      `json:"scheduledTime,omitempty"`
+		Input         json.RawMessage `json:"input,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&updateReq); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	schedulesMutex.Lock()
+	schedule, exists := schedules[scheduleID]
+	if !exists {
+		schedulesMutex.Unlock()
+		http.Error(w, "schedule not found", http.StatusNotFound)
+		return
+	}
+
+	// Update fields
+	updated := false
+	if updateReq.IsActive != nil {
+		schedule.IsActive = *updateReq.IsActive
+		updated = true
+	}
+	if updateReq.ScheduledTime != nil {
+		schedule.ScheduledTime = *updateReq.ScheduledTime
+		// Recalculate next run
+		schedule.NextRun = calculateNextRun(schedule)
+		updated = true
+	}
+	if updateReq.Input != nil {
+		schedule.Input = updateReq.Input
+		updated = true
+	}
+	schedulesMutex.Unlock()
+
+	if !updated {
+		http.Error(w, "no fields to update", http.StatusBadRequest)
+		return
+	}
+
+	// Update in database
+	if err := updateScheduleInDatabase(schedule); err != nil {
+		log.Printf("Failed to update schedule in database: %v", err)
+		http.Error(w, "failed to update schedule", http.StatusInternalServerError)
+		return
+	}
+
+	response := map[string]interface{}{
+		"status":   "schedule updated successfully",
+		"schedule": schedule,
+	}
+	json.NewEncoder(w).Encode(response)
+}
+
+func listScheduledRunsHandler(w http.ResponseWriter, r *http.Request) {
+	scheduleID := r.URL.Query().Get("schedule_id")
+
+	systemDBMutex.RLock()
+	defer systemDBMutex.RUnlock()
+
+	if systemDB == nil {
+		http.Error(w, "system database not initialized", http.StatusInternalServerError)
+		return
+	}
+
+	var query string
+	var args []interface{}
+
+	if scheduleID != "" {
+		query = `SELECT 
+			id, schedule_id, app_id, tool_name, input_data, started_at, 
+			completed_at, status, output, error
+		FROM scheduled_runs WHERE schedule_id = ? ORDER BY started_at DESC`
+		args = []interface{}{scheduleID}
+	} else {
+		query = `SELECT 
+			id, schedule_id, app_id, tool_name, input_data, started_at, 
+			completed_at, status, output, error
+		FROM scheduled_runs ORDER BY started_at DESC`
+	}
+
+	rows, err := systemDB.Query(query, args...)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("failed to query runs: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var runs []*ScheduledRun
+
+	for rows.Next() {
+		run := &ScheduledRun{}
+		var inputData, startedAt string
+		var completedAtStr sql.NullString
+		var output, errorStr sql.NullString
+
+		err := rows.Scan(
+			&run.ID, &run.ScheduleID, &run.AppID, &run.ToolName, &inputData,
+			&startedAt, &completedAtStr, &run.Status, &output, &errorStr,
+		)
+		if err != nil {
+			log.Printf("Error scanning run row: %v", err)
+			continue
+		}
+
+		// Parse JSON input
+		if err := json.Unmarshal([]byte(inputData), &run.Input); err != nil {
+			log.Printf("Error parsing input data for run %s: %v", run.ID, err)
+		}
+
+		// Parse times
+		if t, err := time.Parse(time.RFC3339, startedAt); err == nil {
+			run.StartedAt = t
+		}
+		if completedAtStr.Valid {
+			if t, err := time.Parse(time.RFC3339, completedAtStr.String); err == nil {
+				run.CompletedAt = &t
+			}
+		}
+
+		if output.Valid {
+			run.Output = output.String
+		}
+		if errorStr.Valid {
+			run.Error = errorStr.String
+		}
+
+		runs = append(runs, run)
+	}
+
+	json.NewEncoder(w).Encode(runs)
+}
+
+func deactivateScheduleInDatabase(scheduleID string) error {
+	systemDBMutex.Lock()
+	defer systemDBMutex.Unlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	query := `UPDATE app_schedules SET is_active = 0 WHERE id = ?`
+	_, err := systemDB.Exec(query, scheduleID)
+	return err
 }
 
 func generateRustProjectFromTrait(req AppRequest, buildDir string) error {
@@ -721,17 +1236,20 @@ func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) in
 	queryBytes := data[queryPtr : queryPtr+queryLen]
 	query := string(queryBytes)
 
-	dbMutex.RLock()
-	defer dbMutex.RUnlock()
+	log.Printf("[WASM DB] dbQuery called with query: %s", query)
 
-	if db == nil {
+	appDBMutex.RLock()
+	defer appDBMutex.RUnlock()
+
+	if appDB == nil {
+		log.Printf("[WASM DB] Database not initialized")
 		return -1 // Database not initialized
 	}
 
 	// Execute query
-	rows, err := db.Query(query)
+	rows, err := appDB.Query(query)
 	if err != nil {
-		log.Printf("Database query error: %v", err)
+		log.Printf("[WASM DB] Database query error: %v", err)
 		return -2 // Query error
 	}
 	defer rows.Close()
@@ -739,12 +1257,17 @@ func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) in
 	// Get column names
 	columns, err := rows.Columns()
 	if err != nil {
+		log.Printf("[WASM DB] Column error: %v", err)
 		return -3 // Column error
 	}
+	log.Printf("[WASM DB] Query columns: %v", columns)
 
 	// Collect results
-	var results []map[string]interface{}
+	results := []map[string]interface{}{}
+	log.Printf("[WASM DB] Query returned %+v rows", results)
+	rowCount := 0
 	for rows.Next() {
+		rowCount++
 		// Create a slice to hold column values
 		values := make([]interface{}, len(columns))
 		valuePtrs := make([]interface{}, len(columns))
@@ -753,7 +1276,7 @@ func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) in
 		}
 
 		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Printf("Row scan error: %v", err)
+			log.Printf("[WASM DB] Row scan error: %v", err)
 			continue
 		}
 
@@ -769,20 +1292,26 @@ func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) in
 		}
 		results = append(results, row)
 	}
+	log.Printf("[WASM DB] Query returned %d rows", rowCount)
 
 	// Marshal results to JSON
 	jsonBytes, err := json.Marshal(results)
 	if err != nil {
+		log.Printf("[WASM DB] JSON marshal error: %v", err)
 		return -4 // JSON marshal error
 	}
+	jsonString := string(jsonBytes)
+	log.Printf("[WASM DB] Marshaled JSON result (%d bytes): %s", len(jsonBytes), jsonString)
 
 	// Allocate memory in WASM for result
 	allocateFunc := caller.GetExport("allocate").Func()
 	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
 	if err != nil {
+		log.Printf("[WASM DB] Allocation error: %v", err)
 		return -5 // Allocation error
 	}
 	resultPtr := resultLenResult.(int32)
+	log.Printf("[WASM DB] Allocated result at pointer %d", resultPtr)
 
 	// Copy result to WASM memory
 	copy(data[resultPtr:resultPtr+int32(len(jsonBytes))], jsonBytes)
@@ -794,6 +1323,7 @@ func dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) in
 	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
 	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
 
+	log.Printf("[WASM DB] dbQuery completed successfully, returning %d bytes", len(jsonBytes))
 	return int32(len(jsonBytes)) // Return result length
 }
 
@@ -807,15 +1337,15 @@ func dbExec(caller *wasmtime.Caller, stmtPtr, stmtLen int32) int32 {
 	stmtBytes := data[stmtPtr : stmtPtr+stmtLen]
 	stmt := string(stmtBytes)
 
-	dbMutex.Lock()
-	defer dbMutex.Unlock()
+	appDBMutex.Lock()
+	defer appDBMutex.Unlock()
 
-	if db == nil {
+	if appDB == nil {
 		return -1 // Database not initialized
 	}
 
 	// Execute statement
-	result, err := db.Exec(stmt)
+	result, err := appDB.Exec(stmt)
 	if err != nil {
 		log.Printf("Database exec error: %v", err)
 		return -2 // Execution error
@@ -849,15 +1379,15 @@ func dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, param
 		}
 	}
 
-	dbMutex.RLock()
-	defer dbMutex.RUnlock()
+	appDBMutex.RLock()
+	defer appDBMutex.RUnlock()
 
-	if db == nil {
+	if appDB == nil {
 		return -2 // Database not initialized
 	}
 
 	// Execute prepared statement
-	rows, err := db.Query(stmt, params...)
+	rows, err := appDB.Query(stmt, params...)
 	if err != nil {
 		log.Printf("Database prepared query error: %v", err)
 		return -3 // Query error
@@ -922,6 +1452,556 @@ func dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, param
 	return int32(len(jsonBytes))
 }
 
+// --- Schedule Management ---
+
+func generateID() (string, error) {
+	bytes := make([]byte, 16)
+	_, err := rand.Read(bytes)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+func validateRecurrence(r *RecurrenceRule) error {
+	if r == nil {
+		return fmt.Errorf("recurrence cannot be nil")
+	}
+
+	if r.Interval <= 0 {
+		return fmt.Errorf("interval must be positive")
+	}
+
+	validUnits := map[string]bool{
+		"minutes": true,
+		"hours":   true,
+		"days":    true,
+		"weeks":   true,
+		"months":  true,
+	}
+
+	if !validUnits[r.Unit] {
+		return fmt.Errorf("unit must be one of: minutes, hours, days, weeks, months")
+	}
+
+	// Validate days of week for weekly recurrence
+	if r.Unit == "weeks" && len(r.DaysOfWeek) > 0 {
+		for _, day := range r.DaysOfWeek {
+			if day < 0 || day > 6 {
+				return fmt.Errorf("daysOfWeek must be between 0 (Sunday) and 6 (Saturday)")
+			}
+		}
+	}
+
+	// Validate end date is in the future if provided
+	if r.EndDate != nil && r.EndDate.Before(time.Now()) {
+		return fmt.Errorf("endDate must be in the future")
+	}
+
+	return nil
+}
+
+func saveScheduleToDatabase(schedule *AppSchedule) error {
+	systemDBMutex.Lock()
+	defer systemDBMutex.Unlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	// Convert struct fields to JSON for storage
+	inputJSON, _ := json.Marshal(schedule.Input)
+	recurrenceJSON := []byte("null")
+	if schedule.Recurrence != nil {
+		recurrenceJSON, _ = json.Marshal(schedule.Recurrence)
+	}
+
+	var lastRunStr, nextRunStr interface{}
+	if schedule.LastRun != nil {
+		lastRunStr = schedule.LastRun.Format(time.RFC3339)
+	}
+	if schedule.NextRun != nil {
+		nextRunStr = schedule.NextRun.Format(time.RFC3339)
+	}
+
+	query := `INSERT INTO app_schedules (
+		id, app_id, tool_name, input_data, schedule_type, scheduled_time, 
+		recurrence_rule, is_active, created_at, last_run, next_run, run_count
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := systemDB.Exec(query,
+		schedule.ID,
+		schedule.AppID,
+		schedule.ToolName,
+		string(inputJSON),
+		string(schedule.ScheduleType),
+		schedule.ScheduledTime.Format(time.RFC3339),
+		string(recurrenceJSON),
+		schedule.IsActive,
+		schedule.CreatedAt.Format(time.RFC3339),
+		lastRunStr,
+		nextRunStr,
+		schedule.RunCount,
+	)
+
+	return err
+}
+
+func calculateNextRun(schedule *AppSchedule) *time.Time {
+	if schedule.ScheduleType == ScheduleTypeOneTime {
+		// One-time schedules don't have a "next run" after completion
+		if schedule.RunCount > 0 {
+			return nil
+		}
+		return &schedule.ScheduledTime
+	}
+
+	if schedule.Recurrence == nil {
+		return nil
+	}
+
+	// Start from the last run time, or scheduled time if never run
+	baseTime := schedule.ScheduledTime
+	if schedule.LastRun != nil {
+		baseTime = *schedule.LastRun
+	}
+
+	var nextRun time.Time
+
+	switch schedule.Recurrence.Unit {
+	case "minutes":
+		nextRun = baseTime.Add(time.Duration(schedule.Recurrence.Interval) * time.Minute)
+	case "hours":
+		nextRun = baseTime.Add(time.Duration(schedule.Recurrence.Interval) * time.Hour)
+	case "days":
+		nextRun = baseTime.AddDate(0, 0, schedule.Recurrence.Interval)
+	case "weeks":
+		if len(schedule.Recurrence.DaysOfWeek) == 0 {
+			// Simple weekly interval
+			nextRun = baseTime.AddDate(0, 0, 7*schedule.Recurrence.Interval)
+		} else {
+			// Find next occurrence on specified days of week
+			nextRun = findNextWeeklyOccurrence(baseTime, schedule.Recurrence)
+		}
+	case "months":
+		nextRun = baseTime.AddDate(0, schedule.Recurrence.Interval, 0)
+	default:
+		return nil
+	}
+
+	// Check if we've passed the end date
+	if schedule.Recurrence.EndDate != nil && nextRun.After(*schedule.Recurrence.EndDate) {
+		return nil
+	}
+
+	return &nextRun
+}
+
+func findNextWeeklyOccurrence(baseTime time.Time, recurrence *RecurrenceRule) time.Time {
+	current := baseTime.AddDate(0, 0, 1) // Start from the day after base time
+
+	for i := 0; i < 14; i++ { // Look ahead maximum 2 weeks
+		currentWeekday := int(current.Weekday())
+		for _, day := range recurrence.DaysOfWeek {
+			if currentWeekday == day {
+				return current
+			}
+		}
+		current = current.AddDate(0, 0, 1)
+	}
+
+	// Fallback to simple weekly interval if no matching day found
+	return baseTime.AddDate(0, 0, 7*recurrence.Interval)
+}
+
+func loadSchedulesFromDatabase() error {
+	systemDBMutex.RLock()
+	defer systemDBMutex.RUnlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	query := `SELECT 
+		id, app_id, tool_name, input_data, schedule_type, scheduled_time,
+		recurrence_rule, is_active, created_at, last_run, next_run, run_count
+	FROM app_schedules WHERE is_active = 1`
+
+	rows, err := systemDB.Query(query)
+	if err != nil {
+		return fmt.Errorf("failed to query schedules: %v", err)
+	}
+	defer rows.Close()
+
+	schedulesMutex.Lock()
+	defer schedulesMutex.Unlock()
+	schedules = make(map[string]*AppSchedule)
+
+	for rows.Next() {
+		schedule := &AppSchedule{}
+		var inputData, scheduleType, scheduledTime, recurrenceRule, createdAt string
+		var lastRunStr, nextRunStr sql.NullString
+
+		err := rows.Scan(
+			&schedule.ID, &schedule.AppID, &schedule.ToolName, &inputData,
+			&scheduleType, &scheduledTime, &recurrenceRule, &schedule.IsActive,
+			&createdAt, &lastRunStr, &nextRunStr, &schedule.RunCount,
+		)
+		if err != nil {
+			log.Printf("Error scanning schedule row: %v", err)
+			continue
+		}
+
+		// Parse JSON fields
+		if err := json.Unmarshal([]byte(inputData), &schedule.Input); err != nil {
+			log.Printf("Error parsing input data for schedule %s: %v", schedule.ID, err)
+			continue
+		}
+
+		if recurrenceRule != "null" && recurrenceRule != "" {
+			var recurrence RecurrenceRule
+			if err := json.Unmarshal([]byte(recurrenceRule), &recurrence); err != nil {
+				log.Printf("Error parsing recurrence rule for schedule %s: %v", schedule.ID, err)
+			} else {
+				schedule.Recurrence = &recurrence
+			}
+		}
+
+		// Parse time fields
+		schedule.ScheduleType = ScheduleType(scheduleType)
+		if t, err := time.Parse(time.RFC3339, scheduledTime); err == nil {
+			schedule.ScheduledTime = t
+		}
+		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
+			schedule.CreatedAt = t
+		}
+		if lastRunStr.Valid {
+			if t, err := time.Parse(time.RFC3339, lastRunStr.String); err == nil {
+				schedule.LastRun = &t
+			}
+		}
+		if nextRunStr.Valid {
+			if t, err := time.Parse(time.RFC3339, nextRunStr.String); err == nil {
+				schedule.NextRun = &t
+			}
+		}
+
+		schedules[schedule.ID] = schedule
+	}
+
+	log.Printf("Loaded %d active schedules from database", len(schedules))
+	return nil
+}
+
+func startScheduler() error {
+	schedulerCtx, schedulerCancel = context.WithCancel(context.Background())
+
+	// Load schedules from database
+	if err := loadSchedulesFromDatabase(); err != nil {
+		return fmt.Errorf("failed to load schedules: %v", err)
+	}
+
+	// Start scheduler goroutine
+	go schedulerLoop(schedulerCtx)
+	log.Println("Scheduler started")
+	return nil
+}
+
+func stopScheduler() {
+	if schedulerCancel != nil {
+		schedulerCancel()
+		log.Println("Scheduler stopped")
+	}
+}
+
+func schedulerLoop(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
+	defer ticker.Stop()
+
+	log.Println("Scheduler loop started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Println("Scheduler loop terminating")
+			return
+		case <-ticker.C:
+			checkAndExecuteSchedules()
+		}
+	}
+}
+
+func checkAndExecuteSchedules() {
+	now := time.Now()
+	schedulesMutex.RLock()
+	var schedulesToRun []*AppSchedule
+
+	for _, schedule := range schedules {
+		if schedule.IsActive && schedule.NextRun != nil && schedule.NextRun.Before(now.Add(time.Minute)) {
+			schedulesToRun = append(schedulesToRun, schedule)
+		}
+	}
+	schedulesMutex.RUnlock()
+
+	if len(schedulesToRun) > 0 {
+		log.Printf("Found %d schedules ready to run", len(schedulesToRun))
+	}
+
+	for _, schedule := range schedulesToRun {
+		go executeScheduledRun(schedule)
+	}
+}
+
+func executeScheduledRun(schedule *AppSchedule) {
+	runID, err := generateID()
+	if err != nil {
+		log.Printf("Failed to generate run ID for schedule %s: %v", schedule.ID, err)
+		return
+	}
+
+	startTime := time.Now()
+	log.Printf("Starting scheduled run %s for schedule %s (app: %s, tool: %s)", runID, schedule.ID, schedule.AppID, schedule.ToolName)
+
+	// Create scheduled run record
+	run := &ScheduledRun{
+		ID:         runID,
+		ScheduleID: schedule.ID,
+		AppID:      schedule.AppID,
+		ToolName:   schedule.ToolName,
+		Input:      schedule.Input,
+		StartedAt:  startTime,
+		Status:     "running",
+	}
+
+	// Save run record to database
+	if err := saveScheduledRunToDatabase(run); err != nil {
+		log.Printf("Failed to save scheduled run record: %v", err)
+		return
+	}
+
+	// Execute the app tool
+	output, err := executeAppTool(schedule.AppID, schedule.ToolName, schedule.Input)
+
+	completedAt := time.Now()
+	run.CompletedAt = &completedAt
+
+	if err != nil {
+		run.Status = "failed"
+		run.Error = err.Error()
+		log.Printf("Scheduled run %s failed: %v", runID, err)
+	} else {
+		run.Status = "completed"
+		run.Output = output
+		log.Printf("Scheduled run %s completed successfully in %v", runID, completedAt.Sub(startTime))
+	}
+
+	// Update run record in database
+	if err := updateScheduledRunInDatabase(run); err != nil {
+		log.Printf("Failed to update scheduled run record: %v", err)
+	}
+
+	// Update schedule's last run and calculate next run
+	schedulesMutex.Lock()
+	schedule.LastRun = &startTime
+	schedule.RunCount++
+	schedule.NextRun = calculateNextRun(schedule)
+	schedulesMutex.Unlock()
+
+	// Update schedule in database
+	if err := updateScheduleInDatabase(schedule); err != nil {
+		log.Printf("Failed to update schedule in database: %v", err)
+	}
+
+	log.Printf("Scheduled run %s processing complete. Next run: %v", runID, schedule.NextRun)
+}
+
+func saveScheduledRunToDatabase(run *ScheduledRun) error {
+	systemDBMutex.Lock()
+	defer systemDBMutex.Unlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	inputJSON, _ := json.Marshal(run.Input)
+
+	query := `INSERT INTO scheduled_runs (
+		id, schedule_id, app_id, tool_name, input_data, started_at, status
+	) VALUES (?, ?, ?, ?, ?, ?, ?)`
+
+	_, err := systemDB.Exec(query,
+		run.ID, run.ScheduleID, run.AppID, run.ToolName,
+		string(inputJSON), run.StartedAt.Format(time.RFC3339), run.Status,
+	)
+
+	return err
+}
+
+func updateScheduledRunInDatabase(run *ScheduledRun) error {
+	systemDBMutex.Lock()
+	defer systemDBMutex.Unlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	var completedAtStr interface{}
+	if run.CompletedAt != nil {
+		completedAtStr = run.CompletedAt.Format(time.RFC3339)
+	}
+
+	query := `UPDATE scheduled_runs SET 
+		completed_at = ?, status = ?, output = ?, error = ?
+		WHERE id = ?`
+
+	_, err := systemDB.Exec(query,
+		completedAtStr, run.Status, run.Output, run.Error, run.ID,
+	)
+
+	return err
+}
+
+func updateScheduleInDatabase(schedule *AppSchedule) error {
+	systemDBMutex.Lock()
+	defer systemDBMutex.Unlock()
+
+	if systemDB == nil {
+		return fmt.Errorf("system database not initialized")
+	}
+
+	inputJSON, _ := json.Marshal(schedule.Input)
+
+	var lastRunStr, nextRunStr interface{}
+	if schedule.LastRun != nil {
+		lastRunStr = schedule.LastRun.Format(time.RFC3339)
+	}
+	if schedule.NextRun != nil {
+		nextRunStr = schedule.NextRun.Format(time.RFC3339)
+	}
+
+	query := `UPDATE app_schedules SET 
+		input_data = ?, scheduled_time = ?, is_active = ?,
+		last_run = ?, next_run = ?, run_count = ?
+		WHERE id = ?`
+
+	_, err := systemDB.Exec(query,
+		string(inputJSON), schedule.ScheduledTime.Format(time.RFC3339), schedule.IsActive,
+		lastRunStr, nextRunStr, schedule.RunCount, schedule.ID,
+	)
+
+	return err
+}
+
+func executeAppTool(appID, toolName string, input json.RawMessage) (string, error) {
+	// This reuses the existing runTool logic but without HTTP request/response
+	registryMutex.RLock()
+	app, ok := registry[appID]
+	registryMutex.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("app not found: %s", appID)
+	}
+
+	// Validate tool exists
+	toolFound := false
+	for _, tool := range app.Tools {
+		if tool.Name == toolName {
+			toolFound = true
+			break
+		}
+	}
+	if !toolFound {
+		return "", fmt.Errorf("tool '%s' not found in app", toolName)
+	}
+
+	// Load and compile WASM module (similar to runToolHandler)
+	wasmBytes, err := os.ReadFile(app.ArtifactURI)
+	if err != nil {
+		return "", fmt.Errorf("failed to load WASM artifact: %v", err)
+	}
+
+	store := wasmtime.NewStore(wasmEngine)
+	module, err := wasmtime.NewModule(wasmEngine, wasmBytes)
+	if err != nil {
+		return "", fmt.Errorf("failed to compile WASM module: %v", err)
+	}
+
+	linker := wasmtime.NewLinker(wasmEngine)
+
+	// Define database host functions
+	linker.DefineFunc(store, "env", "db_query", func(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) int32 {
+		return dbQuery(caller, queryPtr, queryLen, resultPtrPtr)
+	})
+	linker.DefineFunc(store, "env", "db_exec", func(caller *wasmtime.Caller, stmtPtr, stmtLen int32) int32 {
+		return dbExec(caller, stmtPtr, stmtLen)
+	})
+	linker.DefineFunc(store, "env", "db_prepared_query", func(caller *wasmtime.Caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr int32) int32 {
+		return dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
+	})
+
+	instance, err := linker.Instantiate(store, module)
+	if err != nil {
+		return "", fmt.Errorf("failed to instantiate WASM module: %v", err)
+	}
+
+	runFunc := instance.GetFunc(store, "run")
+	if runFunc == nil {
+		return "", fmt.Errorf("WASM module does not export 'run' function")
+	}
+
+	allocateFunc := instance.GetFunc(store, "allocate")
+	deallocateFunc := instance.GetFunc(store, "deallocate")
+	getResultPtrFunc := instance.GetFunc(store, "get_result_ptr")
+
+	if allocateFunc == nil || deallocateFunc == nil || getResultPtrFunc == nil {
+		return "", fmt.Errorf("WASM module missing required functions")
+	}
+
+	// Prepare input
+	wasmInput := map[string]interface{}{
+		"tool": toolName,
+		"data": input,
+	}
+	inputBytes, _ := json.Marshal(wasmInput)
+	inputStr := string(inputBytes)
+	inputLen := len(inputStr)
+
+	// Allocate memory and copy input
+	inputPtrResult, err := allocateFunc.Call(store, inputLen)
+	if err != nil {
+		return "", fmt.Errorf("failed to allocate input memory: %v", err)
+	}
+	inputPtr := inputPtrResult.(int32)
+
+	memory := instance.GetExport(store, "memory").Memory()
+	data := memory.UnsafeData(store)
+	copy(data[inputPtr:inputPtr+int32(inputLen)], []byte(inputStr))
+
+	// Execute
+	resultLenResult, err := runFunc.Call(store, inputPtr, inputLen)
+	if err != nil {
+		deallocateFunc.Call(store, inputPtr, inputLen)
+		return "", fmt.Errorf("execution failed: %v", err)
+	}
+	resultLen := resultLenResult.(int32)
+
+	// Get result
+	resultPtrResult, err := getResultPtrFunc.Call(store)
+	if err != nil {
+		deallocateFunc.Call(store, inputPtr, inputLen)
+		return "", fmt.Errorf("failed to get result pointer: %v", err)
+	}
+	resultPtr := resultPtrResult.(int32)
+
+	resultBytes := make([]byte, resultLen)
+	copy(resultBytes, data[resultPtr:resultPtr+resultLen])
+	resultStr := string(resultBytes)
+
+	// Clean up
+	deallocateFunc.Call(store, inputPtr, inputLen)
+
+	return resultStr, nil
+}
+
 func loadRegistry() error {
 	registryMutex.Lock()
 	defer registryMutex.Unlock()
@@ -969,45 +2049,93 @@ func saveRegistry() error {
 
 // --- Database Management ---
 
-func initDatabase() error {
-	var err error
-
+func initDatabases() error {
 	// Create data directory if it doesn't exist
 	if err := os.MkdirAll("data", 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %v", err)
 	}
 
-	// Open SQLite database
-	db, err = sql.Open("sqlite3", "data/arcadia.db")
-	if err != nil {
-		return fmt.Errorf("failed to open database: %v", err)
+	// Initialize app database (for WASM apps to use)
+	if err := initAppDatabase(); err != nil {
+		return fmt.Errorf("failed to initialize app database: %v", err)
 	}
 
-	// Test the connection
-	if err := db.Ping(); err != nil {
-		return fmt.Errorf("failed to ping database: %v", err)
+	// Initialize system database (for app engine internal data)
+	if err := initSystemDatabase(); err != nil {
+		return fmt.Errorf("failed to initialize system database: %v", err)
 	}
 
-	// Enable WAL mode for better concurrency
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("Warning: failed to enable WAL mode: %v", err)
-	}
-
-	// Enable foreign keys
-	if _, err := db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
-		log.Printf("Warning: failed to enable foreign keys: %v", err)
-	}
-
-	// Create default tables for app data storage
-	if err := createDefaultTables(); err != nil {
-		return fmt.Errorf("failed to create default tables: %v", err)
-	}
-
-	log.Println("Database initialized successfully")
+	log.Println("Databases initialized successfully")
 	return nil
 }
 
-func createDefaultTables() error {
+func initAppDatabase() error {
+	var err error
+
+	// Open app SQLite database
+	appDB, err = sql.Open("sqlite3", "data/app_data.db")
+	if err != nil {
+		return fmt.Errorf("failed to open app database: %v", err)
+	}
+
+	// Test the connection
+	if err := appDB.Ping(); err != nil {
+		return fmt.Errorf("failed to ping app database: %v", err)
+	}
+
+	// Enable WAL mode for better concurrency
+	if _, err := appDB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("Warning: failed to enable WAL mode on app database: %v", err)
+	}
+
+	// Enable foreign keys
+	if _, err := appDB.Exec("PRAGMA foreign_keys=ON;"); err != nil {
+		log.Printf("Warning: failed to enable foreign keys on app database: %v", err)
+	}
+
+	// Create default tables for app data storage
+	if err := createAppTables(); err != nil {
+		return fmt.Errorf("failed to create app tables: %v", err)
+	}
+
+	log.Println("App database initialized successfully")
+	return nil
+}
+
+func initSystemDatabase() error {
+	var err error
+
+	// Open system SQLite database
+	systemDB, err = sql.Open("sqlite3", "data/system.db")
+	if err != nil {
+		return fmt.Errorf("failed to open system database: %v", err)
+	}
+
+	// Test the connection
+	if err := systemDB.Ping(); err != nil {
+		return fmt.Errorf("failed to ping system database: %v", err)
+	}
+
+	// Enable WAL mode for better concurrency
+	if _, err := systemDB.Exec("PRAGMA journal_mode=WAL;"); err != nil {
+		log.Printf("Warning: failed to enable WAL mode on system database: %v", err)
+	}
+
+	// Enable foreign keys
+	if _, err := systemDB.Exec("PRAGMA foreign_keys=ON;"); err != nil {
+		log.Printf("Warning: failed to enable foreign keys on system database: %v", err)
+	}
+
+	// Create system tables (schedules, etc.)
+	if err := createSystemTables(); err != nil {
+		return fmt.Errorf("failed to create system tables: %v", err)
+	}
+
+	log.Println("System database initialized successfully")
+	return nil
+}
+
+func createAppTables() error {
 	queries := []string{
 		// App data table - for general key-value storage per app
 		`CREATE TABLE IF NOT EXISTS app_data (
@@ -1048,18 +2176,73 @@ func createDefaultTables() error {
 	}
 
 	for _, query := range queries {
-		if _, err := db.Exec(query); err != nil {
-			return fmt.Errorf("failed to execute query: %v", err)
+		if _, err := appDB.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute app table query: %v", err)
 		}
 	}
 
 	return nil
 }
 
-func closeDatabase() {
-	if db != nil {
-		db.Close()
-		log.Println("Database connection closed")
+func createSystemTables() error {
+	queries := []string{
+		// App schedules table - for scheduled app runs
+		`CREATE TABLE IF NOT EXISTS app_schedules (
+			id TEXT PRIMARY KEY,
+			app_id TEXT NOT NULL,
+			tool_name TEXT NOT NULL,
+			input_data TEXT NOT NULL,
+			schedule_type TEXT NOT NULL CHECK(schedule_type IN ('one-time', 'recurring')),
+			scheduled_time TEXT NOT NULL,
+			recurrence_rule TEXT,
+			is_active BOOLEAN NOT NULL DEFAULT 1,
+			created_at TEXT NOT NULL,
+			last_run TEXT,
+			next_run TEXT,
+			run_count INTEGER NOT NULL DEFAULT 0
+		);`,
+
+		// Scheduled runs table - for tracking individual scheduled executions
+		`CREATE TABLE IF NOT EXISTS scheduled_runs (
+			id TEXT PRIMARY KEY,
+			schedule_id TEXT NOT NULL,
+			app_id TEXT NOT NULL,
+			tool_name TEXT NOT NULL,
+			input_data TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			completed_at TEXT,
+			status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+			output TEXT,
+			error TEXT,
+			FOREIGN KEY (schedule_id) REFERENCES app_schedules(id) ON DELETE CASCADE
+		);`,
+
+		// Create indexes for better performance
+		`CREATE INDEX IF NOT EXISTS idx_app_schedules_app_id ON app_schedules(app_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_schedules_next_run ON app_schedules(next_run);`,
+		`CREATE INDEX IF NOT EXISTS idx_app_schedules_active ON app_schedules(is_active);`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduled_runs_schedule_id ON scheduled_runs(schedule_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduled_runs_status ON scheduled_runs(status);`,
+		`CREATE INDEX IF NOT EXISTS idx_scheduled_runs_started_at ON scheduled_runs(started_at);`,
+	}
+
+	for _, query := range queries {
+		if _, err := systemDB.Exec(query); err != nil {
+			return fmt.Errorf("failed to execute system table query: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func closeDatabases() {
+	if appDB != nil {
+		appDB.Close()
+		log.Println("App database connection closed")
+	}
+	if systemDB != nil {
+		systemDB.Close()
+		log.Println("System database connection closed")
 	}
 }
 
@@ -1072,22 +2255,66 @@ func main() {
 	}
 	defer closeAppLogger()
 
-	// Initialize database
-	if err := initDatabase(); err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+	// Initialize databases (separate app and system databases)
+	if err := initDatabases(); err != nil {
+		log.Fatalf("Failed to initialize databases: %v", err)
 	}
-	defer closeDatabase()
+	defer closeDatabases()
 
 	// Load registry from file on startup
 	if err := loadRegistry(); err != nil {
 		log.Fatalf("Failed to load registry: %v", err)
 	}
 
-	http.HandleFunc("/list_apps", listAppsHandler)
-	http.HandleFunc("/run_tool", runToolHandler)
-	http.HandleFunc("/submit_app_src", submitAppSrcHandler)
+	// Start the scheduler
+	if err := startScheduler(); err != nil {
+		log.Fatalf("Failed to start scheduler: %v", err)
+	}
+	defer stopScheduler()
+
+	// CORS middleware
+	corsHandler := func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			// Set CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", "*")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+
+			// Handle preflight requests
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+
+			// Call the next handler
+			next.ServeHTTP(w, r)
+		}
+	}
+
+	// App management endpoints
+	http.HandleFunc("/list_apps", corsHandler(listAppsHandler))
+	http.HandleFunc("/run_tool", corsHandler(runToolHandler))
+	http.HandleFunc("/submit_app_src", corsHandler(submitAppSrcHandler))
+
+	// Schedule management endpoints
+	http.HandleFunc("/schedule_app_run", corsHandler(scheduleAppRunHandler))
+	http.HandleFunc("/list_schedules", corsHandler(listSchedulesHandler))
+	http.HandleFunc("/get_schedule", corsHandler(getScheduleHandler))
+	http.HandleFunc("/delete_schedule", corsHandler(deleteScheduleHandler))
+	http.HandleFunc("/update_schedule", corsHandler(updateScheduleHandler))
+	http.HandleFunc("/list_scheduled_runs", corsHandler(listScheduledRunsHandler))
 
 	port := "8080"
-	log.Printf("Starting Phase 0 runtime server on port %s...", port)
+	log.Printf("Starting Arcadia App Engine server on port %s...", port)
+	log.Printf("Available endpoints:")
+	log.Printf("  /list_apps - List all registered apps")
+	log.Printf("  /run_tool - Execute a tool from an app")
+	log.Printf("  /submit_app_src - Submit new app source code")
+	log.Printf("  /schedule_app_run - Schedule app runs (one-time or recurring)")
+	log.Printf("  /list_schedules - List all schedules")
+	log.Printf("  /get_schedule?id=<id> - Get specific schedule")
+	log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
+	log.Printf("  /update_schedule?id=<id> - Update a schedule")
+	log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

@@ -135,11 +135,14 @@ impl ArcadiaApp for CounterApp {
                 Ok(json!({ "count": self.count }))
             },
             "get_count" => {
-                // Expects JSON with user_id: {"user_id": "string"}
-                let user_id = data.and_then(|d| d.get("user_id"))
-                    .and_then(|u| u.as_str())
-                    .unwrap_or("anonymous");
-                Ok(json!({ "count": self.count, "user": user_id }))
+                let user_id = data
+                  .as_ref()
+                  .and_then(|d| d.get("user_id"))
+                  .and_then(|uid| uid.as_str())
+                  .map(|s| s.to_string())
+                  .unwrap_or_else(|| "".to_string());
+
+                Ok(json!({ "count": self.count, "user_id": user_id }))
             },
             _ => Err(format!("Unknown tool: {}", tool_name))
         }
@@ -225,6 +228,199 @@ BENEFITS:
                 },
                 "required": ["appId", "version", "runtime", "tools", "appSrc"]
             }
+        ),
+        types.Tool(
+            name="schedule_app_run",
+            title="Schedule App Run",
+            description="Schedule an app tool to run at a specific time, either once or on a recurring basis",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "appId": {
+                        "type": "string",
+                        "description": "ID of the application to schedule"
+                    },
+                    "toolName": {
+                        "type": "string",
+                        "description": "Name of the tool to execute"
+                    },
+                    "input": {
+                        "type": "object",
+                        "description": "Input data to pass to the tool"
+                    },
+                    "scheduleType": {
+                        "type": "string",
+                        "enum": ["one-time", "recurring"],
+                        "description": "Type of schedule: 'one-time' or 'recurring'"
+                    },
+                    "scheduledTime": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When to run the tool (RFC3339 with your local time zone)"
+                    },
+                    "recurrence": {
+                        "type": "object",
+                        "properties": {
+                            "interval": {
+                                "type": "integer",
+                                "description": "Number of units between runs"
+                            },
+                            "unit": {
+                                "type": "string",
+                                "enum": ["minutes", "hours", "days", "weeks", "months"],
+                                "description": "Unit of time for recurrence"
+                            },
+                            "daysOfWeek": {
+                                "type": "array",
+                                "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                                "description": "Days of week for weekly recurrence (0=Sunday, 1=Monday, etc.)"
+                            },
+                            "endDate": {
+                                "type": "string",
+                                "format": "date-time",
+                                "description": "Optional end date for recurring schedules"
+                            }
+                        },
+                        "required": ["interval", "unit"],
+                        "description": "Recurrence pattern (required for recurring schedules)"
+                    }
+                },
+                "required": ["appId", "toolName", "input", "scheduleType", "scheduledTime"]
+            }
+        ),
+        types.Tool(
+            name="list_schedules",
+            title="List Schedules",
+            description="List all scheduled app runs",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "appId": {
+                        "type": "string",
+                        "description": "Optional: filter schedules by app ID"
+                    }
+                }
+            }
+        ),
+        types.Tool(
+            name="get_schedule",
+            title="Get Schedule",
+            description="Get details of a specific schedule",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scheduleId": {
+                        "type": "string",
+                        "description": "ID of the schedule to retrieve"
+                    }
+                },
+                "required": ["scheduleId"]
+            }
+        ),
+        types.Tool(
+            name="delete_schedule",
+            title="Delete Schedule",
+            description="Delete a scheduled app run",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scheduleId": {
+                        "type": "string",
+                        "description": "ID of the schedule to delete"
+                    }
+                },
+                "required": ["scheduleId"]
+            }
+        ),
+        types.Tool(
+            name="update_schedule",
+            title="Update Schedule",
+            description="Update an existing schedule",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scheduleId": {
+                        "type": "string",
+                        "description": "ID of the schedule to update"
+                    },
+                    "appId": {
+                        "type": "string",
+                        "description": "ID of the application to schedule"
+                    },
+                    "toolName": {
+                        "type": "string",
+                        "description": "Name of the tool to execute"
+                    },
+                    "input": {
+                        "type": "object",
+                        "description": "Input data to pass to the tool"
+                    },
+                    "scheduleType": {
+                        "type": "string",
+                        "enum": ["one-time", "recurring"],
+                        "description": "Type of schedule: 'one-time' or 'recurring'"
+                    },
+                    "scheduledTime": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "When to run the tool (ISO 8601 format)"
+                    },
+                    "recurrence": {
+                        "type": "object",
+                        "properties": {
+                            "interval": {
+                                "type": "integer",
+                                "description": "Number of units between runs"
+                            },
+                            "unit": {
+                                "type": "string",
+                                "enum": ["minutes", "hours", "days", "weeks", "months"],
+                                "description": "Unit of time for recurrence"
+                            },
+                            "daysOfWeek": {
+                                "type": "array",
+                                "items": {"type": "integer", "minimum": 0, "maximum": 6},
+                                "description": "Days of week for weekly recurrence (0=Sunday, 1=Monday, etc.)"
+                            },
+                            "endDate": {
+                                "type": "string",
+                                "format": "date-time",
+                                "description": "Optional end date for recurring schedules"
+                            }
+                        },
+                        "required": ["interval", "unit"],
+                        "description": "Recurrence pattern (required for recurring schedules)"
+                    },
+                    "isActive": {
+                        "type": "boolean",
+                        "description": "Whether the schedule is active"
+                    }
+                },
+                "required": ["scheduleId"]
+            }
+        ),
+        types.Tool(
+            name="list_scheduled_runs",
+            title="List Scheduled Runs",
+            description="List execution history of scheduled app runs",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "scheduleId": {
+                        "type": "string",
+                        "description": "Optional: filter runs by schedule ID"
+                    },
+                    "appId": {
+                        "type": "string",
+                        "description": "Optional: filter runs by app ID"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": ["running", "completed", "failed"],
+                        "description": "Optional: filter runs by status"
+                    }
+                }
+            }
         )
     ]
 
@@ -248,6 +444,18 @@ async def handle_call_tool(
                 return await handle_submit_app_trait(client, app_engine_url, arguments)
             elif name == "submit_app_source":
                 return await handle_submit_app_source(client, app_engine_url, arguments)
+            elif name == "schedule_app_run":
+                return await handle_schedule_app_run(client, app_engine_url, arguments)
+            elif name == "list_schedules":
+                return await handle_list_schedules(client, app_engine_url, arguments)
+            elif name == "get_schedule":
+                return await handle_get_schedule(client, app_engine_url, arguments)
+            elif name == "delete_schedule":
+                return await handle_delete_schedule(client, app_engine_url, arguments)
+            elif name == "update_schedule":
+                return await handle_update_schedule(client, app_engine_url, arguments)
+            elif name == "list_scheduled_runs":
+                return await handle_list_scheduled_runs(client, app_engine_url, arguments)
             else:
                 raise ValueError(f"Unknown tool: {name}")
                 
@@ -450,6 +658,282 @@ async def handle_submit_app_source(
         output_text += f"WASM Path: {result['wasmPath']}\n"
     
     return [types.TextContent(type="text", text=output_text)]
+
+
+async def handle_schedule_app_run(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the schedule_app_run tool."""
+    payload = arguments
+    
+    response = await client.post(
+        f"{app_engine_url}/schedule_app_run",
+        json=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    if not response.is_success:
+        error_text = f"Schedule App Run Failed:\n"
+        error_text += f"HTTP Status: {response.status_code} {response.reason_phrase}\n"
+        
+        try:
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                if error_data.get('error'):
+                    error_text += f"Error: {error_data['error']}\n"
+                if error_data.get('message'):
+                    error_text += f"Message: {error_data['message']}\n"
+            else:
+                error_text += f"Error Response: {error_data}\n"
+        except Exception:
+            error_text += f"Response Text: {response.text}\n"
+        
+        return [types.TextContent(type="text", text=error_text)]
+    
+    result = response.json()
+    
+    output_text = f"App Run Scheduled Successfully:\n"
+    output_text += f"Schedule ID: {result.get('scheduleId', 'Unknown')}\n"
+    output_text += f"App ID: {result.get('appId', 'Unknown')}\n"
+    output_text += f"Tool: {result.get('toolName', 'Unknown')}\n"
+    output_text += f"Schedule Type: {result.get('scheduleType', 'Unknown')}\n"
+    output_text += f"Scheduled Time: {result.get('scheduledTime', 'Unknown')}\n"
+    if result.get('nextRun'):
+        output_text += f"Next Run: {result.get('nextRun')}\n"
+    
+    return [types.TextContent(type="text", text=output_text)]
+
+
+async def handle_list_schedules(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the list_schedules tool."""
+    params = {}
+    if arguments.get("appId"):
+        params["appId"] = arguments["appId"]
+    
+    response = await client.get(
+        f"{app_engine_url}/list_schedules",
+        params=params
+    )
+    response.raise_for_status()
+    
+    schedules = response.json()
+    
+    if not schedules:
+        return [types.TextContent(type="text", text="No schedules found.")]
+    
+    result = "Scheduled App Runs:\n\n"
+    for schedule in schedules:
+        result += f"Schedule ID: {schedule.get('id', 'Unknown')}\n"
+        result += f"App ID: {schedule.get('appId', 'Unknown')}\n"
+        result += f"Tool: {schedule.get('toolName', 'Unknown')}\n"
+        result += f"Schedule Type: {schedule.get('scheduleType', 'Unknown')}\n"
+        result += f"Scheduled Time: {schedule.get('scheduledTime', 'Unknown')}\n"
+        result += f"Active: {schedule.get('isActive', False)}\n"
+        result += f"Run Count: {schedule.get('runCount', 0)}\n"
+        
+        if schedule.get('lastRun'):
+            result += f"Last Run: {schedule['lastRun']}\n"
+        if schedule.get('nextRun'):
+            result += f"Next Run: {schedule['nextRun']}\n"
+        if schedule.get('recurrence'):
+            rec = schedule['recurrence']
+            result += f"Recurrence: Every {rec.get('interval', 1)} {rec.get('unit', 'unknown')}\n"
+            if rec.get('daysOfWeek'):
+                days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+                day_names = [days[d] for d in rec['daysOfWeek'] if 0 <= d <= 6]
+                result += f"Days of Week: {', '.join(day_names)}\n"
+            if rec.get('endDate'):
+                result += f"End Date: {rec['endDate']}\n"
+        
+        result += "-" * 50 + "\n"
+    
+    return [types.TextContent(type="text", text=result)]
+
+
+async def handle_get_schedule(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the get_schedule tool."""
+    schedule_id = arguments["scheduleId"]
+    
+    response = await client.get(
+        f"{app_engine_url}/get_schedule",
+        params={"scheduleId": schedule_id}
+    )
+    
+    if response.status_code == 404:
+        return [types.TextContent(type="text", text=f"Schedule not found: {schedule_id}")]
+    
+    response.raise_for_status()
+    schedule = response.json()
+    
+    result = f"Schedule Details:\n\n"
+    result += f"Schedule ID: {schedule.get('id', 'Unknown')}\n"
+    result += f"App ID: {schedule.get('appId', 'Unknown')}\n"
+    result += f"Tool: {schedule.get('toolName', 'Unknown')}\n"
+    result += f"Schedule Type: {schedule.get('scheduleType', 'Unknown')}\n"
+    result += f"Scheduled Time: {schedule.get('scheduledTime', 'Unknown')}\n"
+    result += f"Active: {schedule.get('isActive', False)}\n"
+    result += f"Created At: {schedule.get('createdAt', 'Unknown')}\n"
+    result += f"Run Count: {schedule.get('runCount', 0)}\n"
+    
+    if schedule.get('input'):
+        result += f"Input Data: {schedule['input']}\n"
+    if schedule.get('lastRun'):
+        result += f"Last Run: {schedule['lastRun']}\n"
+    if schedule.get('nextRun'):
+        result += f"Next Run: {schedule['nextRun']}\n"
+        
+    if schedule.get('recurrence'):
+        rec = schedule['recurrence']
+        result += f"\nRecurrence Pattern:\n"
+        result += f"- Every {rec.get('interval', 1)} {rec.get('unit', 'unknown')}\n"
+        if rec.get('daysOfWeek'):
+            days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+            day_names = [days[d] for d in rec['daysOfWeek'] if 0 <= d <= 6]
+            result += f"- Days of Week: {', '.join(day_names)}\n"
+        if rec.get('endDate'):
+            result += f"- End Date: {rec['endDate']}\n"
+    
+    return [types.TextContent(type="text", text=result)]
+
+
+async def handle_delete_schedule(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the delete_schedule tool."""
+    schedule_id = arguments["scheduleId"]
+    
+    response = await client.delete(
+        f"{app_engine_url}/delete_schedule",
+        params={"scheduleId": schedule_id}
+    )
+    
+    if response.status_code == 404:
+        return [types.TextContent(type="text", text=f"Schedule not found: {schedule_id}")]
+    
+    if not response.is_success:
+        error_text = f"Delete Schedule Failed:\n"
+        error_text += f"HTTP Status: {response.status_code} {response.reason_phrase}\n"
+        
+        try:
+            error_data = response.json()
+            if isinstance(error_data, dict) and error_data.get('error'):
+                error_text += f"Error: {error_data['error']}\n"
+            else:
+                error_text += f"Error Response: {error_data}\n"
+        except Exception:
+            error_text += f"Response Text: {response.text}\n"
+        
+        return [types.TextContent(type="text", text=error_text)]
+    
+    response.raise_for_status()
+    return [types.TextContent(type="text", text=f"Schedule deleted successfully: {schedule_id}")]
+
+
+async def handle_update_schedule(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the update_schedule tool."""
+    payload = arguments
+    
+    response = await client.put(
+        f"{app_engine_url}/update_schedule",
+        json=payload,
+        headers={"Content-Type": "application/json"}
+    )
+    
+    if response.status_code == 404:
+        return [types.TextContent(type="text", text=f"Schedule not found: {arguments.get('scheduleId', 'Unknown')}")]
+    
+    if not response.is_success:
+        error_text = f"Update Schedule Failed:\n"
+        error_text += f"HTTP Status: {response.status_code} {response.reason_phrase}\n"
+        
+        try:
+            error_data = response.json()
+            if isinstance(error_data, dict):
+                if error_data.get('error'):
+                    error_text += f"Error: {error_data['error']}\n"
+                if error_data.get('message'):
+                    error_text += f"Message: {error_data['message']}\n"
+            else:
+                error_text += f"Error Response: {error_data}\n"
+        except Exception:
+            error_text += f"Response Text: {response.text}\n"
+        
+        return [types.TextContent(type="text", text=error_text)]
+    
+    result = response.json()
+    
+    output_text = f"Schedule Updated Successfully:\n"
+    output_text += f"Schedule ID: {result.get('id', 'Unknown')}\n"
+    output_text += f"App ID: {result.get('appId', 'Unknown')}\n"
+    output_text += f"Tool: {result.get('toolName', 'Unknown')}\n"
+    output_text += f"Schedule Type: {result.get('scheduleType', 'Unknown')}\n"
+    output_text += f"Active: {result.get('isActive', False)}\n"
+    if result.get('nextRun'):
+        output_text += f"Next Run: {result.get('nextRun')}\n"
+    
+    return [types.TextContent(type="text", text=output_text)]
+
+
+async def handle_list_scheduled_runs(
+    client: httpx.AsyncClient,
+    app_engine_url: str,
+    arguments: Dict[str, Any]
+) -> List[types.TextContent]:
+    """Handle the list_scheduled_runs tool."""
+    params = {}
+    if arguments.get("scheduleId"):
+        params["scheduleId"] = arguments["scheduleId"]
+    if arguments.get("appId"):
+        params["appId"] = arguments["appId"]
+    if arguments.get("status"):
+        params["status"] = arguments["status"]
+    
+    response = await client.get(
+        f"{app_engine_url}/list_scheduled_runs",
+        params=params
+    )
+    response.raise_for_status()
+    
+    runs = response.json()
+    
+    if not runs:
+        return [types.TextContent(type="text", text="No scheduled runs found.")]
+    
+    result = "Scheduled Run History:\n\n"
+    for run in runs:
+        result += f"Run ID: {run.get('id', 'Unknown')}\n"
+        result += f"Schedule ID: {run.get('scheduleId', 'Unknown')}\n"
+        result += f"App ID: {run.get('appId', 'Unknown')}\n"
+        result += f"Tool: {run.get('toolName', 'Unknown')}\n"
+        result += f"Status: {run.get('status', 'Unknown')}\n"
+        result += f"Started At: {run.get('startedAt', 'Unknown')}\n"
+        
+        if run.get('completedAt'):
+            result += f"Completed At: {run['completedAt']}\n"
+        if run.get('output'):
+            result += f"Output: {run['output']}\n"
+        if run.get('error'):
+            result += f"Error: {run['error']}\n"
+        
+        result += "-" * 50 + "\n"
+    
+    return [types.TextContent(type="text", text=result)]
 
 
 async def main():
