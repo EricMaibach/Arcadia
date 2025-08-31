@@ -161,6 +161,8 @@ type ClaudeConfig struct {
 	Model          string `json:"model"`
 	MaxTokens      int    `json:"max_tokens"`
 	TimeoutSeconds int    `json:"timeout_seconds"`
+	EnableMCP      bool   `json:"enable_mcp"`
+	MCPServerCmd   string `json:"mcp_server_cmd"`
 }
 
 type ServerConfig struct {
@@ -180,18 +182,30 @@ type ClaudeMessage struct {
 	Content string `json:"content"`
 }
 
+type ClaudeTool struct {
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	InputSchema interface{} `json:"input_schema"`
+}
+
 type ClaudeRequest struct {
 	Model     string          `json:"model"`
 	MaxTokens int             `json:"max_tokens"`
 	Messages  []ClaudeMessage `json:"messages"`
+	Tools     []ClaudeTool    `json:"tools,omitempty"`
+}
+
+type ClaudeContent struct {
+	Type string `json:"type"`
+	Text string `json:"text,omitempty"`
+	ID   string `json:"id,omitempty"`
+	Name string `json:"name,omitempty"`
+	Input interface{} `json:"input,omitempty"`
 }
 
 type ClaudeResponse struct {
-	Content []struct {
-		Text string `json:"text"`
-		Type string `json:"type"`
-	} `json:"content"`
-	StopReason string `json:"stop_reason"`
+	Content    []ClaudeContent `json:"content"`
+	StopReason string          `json:"stop_reason"`
 	Usage      struct {
 		InputTokens  int `json:"input_tokens"`
 		OutputTokens int `json:"output_tokens"`
@@ -203,15 +217,23 @@ type ClaudeResponse struct {
 type ClaudeService struct {
 	config     ClaudeConfig
 	httpClient *http.Client
+	mcpTools   []ClaudeTool
 }
 
 func NewClaudeService(config ClaudeConfig) *ClaudeService {
-	return &ClaudeService{
+	service := &ClaudeService{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
 		},
+		mcpTools: []ClaudeTool{},
 	}
+	
+	if config.EnableMCP {
+		service.loadMCPTools()
+	}
+	
+	return service
 }
 
 func (cs *ClaudeService) SendMessage(message string) (string, error) {
@@ -224,6 +246,7 @@ func (cs *ClaudeService) SendMessage(message string) (string, error) {
 				Content: message,
 			},
 		},
+		Tools: cs.mcpTools,
 	}
 
 	jsonData, err := json.Marshal(request)
@@ -260,7 +283,510 @@ func (cs *ClaudeService) SendMessage(message string) (string, error) {
 		return "", fmt.Errorf("no content in Claude response")
 	}
 
-	return claudeResp.Content[0].Text, nil
+	// Check if Claude wants to use tools
+	if claudeResp.StopReason == "tool_use" {
+		return cs.handleToolUse(claudeResp, message)
+	}
+
+	// Return the first text content
+	for _, content := range claudeResp.Content {
+		if content.Type == "text" {
+			return content.Text, nil
+		}
+	}
+
+	return "", fmt.Errorf("no text content in Claude response")
+}
+
+func (cs *ClaudeService) loadMCPTools() {
+	// Define tools directly in Go, no longer using Python MCP server
+	cs.mcpTools = []ClaudeTool{
+		{
+			Name:        "list_apps",
+			Description: "List all registered applications in the Arcadia App Engine",
+			InputSchema: map[string]interface{}{
+				"type":       "object",
+				"properties": map[string]interface{}{},
+			},
+		},
+		{
+			Name:        "run_app",
+			Description: "Execute a tool from a registered application",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"app_id": map[string]interface{}{
+						"type":        "string",
+						"description": "The ID of the application to run",
+					},
+					"tool_name": map[string]interface{}{
+						"type":        "string",
+						"description": "The name of the tool to execute",
+					},
+					"input_data": map[string]interface{}{
+						"type":        "object",
+						"description": "Input data to pass to the tool",
+					},
+				},
+				"required": []string{"app_id", "tool_name", "input_data"},
+			},
+		},
+		{
+			Name:        "create_app",
+			Description: "Submit a Rust trait implementation to compile and register a new WASM application",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"appId": map[string]interface{}{
+						"type":        "string",
+						"description": "Unique identifier for the application",
+					},
+					"version": map[string]interface{}{
+						"type":        "string",
+						"description": "Version of the application",
+					},
+					"runtime": map[string]interface{}{
+						"type":        "string",
+						"description": "Runtime for the application (must be 'wasm')",
+					},
+					"tools": map[string]interface{}{
+						"type": "array",
+						"items": map[string]interface{}{
+							"type": "object",
+							"properties": map[string]interface{}{
+								"name": map[string]interface{}{
+									"type":        "string",
+									"description": "The name of the tool",
+								},
+								"inputFormat": map[string]interface{}{
+									"type":        "string",
+									"description": "The expected JSON structure for this tool's input",
+								},
+							},
+							"required": []string{"name", "inputFormat"},
+						},
+						"description": "List of tools this application provides",
+					},
+					"appSrc": map[string]interface{}{
+						"type":        "string",
+						"description": "Rust code implementing the ArcadiaApp trait",
+					},
+				},
+				"required": []string{"appId", "version", "runtime", "tools", "appSrc"},
+			},
+		},
+		{
+			Name:        "schedule_app_run",
+			Description: "Schedule an app tool to run at a specific time, either once or on a recurring basis",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"appId": map[string]interface{}{
+						"type":        "string",
+						"description": "ID of the application to schedule",
+					},
+					"toolName": map[string]interface{}{
+						"type":        "string",
+						"description": "Name of the tool to execute",
+					},
+					"input": map[string]interface{}{
+						"type":        "object",
+						"description": "Input data to pass to the tool",
+					},
+					"scheduleType": map[string]interface{}{
+						"type":        "string",
+						"description": "Type of schedule: 'one-time' or 'recurring'",
+					},
+					"scheduledTime": map[string]interface{}{
+						"type":        "string",
+						"format":      "date-time",
+						"description": "When to run the tool (ISO 8601 format)",
+					},
+					"recurrence": map[string]interface{}{
+						"type": "object",
+						"properties": map[string]interface{}{
+							"interval": map[string]interface{}{
+								"type":        "integer",
+								"description": "Number of units between runs",
+							},
+							"unit": map[string]interface{}{
+								"type":        "string",
+								"description": "Unit of time for recurrence",
+							},
+							"daysOfWeek": map[string]interface{}{
+								"type":        "array",
+								"description": "Days of week for weekly recurrence (0=Sunday, 1=Monday, etc.)",
+							},
+							"endDate": map[string]interface{}{
+								"type":        "string",
+								"format":      "date-time",
+								"description": "Optional end date for recurring schedules",
+							},
+						},
+						"description": "Recurrence pattern (required for recurring schedules)",
+					},
+				},
+				"required": []string{"appId", "toolName", "input", "scheduleType", "scheduledTime"},
+			},
+		},
+		{
+			Name:        "list_schedules",
+			Description: "List all scheduled app runs",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"appId": map[string]interface{}{
+						"type":        "string",
+						"description": "Optional: filter schedules by app ID",
+					},
+				},
+			},
+		},
+	}
+	
+	log.Printf("Loaded %d MCP tools directly in Go", len(cs.mcpTools))
+}
+
+
+
+
+
+
+func (cs *ClaudeService) handleToolUse(response ClaudeResponse, originalMessage string) (string, error) {
+	var toolResults []string
+	
+	// Execute each tool call
+	for _, content := range response.Content {
+		if content.Type == "tool_use" {
+			result, err := cs.executeMCPTool(content.Name, content.Input)
+			if err != nil {
+				toolResults = append(toolResults, fmt.Sprintf("Tool %s failed: %v", content.Name, err))
+			} else {
+				toolResults = append(toolResults, fmt.Sprintf("Tool %s result: %s", content.Name, result))
+			}
+		}
+	}
+	
+	if len(toolResults) == 0 {
+		return "I tried to use tools but no tool results were available.", nil
+	}
+	
+	// Return the combined results
+	return strings.Join(toolResults, "\n\n"), nil
+}
+
+func (cs *ClaudeService) executeMCPTool(toolName string, input interface{}) (string, error) {
+	// Execute tools directly using Go methods
+	log.Printf("Executing MCP tool: %s", toolName)
+	return cs.executeMCPToolDirect(toolName, input)
+}
+
+
+
+func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}) (string, error) {
+	// Execute tools directly using local Go functions instead of HTTP calls
+	switch toolName {
+	case "list_apps":
+		return cs.executeListApps()
+	case "run_app":
+		return cs.executeRunApp(input)
+	case "create_app":
+		return cs.executeCreateApp(input)
+	case "schedule_app_run":
+		return cs.executeScheduleAppRun(input)
+	case "list_schedules":
+		return cs.executeListSchedules(input)
+	default:
+		return "", fmt.Errorf("unknown tool: %s", toolName)
+	}
+}
+
+// executeListApps handles the list_apps tool
+func (cs *ClaudeService) executeListApps() (string, error) {
+	registryMutex.RLock()
+	defer registryMutex.RUnlock()
+
+	apps := []*App{}
+	for _, app := range registry {
+		apps = append(apps, app)
+	}
+	
+	result, err := json.MarshalIndent(apps, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal apps: %w", err)
+	}
+	
+	return string(result), nil
+}
+
+// executeRunApp handles the run_app tool
+func (cs *ClaudeService) executeRunApp(input interface{}) (string, error) {
+	// Parse input
+	inputMap, ok := input.(map[string]interface{})
+	if !ok {
+		return "", fmt.Errorf("invalid input format for run_app")
+	}
+	
+	appID, ok := inputMap["app_id"].(string)
+	if !ok {
+		return "", fmt.Errorf("app_id is required")
+	}
+	
+	toolName, ok := inputMap["tool_name"].(string)
+	if !ok {
+		return "", fmt.Errorf("tool_name is required")
+	}
+	
+	inputData := inputMap["input_data"]
+	inputJSON, err := json.Marshal(inputData)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input_data: %w", err)
+	}
+	
+	// Execute the app tool
+	output, err := executeAppTool(appID, toolName, json.RawMessage(inputJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to execute app tool: %w", err)
+	}
+	
+	// Return formatted result
+	result := map[string]interface{}{
+		"output": output,
+		"status": "success",
+	}
+	
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal result: %w", err)
+	}
+	
+	return string(resultJSON), nil
+}
+
+// executeCreateApp handles the create_app tool
+func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
+	// Convert input to AppRequest
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+	
+	var req AppRequest
+	if err := json.Unmarshal(inputJSON, &req); err != nil {
+		return "", fmt.Errorf("failed to parse app request: %w", err)
+	}
+	
+	// Validate required fields
+	if strings.TrimSpace(req.AppSrc) == "" {
+		return "", fmt.Errorf("trait implementation is required")
+	}
+	if req.AppID == "" {
+		return "", fmt.Errorf("appId is required")
+	}
+	if req.Version == "" {
+		return "", fmt.Errorf("version is required")
+	}
+	if len(req.Tools) == 0 {
+		return "", fmt.Errorf("at least one tool is required")
+	}
+	
+	// Check for existing compiled WASM
+	artifactsDir := filepath.Join("artifacts", req.AppID)
+	wasmFilename := fmt.Sprintf("%s.wasm", req.Version)
+	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
+	
+	if _, err := os.Stat(finalWasmPath); err == nil {
+		return "", fmt.Errorf("app %s version %s already compiled and exists", req.AppID, req.Version)
+	}
+	
+	// Prepare build directory
+	buildDir := filepath.Join("build", req.AppID, req.Version)
+	if _, err := os.Stat(buildDir); err == nil {
+		if err := os.RemoveAll(buildDir); err != nil {
+			return "", fmt.Errorf("failed to clear existing build directory: %w", err)
+		}
+	}
+	
+	if err := os.MkdirAll(buildDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create build directory: %w", err)
+	}
+	
+	// Generate Rust project from trait
+	if err := generateRustProjectFromTrait(req, buildDir); err != nil {
+		os.RemoveAll(buildDir)
+		return "", fmt.Errorf("failed to generate Rust project: %w", err)
+	}
+	
+	// Compile to WASM
+	wasmPath, err := buildRustToWasm(buildDir)
+	if err != nil {
+		return "", fmt.Errorf("failed to compile Rust to WASM: %w", err)
+	}
+	
+	// Register app in registry
+	registryMutex.Lock()
+	registry[req.AppID] = &App{
+		AppID:          req.AppID,
+		Version:        req.Version,
+		Runtime:        req.Runtime,
+		Tools:          req.Tools,
+		ArtifactURI:    wasmPath,
+		SourceLanguage: "rust",
+		Files: []File{
+			{
+				Name:    "src/lib.rs",
+				Content: "Generated from trait implementation",
+			},
+		},
+	}
+	registryMutex.Unlock()
+	
+	// Save registry to file
+	if err := saveRegistry(); err != nil {
+		log.Printf("Warning: failed to save registry: %v", err)
+	}
+	
+	// Return success response
+	response := map[string]string{
+		"status":   "app trait implementation submitted and compiled",
+		"wasmPath": wasmPath,
+	}
+	
+	resultJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+	
+	return string(resultJSON), nil
+}
+
+// executeScheduleAppRun handles the schedule_app_run tool
+func (cs *ClaudeService) executeScheduleAppRun(input interface{}) (string, error) {
+	// Convert input to ScheduleRequest
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+	
+	var req ScheduleRequest
+	if err := json.Unmarshal(inputJSON, &req); err != nil {
+		return "", fmt.Errorf("failed to parse schedule request: %w", err)
+	}
+	
+	// Validate request
+	if req.AppID == "" {
+		return "", fmt.Errorf("appId is required")
+	}
+	if req.ToolName == "" {
+		return "", fmt.Errorf("toolName is required")
+	}
+	if req.ScheduleType != ScheduleTypeOneTime && req.ScheduleType != ScheduleTypeRecurring {
+		return "", fmt.Errorf("scheduleType must be 'one-time' or 'recurring'")
+	}
+	if req.ScheduledTime.Time.IsZero() {
+		return "", fmt.Errorf("scheduledTime is required")
+	}
+	if req.ScheduledTime.Time.Before(time.Now()) {
+		return "", fmt.Errorf("scheduledTime must be in the future")
+	}
+	
+	// Verify app exists and tool is valid
+	registryMutex.RLock()
+	app, ok := registry[req.AppID]
+	registryMutex.RUnlock()
+	if !ok {
+		return "", fmt.Errorf("app not found: %s", req.AppID)
+	}
+	
+	toolFound := false
+	for _, tool := range app.Tools {
+		if tool.Name == req.ToolName {
+			toolFound = true
+			break
+		}
+	}
+	if !toolFound {
+		return "", fmt.Errorf("tool '%s' not found in app", req.ToolName)
+	}
+	
+	// Generate schedule ID and create schedule
+	scheduleID, err := generateID()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate schedule ID: %w", err)
+	}
+	
+	now := time.Now()
+	schedule := &AppSchedule{
+		ID:            scheduleID,
+		AppID:         req.AppID,
+		ToolName:      req.ToolName,
+		Input:         req.Input,
+		ScheduleType:  req.ScheduleType,
+		ScheduledTime: req.ScheduledTime.Time,
+		Recurrence:    req.Recurrence,
+		IsActive:      true,
+		CreatedAt:     now,
+		RunCount:      0,
+	}
+	
+	nextRun := req.ScheduledTime.Time
+	schedule.NextRun = &nextRun
+	
+	// Store schedule in database
+	if err := saveScheduleToDatabase(schedule); err != nil {
+		return "", fmt.Errorf("failed to save schedule: %w", err)
+	}
+	
+	// Store schedule in memory
+	schedulesMutex.Lock()
+	schedules[scheduleID] = schedule
+	schedulesMutex.Unlock()
+	
+	// Return success response
+	response := map[string]interface{}{
+		"status":     "schedule created successfully",
+		"scheduleId": scheduleID,
+		"nextRun":    schedule.NextRun,
+	}
+	
+	resultJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+	
+	return string(resultJSON), nil
+}
+
+// executeListSchedules handles the list_schedules tool
+func (cs *ClaudeService) executeListSchedules(input interface{}) (string, error) {
+	// Parse optional appId filter
+	var appIdFilter string
+	if input != nil {
+		if inputMap, ok := input.(map[string]interface{}); ok {
+			if appId, ok := inputMap["appId"].(string); ok {
+				appIdFilter = appId
+			}
+		}
+	}
+	
+	schedulesMutex.RLock()
+	defer schedulesMutex.RUnlock()
+	
+	scheduleList := []*AppSchedule{}
+	for _, schedule := range schedules {
+		// Apply app ID filter if specified
+		if appIdFilter != "" && schedule.AppID != appIdFilter {
+			continue
+		}
+		scheduleList = append(scheduleList, schedule)
+	}
+	
+	result, err := json.MarshalIndent(scheduleList, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal schedules: %w", err)
+	}
+	
+	return string(result), nil
 }
 
 // --- REST API Handler for future use ---
@@ -2498,6 +3024,9 @@ func loadConfig() error {
 	if appConfig.Claude.TimeoutSeconds == 0 {
 		appConfig.Claude.TimeoutSeconds = 30
 	}
+	
+	// Enable MCP by default (now handled directly in Go)
+	appConfig.Claude.EnableMCP = true
 	
 	// Initialize Claude service
 	claudeService = NewClaudeService(appConfig.Claude)
