@@ -572,3 +572,56 @@ error: could not compile `food-tracker` (lib) due to 1 previous error; 5 warning
 [APP_SUBMISSION] 2025/09/01 21:18:58.397927 [schedule_session_1756775938395392000] Schedule created successfully with ID: 553d200c949614d255a1a446408b72aa
 [APP_SUBMISSION] 2025/09/01 21:18:58.397952 [schedule_session_1756775938395392000] STEP 5: Sending success response
 [APP_SUBMISSION] 2025/09/01 21:18:58.397998 [schedule_session_1756775938395392000] === APP SCHEDULE CREATED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 21:44:02.574896 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 21:45:37.658235 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 21:47:00.873453 === NEW APP SCHEDULE REQUEST [schedule_session_1756777620873442000] ===
+[APP_SUBMISSION] 2025/09/01 21:47:00.873791 [schedule_session_1756777620873442000] Client IP: [::1]:64013
+[APP_SUBMISSION] 2025/09/01 21:47:00.873851 [schedule_session_1756777620873442000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 21:47:00.873880 [schedule_session_1756777620873442000] Request URL: /schedule_app_run
+[APP_SUBMISSION] 2025/09/01 21:47:00.873906 [schedule_session_1756777620873442000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 21:47:00.873946 [schedule_session_1756777620873442000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 21:47:00.873969 [schedule_session_1756777620873442000] STEP 1: Parsing schedule request
+[APP_SUBMISSION] 2025/09/01 21:47:00.874143 [schedule_session_1756777620873442000] Parsed request - AppID: counter_app, ToolName: increment, ScheduleType: one-time
+[APP_SUBMISSION] 2025/09/01 21:47:00.874452 [schedule_session_1756777620873442000] STEP 2: Validating schedule request
+[APP_SUBMISSION] 2025/09/01 21:47:00.874476 [schedule_session_1756777620873442000] STEP 3: Verifying app and tool exist
+[APP_SUBMISSION] 2025/09/01 21:47:00.874499 [schedule_session_1756777620873442000] Tool 'increment' found in app
+[APP_SUBMISSION] 2025/09/01 21:47:00.874520 [schedule_session_1756777620873442000] STEP 4: Creating schedule
+[APP_SUBMISSION] 2025/09/01 21:47:00.875958 [schedule_session_1756777620873442000] Schedule created successfully with ID: 83d31df51dbd0a2aac97548fee6e576c
+[APP_SUBMISSION] 2025/09/01 21:47:00.875993 [schedule_session_1756777620873442000] STEP 5: Sending success response
+[APP_SUBMISSION] 2025/09/01 21:47:00.876051 [schedule_session_1756777620873442000] === APP SCHEDULE CREATED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 21:50:34.751136 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 21:50:59.337739 === NEW APP SCHEDULE REQUEST [schedule_session_1756777859337724000] ===
+[APP_SUBMISSION] 2025/09/01 21:50:59.338090 [schedule_session_1756777859337724000] Client IP: [::1]:64207
+[APP_SUBMISSION] 2025/09/01 21:50:59.338140 [schedule_session_1756777859337724000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 21:50:59.338170 [schedule_session_1756777859337724000] Request URL: /schedule_app_run
+[APP_SUBMISSION] 2025/09/01 21:50:59.338197 [schedule_session_1756777859337724000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 21:50:59.338238 [schedule_session_1756777859337724000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 21:50:59.338260 [schedule_session_1756777859337724000] STEP 1: Parsing schedule request
+[APP_SUBMISSION] 2025/09/01 21:50:59.338429 [schedule_session_1756777859337724000] Parsed request - AppID: counter_app, ToolName: increment, ScheduleType: one-time
+[APP_SUBMISSION] 2025/09/01 21:50:59.338473 [schedule_session_1756777859337724000] STEP 2: Validating schedule request
+[APP_SUBMISSION] 2025/09/01 21:50:59.338497 [schedule_session_1756777859337724000] STEP 3: Verifying app and tool exist
+[APP_SUBMISSION] 2025/09/01 21:50:59.338520 [schedule_session_1756777859337724000] Tool 'increment' found in app
+[APP_SUBMISSION] 2025/09/01 21:50:59.338540 [schedule_session_1756777859337724000] STEP 4: Creating schedule
+[APP_SUBMISSION] 2025/09/01 21:50:59.339685 [schedule_session_1756777859337724000] Schedule created successfully with ID: 1bbeb2fbb4119f0ea636182f8dda2ec1
+[APP_SUBMISSION] 2025/09/01 21:50:59.339712 [schedule_session_1756777859337724000] STEP 5: Sending success response
+[APP_SUBMISSION] 2025/09/01 21:50:59.339780 [schedule_session_1756777859337724000] === APP SCHEDULE CREATED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 21:58:53.346913 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 22:01:11.204214 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 22:02:22.008244 === NEW TOOL EXECUTION REQUEST [tool_session_1756778542008224000] ===
+[APP_SUBMISSION] 2025/09/01 22:02:22.008597 [tool_session_1756778542008224000] Client IP: [::1]:64560
+[APP_SUBMISSION] 2025/09/01 22:02:22.008657 [tool_session_1756778542008224000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 22:02:22.008689 [tool_session_1756778542008224000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 22:02:22.008713 [tool_session_1756778542008224000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 22:02:22.008754 [tool_session_1756778542008224000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 22:02:22.008777 [tool_session_1756778542008224000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 22:02:22.008959 [tool_session_1756778542008224000] Parsed request - AppID: counter_app, ToolName: get_count, InputLength: 18
+[APP_SUBMISSION] 2025/09/01 22:02:22.008992 [tool_session_1756778542008224000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 22:02:22.009016 [tool_session_1756778542008224000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 22:02:22.009503 [tool_session_1756778542008224000] Tool 'get_count' found with input format: {"user_id": "string"}
+[APP_SUBMISSION] 2025/09/01 22:02:22.009526 [tool_session_1756778542008224000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 22:02:22.010423 [tool_session_1756778542008224000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 22:02:22.010512 [tool_session_1756778542008224000] STEP 4: Executing tool 'get_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 22:02:22.010534 [tool_session_1756778542008224000] STEP 5: Executing tool 'get_count'
+[APP_SUBMISSION] 2025/09/01 22:02:22.051607 [tool_session_1756778542008224000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 22:02:22.051629 [tool_session_1756778542008224000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 22:02:22.051654 [tool_session_1756778542008224000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===

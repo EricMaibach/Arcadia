@@ -330,8 +330,8 @@ func TestCalculateNextRun(t *testing.T) {
 }
 
 func TestScheduler_CreateSchedule(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	futureTime := time.Now().Add(time.Hour)
 
@@ -424,7 +424,7 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 				ScheduledTime: FlexibleTime{Time: futureTime},
 			},
 			setup: func() {
-				mockDB.SaveError = fmt.Errorf("database error")
+				mockRepo.SaveError = fmt.Errorf("database error")
 			},
 			wantErr: true,
 		},
@@ -433,8 +433,8 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock state and scheduler
-			mockDB.SaveError = nil
-			mockDB.Schedules = make(map[string]*AppSchedule)
+			mockRepo.SaveError = nil
+			mockRepo.Schedules = make(map[string]*AppSchedule)
 			scheduler.schedules = make(map[string]*AppSchedule)
 			
 			if tt.setup != nil {
@@ -471,8 +471,8 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 				}
 
 				// Check that schedule was saved to mock database
-				if len(mockDB.Schedules) != 1 {
-					t.Errorf("Expected 1 schedule in database, got %d", len(mockDB.Schedules))
+				if len(mockRepo.Schedules) != 1 {
+					t.Errorf("Expected 1 schedule in database, got %d", len(mockRepo.Schedules))
 				}
 
 				// Check that schedule was added to scheduler's in-memory map
@@ -485,8 +485,8 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 }
 
 func TestScheduler_GetAllSchedules(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Add test schedules to scheduler
 	schedule1 := &AppSchedule{
@@ -541,8 +541,8 @@ func TestScheduler_GetAllSchedules(t *testing.T) {
 }
 
 func TestScheduler_GetSchedule(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -573,8 +573,8 @@ func TestScheduler_GetSchedule(t *testing.T) {
 }
 
 func TestScheduler_DeleteSchedule(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -611,7 +611,7 @@ func TestScheduler_DeleteSchedule(t *testing.T) {
 		AppID:    "test-app",
 		IsActive: true,
 	}
-	mockDB.DeactivateError = fmt.Errorf("database error")
+	mockRepo.DeactivateError = fmt.Errorf("database error")
 
 	err = scheduler.DeleteSchedule("error-schedule")
 	if err == nil {
@@ -620,8 +620,8 @@ func TestScheduler_DeleteSchedule(t *testing.T) {
 }
 
 func TestScheduler_UpdateSchedule(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -634,7 +634,7 @@ func TestScheduler_UpdateSchedule(t *testing.T) {
 		RunCount:      0,
 	}
 	scheduler.schedules["test-schedule"] = testSchedule
-	mockDB.Schedules["test-schedule"] = testSchedule
+	mockRepo.Schedules["test-schedule"] = testSchedule
 
 	tests := []struct {
 		name      string
@@ -682,7 +682,7 @@ func TestScheduler_UpdateSchedule(t *testing.T) {
 				IsActive: boolPtr(false),
 			},
 			setup: func() {
-				mockDB.UpdateError = fmt.Errorf("database error")
+				mockRepo.UpdateError = fmt.Errorf("database error")
 			},
 			wantErr: true,
 		},
@@ -691,7 +691,7 @@ func TestScheduler_UpdateSchedule(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Reset mock state and add test schedule
-			mockDB.UpdateError = nil
+			mockRepo.UpdateError = nil
 			testSched := &AppSchedule{
 				ID:            "test-schedule",
 				AppID:         "test-app",
@@ -702,7 +702,7 @@ func TestScheduler_UpdateSchedule(t *testing.T) {
 				RunCount:      0,
 			}
 			scheduler.schedules["test-schedule"] = testSched
-			mockDB.Schedules["test-schedule"] = testSched
+			mockRepo.Schedules["test-schedule"] = testSched
 
 			if tt.setup != nil {
 				tt.setup()
@@ -747,8 +747,8 @@ func boolPtr(b bool) *bool {
 }
 
 func TestScheduler_Start(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Add a test schedule to the mock database
 	testSchedule := &AppSchedule{
@@ -757,7 +757,7 @@ func TestScheduler_Start(t *testing.T) {
 		ToolName: "test-tool",
 		IsActive: true,
 	}
-	mockDB.Schedules["test-schedule"] = testSchedule
+	mockRepo.Schedules["test-schedule"] = testSchedule
 
 	// Test successful start
 	err := scheduler.Start()
@@ -774,8 +774,8 @@ func TestScheduler_Start(t *testing.T) {
 	scheduler.Stop()
 
 	// Test start with database error
-	mockDB.LoadError = fmt.Errorf("database error")
-	scheduler2 := NewScheduler(mockDB)
+	mockRepo.LoadError = fmt.Errorf("database error")
+	scheduler2 := NewScheduler(mockRepo)
 	
 	err = scheduler2.Start()
 	if err == nil {
@@ -784,8 +784,8 @@ func TestScheduler_Start(t *testing.T) {
 }
 
 func TestScheduler_SetExecuteAppTool(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 
 	// Test setting execute function
 	var executeCalled bool
@@ -838,8 +838,8 @@ func TestScheduler_SetExecuteAppTool(t *testing.T) {
 // Test backward compatibility functions
 func TestBackwardCompatibilityFunctions(t *testing.T) {
 	// Initialize default scheduler
-	mockDB := NewMockSystemDB()
-	InitDefaultScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	InitDefaultScheduler(mockRepo)
 
 	// Test StartScheduler
 	err := StartScheduler()
@@ -928,8 +928,8 @@ func TestBackwardCompatibilityFunctions(t *testing.T) {
 }
 
 func TestScheduler_ExecuteScheduledRun(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 	
 	// Set up execute function
 	var executedAppID, executedToolName string
@@ -966,8 +966,8 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	}
 	
 	// Check that a run was saved
-	if len(mockDB.ScheduledRuns) != 1 {
-		t.Errorf("Expected 1 scheduled run, got %d", len(mockDB.ScheduledRuns))
+	if len(mockRepo.ScheduledRuns) != 1 {
+		t.Errorf("Expected 1 scheduled run, got %d", len(mockRepo.ScheduledRuns))
 	}
 	
 	// Check that the schedule was updated
@@ -1001,7 +1001,7 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	// Check that the run was marked as failed
 	// Find the run for schedule2
 	var failedRun *ScheduledRun
-	for _, run := range mockDB.ScheduledRuns {
+	for _, run := range mockRepo.ScheduledRuns {
 		if run.ScheduleID == schedule2.ID {
 			failedRun = run
 			break
@@ -1031,14 +1031,14 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	scheduler.ExecuteScheduledRun(schedule3)
 	
 	// Should still create a run but it will be failed
-	if len(mockDB.ScheduledRuns) < 3 {
+	if len(mockRepo.ScheduledRuns) < 3 {
 		t.Error("Expected at least 3 scheduled runs")
 	}
 }
 
 func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
-	mockDB := NewMockSystemDB()
-	scheduler := NewScheduler(mockDB)
+	mockRepo := NewMockScheduleRepository()
+	scheduler := NewScheduler(mockRepo)
 	
 	// Set up execute function
 	executionCount := 0

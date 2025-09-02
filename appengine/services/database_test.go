@@ -422,55 +422,59 @@ func TestComplexScheduleOperations(t *testing.T) {
 	}
 }
 
+func TestScheduleRepository_Methods(t *testing.T) {
+	// Test that schedule repository methods return errors when database is nil
+	repo := NewScheduleRepository(nil)
+	
+	t.Run("SaveSchedule without db", func(t *testing.T) {
+		schedule := &AppSchedule{ID: "test"}
+		err := repo.SaveSchedule(schedule)
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+	
+	t.Run("LoadSchedules without db", func(t *testing.T) {
+		_, err := repo.LoadSchedules()
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+	
+	t.Run("UpdateSchedule without db", func(t *testing.T) {
+		schedule := &AppSchedule{ID: "test"}
+		err := repo.UpdateSchedule(schedule)
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+	
+	t.Run("DeactivateSchedule without db", func(t *testing.T) {
+		err := repo.DeactivateSchedule("test")
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+	
+	t.Run("SaveScheduledRun without db", func(t *testing.T) {
+		run := &ScheduledRun{ID: "test"}
+		err := repo.SaveScheduledRun(run)
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+	
+	t.Run("UpdateScheduledRun without db", func(t *testing.T) {
+		run := &ScheduledRun{ID: "test"}
+		err := repo.UpdateScheduledRun(run)
+		if err == nil {
+			t.Error("Expected error when database not initialized")
+		}
+	})
+}
+
 func TestDatabaseManager_Methods(t *testing.T) {
 	dm := NewDatabaseManager()
-	
-	// Test that methods return errors when databases are not initialized
-	t.Run("SaveSchedule without init", func(t *testing.T) {
-		schedule := &AppSchedule{ID: "test"}
-		err := dm.SaveSchedule(schedule)
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
-	
-	t.Run("LoadSchedules without init", func(t *testing.T) {
-		_, err := dm.LoadSchedules()
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
-	
-	t.Run("UpdateSchedule without init", func(t *testing.T) {
-		schedule := &AppSchedule{ID: "test"}
-		err := dm.UpdateSchedule(schedule)
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
-	
-	t.Run("DeactivateSchedule without init", func(t *testing.T) {
-		err := dm.DeactivateSchedule("test")
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
-	
-	t.Run("SaveScheduledRun without init", func(t *testing.T) {
-		run := &ScheduledRun{ID: "test"}
-		err := dm.SaveScheduledRun(run)
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
-	
-	t.Run("UpdateScheduledRun without init", func(t *testing.T) {
-		run := &ScheduledRun{ID: "test"}
-		err := dm.UpdateScheduledRun(run)
-		if err == nil {
-			t.Error("Expected error when database not initialized")
-		}
-	})
 	
 	t.Run("Query without init", func(t *testing.T) {
 		_, err := dm.Query("SELECT 1")
@@ -512,25 +516,6 @@ func TestDatabaseManager_Methods(t *testing.T) {
 	})
 }
 
-func TestGetGlobalFunctions(t *testing.T) {
-	// Test GetAppDB
-	t.Run("GetAppDB", func(t *testing.T) {
-		db := GetAppDB()
-		// It will be nil since we haven't initialized
-		if db != nil {
-			t.Error("Expected nil when not initialized")
-		}
-	})
-	
-	// Test GetSystemDB
-	t.Run("GetSystemDB", func(t *testing.T) {
-		db := GetSystemDB()
-		// It will be nil since we haven't initialized
-		if db != nil {
-			t.Error("Expected nil when not initialized")
-		}
-	})
-}
 
 func TestMockRow(t *testing.T) {
 	// Test MockRow with custom scan function

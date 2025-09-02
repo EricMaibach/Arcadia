@@ -12,9 +12,63 @@ import (
 	"time"
 )
 
+// Schedule-related type definitions
+type ScheduleType string
+
+const (
+	ScheduleTypeOneTime   ScheduleType = "one-time"
+	ScheduleTypeRecurring ScheduleType = "recurring"
+)
+
+type RecurrenceRule struct {
+	Interval    int       `json:"interval"`
+	Unit        string    `json:"unit"` // "minutes", "hours", "days", "weeks", "months"
+	DaysOfWeek  []int     `json:"daysOfWeek,omitempty"`
+	EndDate     *time.Time `json:"endDate,omitempty"`
+}
+
+type AppSchedule struct {
+	ID            string          `json:"id"`
+	AppID         string          `json:"appId"`
+	ToolName      string          `json:"toolName"`
+	Input         json.RawMessage `json:"input"`
+	ScheduleType  ScheduleType    `json:"scheduleType"`
+	ScheduledTime time.Time       `json:"scheduledTime"`
+	Recurrence    *RecurrenceRule `json:"recurrence,omitempty"`
+	IsActive      bool            `json:"isActive"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	NextRun       *time.Time      `json:"nextRun,omitempty"`
+	LastRun       *time.Time      `json:"lastRun,omitempty"`
+	RunCount      int             `json:"runCount"`
+}
+
+type ScheduledRun struct {
+	ID          string          `json:"id"`
+	ScheduleID  string          `json:"scheduleId"`
+	AppID       string          `json:"appId"`
+	ToolName    string          `json:"toolName"`
+	Input       json.RawMessage `json:"input"`
+	StartedAt   time.Time       `json:"startedAt"`
+	CompletedAt *time.Time      `json:"completedAt,omitempty"`
+	Status      string          `json:"status"` // "pending", "running", "completed", "failed"
+	Output      string          `json:"output,omitempty"`
+	Error       string          `json:"error,omitempty"`
+}
+
+// ScheduleRepositoryInterface defines the interface for schedule persistence
+type ScheduleRepositoryInterface interface {
+	SaveSchedule(schedule *AppSchedule) error
+	LoadSchedules() (map[string]*AppSchedule, error)
+	UpdateSchedule(schedule *AppSchedule) error
+	DeactivateSchedule(scheduleID string) error
+	SaveScheduledRun(run *ScheduledRun) error
+	UpdateScheduledRun(run *ScheduledRun) error
+}
+
 // Scheduler manages scheduled app executions
 type Scheduler struct {
-	db             SystemDB
+	repository      ScheduleRepositoryInterface
 	schedules      map[string]*AppSchedule
 	schedulesMutex sync.RWMutex
 	schedulerCtx   context.Context
@@ -22,11 +76,11 @@ type Scheduler struct {
 	executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)
 }
 
-// NewScheduler creates a new scheduler with the given database interface
-func NewScheduler(db SystemDB) *Scheduler {
+// NewScheduler creates a new scheduler with the given repository
+func NewScheduler(repository ScheduleRepositoryInterface) *Scheduler {
 	return &Scheduler{
-		db:        db,
-		schedules: make(map[string]*AppSchedule),
+		repository: repository,
+		schedules:  make(map[string]*AppSchedule),
 	}
 }
 
@@ -223,8 +277,8 @@ func findNextWeeklyOccurrence(baseTime time.Time, recurrence *RecurrenceRule) ti
 func (s *Scheduler) Start() error {
 	s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())
 
-	// Load schedules from database
-	loadedSchedules, err := s.db.LoadSchedules()
+	// Load schedules from repository
+	loadedSchedules, err := s.repository.LoadSchedules()
 	if err != nil {
 		return fmt.Errorf("failed to load schedules: %v", err)
 	}
@@ -329,8 +383,8 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 		Status:     "running",
 	}
 
-	// Save run record to database
-	if err := s.db.SaveScheduledRun(run); err != nil {
+	// Save run record to repository
+	if err := s.repository.SaveScheduledRun(run); err != nil {
 		log.Printf("Failed to save scheduled run record: %v", err)
 		return
 	}
@@ -356,8 +410,8 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 		log.Printf("Scheduled run %s completed successfully in %v", runID, completedAt.Sub(startTime))
 	}
 
-	// Update run record in database
-	if err := s.db.UpdateScheduledRun(run); err != nil {
+	// Update run record in repository
+	if err := s.repository.UpdateScheduledRun(run); err != nil {
 		log.Printf("Failed to update scheduled run record: %v", err)
 	}
 
@@ -368,8 +422,8 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 	schedule.NextRun = CalculateNextRun(schedule)
 	s.schedulesMutex.Unlock()
 
-	// Update schedule in database
-	if err := s.db.UpdateSchedule(schedule); err != nil {
+	// Update schedule in repository
+	if err := s.repository.UpdateSchedule(schedule); err != nil {
 		log.Printf("Failed to update schedule in database: %v", err)
 	}
 
@@ -446,8 +500,8 @@ func (s *Scheduler) CreateSchedule(req ScheduleRequest) (*AppSchedule, error) {
 	nextRun := req.ScheduledTime.Time
 	schedule.NextRun = &nextRun
 
-	// Store schedule in database
-	if err := s.db.SaveSchedule(schedule); err != nil {
+	// Store schedule in repository
+	if err := s.repository.SaveSchedule(schedule); err != nil {
 		return nil, fmt.Errorf("failed to save schedule: %w", err)
 	}
 
@@ -499,8 +553,8 @@ func (s *Scheduler) DeleteSchedule(scheduleID string) error {
 	delete(s.schedules, scheduleID)
 	s.schedulesMutex.Unlock()
 
-	// Update in database
-	if err := s.db.DeactivateSchedule(scheduleID); err != nil {
+	// Update in repository
+	if err := s.repository.DeactivateSchedule(scheduleID); err != nil {
 		return fmt.Errorf("failed to deactivate schedule in database: %v", err)
 	}
 
@@ -545,8 +599,8 @@ func (s *Scheduler) UpdateSchedule(scheduleID string, updateReq UpdateScheduleRe
 		return nil, fmt.Errorf("no fields to update")
 	}
 
-	// Update in database
-	if err := s.db.UpdateSchedule(schedule); err != nil {
+	// Update in repository
+	if err := s.repository.UpdateSchedule(schedule); err != nil {
 		return nil, fmt.Errorf("failed to update schedule in database: %v", err)
 	}
 
@@ -555,9 +609,9 @@ func (s *Scheduler) UpdateSchedule(scheduleID string, updateReq UpdateScheduleRe
 
 // Backward compatibility functions - delegate to default scheduler
 
-// InitDefaultScheduler initializes the default scheduler with the given database
-func InitDefaultScheduler(db SystemDB) {
-	defaultScheduler = NewScheduler(db)
+// InitDefaultScheduler initializes the default scheduler with the given repository
+func InitDefaultScheduler(repository ScheduleRepositoryInterface) {
+	defaultScheduler = NewScheduler(repository)
 }
 
 // CreateSchedule creates and stores a new schedule (backward compatibility)
@@ -599,3 +653,4 @@ func UpdateSchedule(scheduleID string, updateReq UpdateScheduleRequest) (*AppSch
 	}
 	return defaultScheduler.UpdateSchedule(scheduleID, updateReq)
 }
+
