@@ -377,8 +377,8 @@ func (dm *DatabaseManager) Close() {
 // Helper functions for database operations (reconstructed based on usage)
 func saveScheduleToDatabase(db *sql.DB, schedule *AppSchedule) error {
 	query := `INSERT OR REPLACE INTO app_schedules 
-		(id, app_id, tool_name, input_data, schedule_type, scheduled_time, recurrence_rule, is_active, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`
+		(id, app_id, tool_name, input_data, schedule_type, scheduled_time, recurrence_rule, is_active, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
 
 	var inputData string
 	if schedule.Input != nil {

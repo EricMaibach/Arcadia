@@ -59,7 +59,7 @@ const ScheduleList: React.FC = () => {
     <div className="schedule-list">
       <div className="header">
         <h2>App Schedules</h2>
-        <Link to="/schedule/new" className="new-btn">New Schedule</Link>
+        <Link to="/admin/schedule/new" className="new-btn">New Schedule</Link>
       </div>
 
       <div className="filters">
@@ -107,7 +107,7 @@ const ScheduleList: React.FC = () => {
                   </td>
                   <td>{schedule.runCount}</td>
                   <td className="actions">
-                    <Link to={`/schedule/edit/${schedule.id}`} className="edit-btn">
+                    <Link to={`/admin/schedule/edit/${schedule.id}`} className="edit-btn">
                       Edit
                     </Link>
                     <button
