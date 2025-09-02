@@ -161,43 +161,8 @@ func (dm *DatabaseManager) initSystemDatabase() error {
 }
 
 func (dm *DatabaseManager) createAppTables() error {
-	queries := []string{
-		// App data table - for general key-value storage per app
-		`CREATE TABLE IF NOT EXISTS app_data (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			app_id TEXT NOT NULL,
-			key TEXT NOT NULL,
-			value TEXT,
-			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-			UNIQUE(app_id, key)
-		);`,
-
-		// App logs table - for application logging
-		`CREATE TABLE IF NOT EXISTS app_logs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			app_id TEXT NOT NULL,
-			level TEXT NOT NULL,
-			message TEXT NOT NULL,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);`,
-
-		// App metrics table - for performance monitoring
-		`CREATE TABLE IF NOT EXISTS app_metrics (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			app_id TEXT NOT NULL,
-			metric_name TEXT NOT NULL,
-			metric_value REAL NOT NULL,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);`,
-	}
-
-	for _, query := range queries {
-		if _, err := dm.appDB.Exec(query); err != nil {
-			return fmt.Errorf("failed to create app table: %v", err)
-		}
-	}
-
+	// Currently no app-specific tables are needed
+	// Tables are created as needed by the application
 	return nil
 }
 
