@@ -1,0 +1,9 @@
+{
+  "test-app": {
+    "appId": "test-app",
+    "version": "1.0.0",
+    "runtime": "",
+    "tools": null,
+    "artifactUri": ""
+  }
+}

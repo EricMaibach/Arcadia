@@ -1,0 +1,464 @@
+[APP_SUBMISSION] 2025/09/01 16:11:41.090048 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 16:12:38.308660 === NEW TOOL EXECUTION REQUEST [tool_session_1756757558308647000] ===
+[APP_SUBMISSION] 2025/09/01 16:12:38.309003 [tool_session_1756757558308647000] Client IP: [::1]:57725
+[APP_SUBMISSION] 2025/09/01 16:12:38.309057 [tool_session_1756757558308647000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 16:12:38.309089 [tool_session_1756757558308647000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 16:12:38.309116 [tool_session_1756757558308647000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 16:12:38.309155 [tool_session_1756757558308647000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 16:12:38.309178 [tool_session_1756757558308647000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 16:12:38.309321 [tool_session_1756757558308647000] Parsed request - AppID: food-tracker, ToolName: get_meals, InputLength: 27
+[APP_SUBMISSION] 2025/09/01 16:12:38.309354 [tool_session_1756757558308647000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 16:12:38.309376 [tool_session_1756757558308647000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:12:38.309398 [tool_session_1756757558308647000] Tool 'get_meals' found with input format: {"start_date": "string?", "end_date": "string?", "meal_type": "string?"}
+[APP_SUBMISSION] 2025/09/01 16:12:38.309419 [tool_session_1756757558308647000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:12:38.310307 [tool_session_1756757558308647000] WASM module loaded successfully (164713 bytes)
+[APP_SUBMISSION] 2025/09/01 16:12:38.310339 [tool_session_1756757558308647000] STEP 4: Executing tool 'get_meals' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 16:12:38.310356 [tool_session_1756757558308647000] STEP 5: Executing tool 'get_meals'
+[APP_SUBMISSION] 2025/09/01 16:12:38.366959 [tool_session_1756757558308647000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 16:12:38.366999 [tool_session_1756757558308647000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 16:12:38.367018 [tool_session_1756757558308647000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 16:13:37.605935 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 16:18:07.640025 === NEW APP SUBMISSION REQUEST [session_1756757887639073000] ===
+[APP_SUBMISSION] 2025/09/01 16:18:07.641724 [session_1756757887639073000] Client IP: [::1]:57757
+[APP_SUBMISSION] 2025/09/01 16:18:07.641749 [session_1756757887639073000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 16:18:07.641764 [session_1756757887639073000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/01 16:18:07.641777 [session_1756757887639073000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/01 16:18:07.641789 [session_1756757887639073000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 16:18:07.641800 [session_1756757887639073000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/09/01 16:18:07.643143 [session_1756757887639073000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 20629,
+  "appSrcPreview": "use serde_json::json;\nuse chrono::{NaiveDate, Datelike, Duration};\n\nstruct FoodTrackerApp {\n    init...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "add_food",
+      "inputFormat": "{\"name\": \"string\", \"meal\": \"string\", \"date\": \"string?\", \"calories\": \"number\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\"}"
+    },
+    {
+      "name": "get_foods_by_date",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "delete_food",
+      "inputFormat": "{\"id\": \"number\"}"
+    },
+    {
+      "name": "update_food",
+      "inputFormat": "{\"id\": \"number\", \"name\": \"string?\", \"meal\": \"string?\", \"calories\": \"number?\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\"}"
+    },
+    {
+      "name": "get_weekly_summary",
+      "inputFormat": "{\"start_date\": \"string\"}"
+    },
+    {
+      "name": "search_foods",
+      "inputFormat": "{\"query\": \"string\"}"
+    },
+    {
+      "name": "analyze_nutrition",
+      "inputFormat": "{\"date\": \"string?\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/01 16:18:07.643231 [session_1756757887639073000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/09/01 16:18:07.643243 [session_1756757887639073000] All validation passed
+[APP_SUBMISSION] 2025/09/01 16:18:07.643251 [session_1756757887639073000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/09/01 16:18:07.643789 [session_1756757887639073000] Checking path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:18:07.644091 [session_1756757887639073000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/09/01 16:18:07.644177 [session_1756757887639073000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/09/01 16:18:07.644194 [session_1756757887639073000] Build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:18:07.644217 [session_1756757887639073000] Creating build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:18:07.644804 [session_1756757887639073000] Build directory created successfully
+[APP_SUBMISSION] 2025/09/01 16:18:07.644821 [session_1756757887639073000] STEP 5: Compiling Rust trait to WASM
+[APP_SUBMISSION] 2025/09/01 16:18:13.610220 [session_1756757887639073000] ERROR: Failed to compile trait to WASM: failed to build Rust to WASM: cargo build failed: exit status 101
+Output:     Updating crates.io index
+     Locking 10 packages to latest compatible versions
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.18
+   Compiling serde v1.0.219
+   Compiling serde_json v1.0.143
+   Compiling itoa v1.0.15
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.5
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling serde_derive v1.0.219
+   Compiling food-tracker v1.0.0 (/Users/ericmaibach/Documents/repos/Arcadia/appengine/build/food-tracker/1.0.0)
+error[E0432]: unresolved import `chrono`
+   --> src/lib.rs:199:5
+    |
+199 | use chrono::{NaiveDate, Datelike, Duration};
+    |     ^^^^^^ use of unresolved module or unlinked crate `chrono`
+    |
+    = help: if you wanted to use a crate named `chrono`, use `cargo add chrono` to add it to your `Cargo.toml`
+
+warning: unnecessary parentheses around block return value
+   --> src/lib.rs:613:71
+    |
+613 |                 let protein_percent = if total_macro_calories > 0.0 { (protein * 4.0 / total_macro_calories * 100.0) } else { 0.0 };
+    |                                                                       ^                                            ^
+    |
+    = note: `#[warn(unused_parens)]` on by default
+help: remove these parentheses
+    |
+613 -                 let protein_percent = if total_macro_calories > 0.0 { (protein * 4.0 / total_macro_calories * 100.0) } else { 0.0 };
+613 +                 let protein_percent = if total_macro_calories > 0.0 { protein * 4.0 / total_macro_calories * 100.0 } else { 0.0 };
+    |
+
+warning: unnecessary parentheses around block return value
+   --> src/lib.rs:614:69
+    |
+614 |                 let carbs_percent = if total_macro_calories > 0.0 { (carbs * 4.0 / total_macro_calories * 100.0) } else { 0.0 };
+    |                                                                     ^                                          ^
+    |
+help: remove these parentheses
+    |
+614 -                 let carbs_percent = if total_macro_calories > 0.0 { (carbs * 4.0 / total_macro_calories * 100.0) } else { 0.0 };
+614 +                 let carbs_percent = if total_macro_calories > 0.0 { carbs * 4.0 / total_macro_calories * 100.0 } else { 0.0 };
+    |
+
+warning: unnecessary parentheses around block return value
+   --> src/lib.rs:615:67
+    |
+615 |                 let fat_percent = if total_macro_calories > 0.0 { (fat * 9.0 / total_macro_calories * 100.0) } else { 0.0 };
+    |                                                                   ^                                        ^
+    |
+help: remove these parentheses
+    |
+615 -                 let fat_percent = if total_macro_calories > 0.0 { (fat * 9.0 / total_macro_calories * 100.0) } else { 0.0 };
+615 +                 let fat_percent = if total_macro_calories > 0.0 { fat * 9.0 / total_macro_calories * 100.0 } else { 0.0 };
+    |
+
+warning: unnecessary `unsafe` block
+  --> src/lib.rs:90:9
+   |
+90 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+   |         ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:133:9
+    |
+133 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:170:9
+    |
+170 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `db`
+   --> src/lib.rs:188:30
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                              ^^ help: if this is intentional, prefix it with an underscore: `_db`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `claude`
+   --> src/lib.rs:188:55
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+For more information about this error, try `rustc --explain E0432`.
+warning: `food-tracker` (lib) generated 8 warnings
+error: could not compile `food-tracker` (lib) due to 1 previous error; 8 warnings emitted
+[APP_SUBMISSION] 2025/09/01 16:18:13.610916 [session_1756757887639073000] Cleaning up build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:18:13.621450 [session_1756757887639073000] RESPONSE: HTTP 500 - WASM compilation failed
+[APP_SUBMISSION] 2025/09/01 16:21:23.862768 === NEW APP SUBMISSION REQUEST [session_1756758083861809000] ===
+[APP_SUBMISSION] 2025/09/01 16:21:23.863322 [session_1756758083861809000] Client IP: [::1]:57762
+[APP_SUBMISSION] 2025/09/01 16:21:23.863382 [session_1756758083861809000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 16:21:23.863414 [session_1756758083861809000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/01 16:21:23.863440 [session_1756758083861809000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/01 16:21:23.863462 [session_1756758083861809000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 16:21:23.863483 [session_1756758083861809000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/09/01 16:21:23.864344 [session_1756758083861809000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 22159,
+  "appSrcPreview": "use serde_json::json;\n\nstruct FoodTrackerApp {\n    initialized: bool,\n}\n\nimpl FoodTrackerApp {\n    f...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "add_food",
+      "inputFormat": "{\"name\": \"string\", \"meal\": \"string\", \"date\": \"string?\", \"calories\": \"number\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\"}"
+    },
+    {
+      "name": "get_foods_by_date",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "delete_food",
+      "inputFormat": "{\"id\": \"number\"}"
+    },
+    {
+      "name": "update_food",
+      "inputFormat": "{\"id\": \"number\", \"name\": \"string?\", \"meal\": \"string?\", \"calories\": \"number?\", \"protein\": \"number?\", \"carbs\": \"number?\", \"fat\": \"number?\", \"fiber\": \"number?\", \"sugar\": \"number?\", \"sodium\": \"number?\"}"
+    },
+    {
+      "name": "get_weekly_summary",
+      "inputFormat": "{\"start_date\": \"string\"}"
+    },
+    {
+      "name": "search_foods",
+      "inputFormat": "{\"query\": \"string\"}"
+    },
+    {
+      "name": "analyze_nutrition",
+      "inputFormat": "{\"date\": \"string?\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/01 16:21:23.864428 [session_1756758083861809000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/09/01 16:21:23.864439 [session_1756758083861809000] All validation passed
+[APP_SUBMISSION] 2025/09/01 16:21:23.864446 [session_1756758083861809000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/09/01 16:21:23.864456 [session_1756758083861809000] Checking path: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:21:23.864493 [session_1756758083861809000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/09/01 16:21:23.864503 [session_1756758083861809000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/09/01 16:21:23.864510 [session_1756758083861809000] Build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:21:23.864521 [session_1756758083861809000] Creating build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:21:23.864712 [session_1756758083861809000] Build directory created successfully
+[APP_SUBMISSION] 2025/09/01 16:21:23.864723 [session_1756758083861809000] STEP 5: Compiling Rust trait to WASM
+[APP_SUBMISSION] 2025/09/01 16:21:29.819171 [session_1756758083861809000] ERROR: Failed to compile trait to WASM: failed to build Rust to WASM: cargo build failed: exit status 101
+Output:     Updating crates.io index
+     Locking 10 packages to latest compatible versions
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.18
+   Compiling serde v1.0.219
+   Compiling serde_json v1.0.143
+   Compiling itoa v1.0.15
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.5
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling serde_derive v1.0.219
+   Compiling food-tracker v1.0.0 (/Users/ericmaibach/Documents/repos/Arcadia/appengine/build/food-tracker/1.0.0)
+warning: unnecessary `unsafe` block
+  --> src/lib.rs:90:9
+   |
+90 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+   |         ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:133:9
+    |
+133 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:170:9
+    |
+170 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `db`
+   --> src/lib.rs:188:30
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                              ^^ help: if this is intentional, prefix it with an underscore: `_db`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `claude`
+   --> src/lib.rs:188:55
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+error[E0716]: temporary value dropped while borrowed
+   --> src/lib.rs:307:33
+    |
+307 |                     .unwrap_or(&self.get_current_date());
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^ - temporary value is freed at the end of this statement
+    |                                 |
+    |                                 creates a temporary value which is freed while still in use
+...
+310 |                 self.validate_date(date)?;
+    |                                    ---- borrow later used here
+    |
+    = note: consider using a `let` binding to create a longer lived value
+
+For more information about this error, try `rustc --explain E0716`.
+warning: `food-tracker` (lib) generated 5 warnings
+error: could not compile `food-tracker` (lib) due to 1 previous error; 5 warnings emitted
+[APP_SUBMISSION] 2025/09/01 16:21:29.819857 [session_1756758083861809000] Cleaning up build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:21:29.829757 [session_1756758083861809000] RESPONSE: HTTP 500 - WASM compilation failed
+[APP_SUBMISSION] 2025/09/01 16:34:12.330668 === NEW APP SUBMISSION REQUEST [session_1756758852330181000] ===
+[APP_SUBMISSION] 2025/09/01 16:34:12.331190 [session_1756758852330181000] Client IP: [::1]:57910
+[APP_SUBMISSION] 2025/09/01 16:34:12.331218 [session_1756758852330181000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 16:34:12.331236 [session_1756758852330181000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/01 16:34:12.331249 [session_1756758852330181000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 16:34:12.331262 [session_1756758852330181000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 16:34:12.331273 [session_1756758852330181000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/09/01 16:34:12.333681 [session_1756758852330181000] Parsed request: {
+  "appId": "counter_app",
+  "appSrcLength": 2391,
+  "appSrcPreview": "use serde_json::json;\n\nstruct CounterApp {\n    count: i64,\n}\n\nimpl CounterApp {\n    fn new() -\u003e Self...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "increment",
+      "inputFormat": "{}"
+    },
+    {
+      "name": "get_count",
+      "inputFormat": "{\"user_id\": \"string\"}"
+    },
+    {
+      "name": "ask_about_count",
+      "inputFormat": "{\"question\": \"string\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/01 16:34:12.333737 [session_1756758852330181000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/09/01 16:34:12.333755 [session_1756758852330181000] All validation passed
+[APP_SUBMISSION] 2025/09/01 16:34:12.333768 [session_1756758852330181000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/09/01 16:34:12.334155 [session_1756758852330181000] Checking path: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:34:12.334431 [session_1756758852330181000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/09/01 16:34:12.334789 [session_1756758852330181000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/09/01 16:34:12.334811 [session_1756758852330181000] Build directory: build/counter_app/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:34:12.334862 [session_1756758852330181000] Creating build directory: build/counter_app/1.0.0
+[APP_SUBMISSION] 2025/09/01 16:34:12.335352 [session_1756758852330181000] Build directory created successfully
+[APP_SUBMISSION] 2025/09/01 16:34:12.335374 [session_1756758852330181000] STEP 5: Compiling Rust trait to WASM
+[APP_SUBMISSION] 2025/09/01 16:34:18.498240 [session_1756758852330181000] WASM compilation completed successfully in 6.162895583s
+[APP_SUBMISSION] 2025/09/01 16:34:18.498350 [session_1756758852330181000] Compiled WASM path: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:34:18.498359 [session_1756758852330181000] STEP 6: Registering app in registry
+[APP_SUBMISSION] 2025/09/01 16:34:18.498375 [session_1756758852330181000] App registered successfully. Registry now contains 1 apps
+[APP_SUBMISSION] 2025/09/01 16:34:18.498381 [session_1756758852330181000] STEP 7: Sending success response
+[APP_SUBMISSION] 2025/09/01 16:34:18.498770 [session_1756758852330181000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 16:34:36.994081 === NEW TOOL EXECUTION REQUEST [tool_session_1756758876994060000] ===
+[APP_SUBMISSION] 2025/09/01 16:34:36.994235 [tool_session_1756758876994060000] Client IP: [::1]:57910
+[APP_SUBMISSION] 2025/09/01 16:34:36.994317 [tool_session_1756758876994060000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 16:34:36.994344 [tool_session_1756758876994060000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 16:34:36.994364 [tool_session_1756758876994060000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 16:34:36.994382 [tool_session_1756758876994060000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 16:34:36.994399 [tool_session_1756758876994060000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 16:34:36.994539 [tool_session_1756758876994060000] Parsed request - AppID: counter_app, ToolName: increment, InputLength: 2
+[APP_SUBMISSION] 2025/09/01 16:34:36.994577 [tool_session_1756758876994060000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 16:34:36.994596 [tool_session_1756758876994060000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:34:36.994614 [tool_session_1756758876994060000] Tool 'increment' found with input format: {}
+[APP_SUBMISSION] 2025/09/01 16:34:36.994630 [tool_session_1756758876994060000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 16:34:36.994967 [tool_session_1756758876994060000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 16:34:36.995004 [tool_session_1756758876994060000] STEP 4: Executing tool 'increment' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 16:34:36.995021 [tool_session_1756758876994060000] STEP 5: Executing tool 'increment'
+[APP_SUBMISSION] 2025/09/01 16:34:36.995041 [tool_session_1756758876994060000] ERROR: Tool execution failed: app not found: counter_app
+[APP_SUBMISSION] 2025/09/01 16:34:36.995062 [tool_session_1756758876994060000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/01 17:06:58.347484 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 17:08:31.119807 === NEW APP SUBMISSION REQUEST [session_1756760911119786000] ===
+[APP_SUBMISSION] 2025/09/01 17:08:31.120174 [session_1756760911119786000] Client IP: [::1]:58701
+[APP_SUBMISSION] 2025/09/01 17:08:31.120228 [session_1756760911119786000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 17:08:31.120258 [session_1756760911119786000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/01 17:08:31.120284 [session_1756760911119786000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 17:08:31.120323 [session_1756760911119786000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 17:08:31.120345 [session_1756760911119786000] STEP 1: Parsing request body
+[APP_SUBMISSION] 2025/09/01 17:08:31.121293 [session_1756760911119786000] Parsed request: {
+  "appId": "counter_app",
+  "appSrcLength": 2391,
+  "appSrcPreview": "use serde_json::json;\n\nstruct CounterApp {\n    count: i64,\n}\n\nimpl CounterApp {\n    fn new() -\u003e Self...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "increment",
+      "inputFormat": "{}"
+    },
+    {
+      "name": "get_count",
+      "inputFormat": "{\"user_id\": \"string\"}"
+    },
+    {
+      "name": "ask_about_count",
+      "inputFormat": "{\"question\": \"string\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/01 17:08:31.121372 [session_1756760911119786000] STEP 2: Validating request fields
+[APP_SUBMISSION] 2025/09/01 17:08:31.121406 [session_1756760911119786000] All validation passed
+[APP_SUBMISSION] 2025/09/01 17:08:31.121429 [session_1756760911119786000] STEP 3: Checking for existing compiled WASM
+[APP_SUBMISSION] 2025/09/01 17:08:31.121462 [session_1756760911119786000] Checking path: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:08:31.121508 [session_1756760911119786000] No existing WASM found - proceeding with compilation
+[APP_SUBMISSION] 2025/09/01 17:08:31.121572 [session_1756760911119786000] STEP 4: Setting up build directory
+[APP_SUBMISSION] 2025/09/01 17:08:31.121591 [session_1756760911119786000] Build directory: build/counter_app/1.0.0
+[APP_SUBMISSION] 2025/09/01 17:08:31.121617 [session_1756760911119786000] Creating build directory: build/counter_app/1.0.0
+[APP_SUBMISSION] 2025/09/01 17:08:31.122321 [session_1756760911119786000] Build directory created successfully
+[APP_SUBMISSION] 2025/09/01 17:08:31.122338 [session_1756760911119786000] STEP 5: Compiling Rust trait to WASM
+[APP_SUBMISSION] 2025/09/01 17:08:36.905767 [session_1756760911119786000] WASM compilation completed successfully in 5.783410583s
+[APP_SUBMISSION] 2025/09/01 17:08:36.905806 [session_1756760911119786000] Compiled WASM path: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:08:36.905810 [session_1756760911119786000] STEP 6: Registering app in registry
+[APP_SUBMISSION] 2025/09/01 17:08:36.906138 [session_1756760911119786000] App registered successfully. Registry now contains 1 apps
+[APP_SUBMISSION] 2025/09/01 17:08:36.906144 [session_1756760911119786000] STEP 7: Sending success response
+[APP_SUBMISSION] 2025/09/01 17:08:36.906169 [session_1756760911119786000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 17:08:54.209505 === NEW TOOL EXECUTION REQUEST [tool_session_1756760934209472000] ===
+[APP_SUBMISSION] 2025/09/01 17:08:54.210552 [tool_session_1756760934209472000] Client IP: [::1]:58701
+[APP_SUBMISSION] 2025/09/01 17:08:54.210624 [tool_session_1756760934209472000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 17:08:54.210661 [tool_session_1756760934209472000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 17:08:54.210687 [tool_session_1756760934209472000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 17:08:54.210722 [tool_session_1756760934209472000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 17:08:54.210745 [tool_session_1756760934209472000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 17:08:54.210939 [tool_session_1756760934209472000] Parsed request - AppID: counter_app, ToolName: increment, InputLength: 2
+[APP_SUBMISSION] 2025/09/01 17:08:54.211013 [tool_session_1756760934209472000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 17:08:54.211065 [tool_session_1756760934209472000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:08:54.211094 [tool_session_1756760934209472000] Tool 'increment' found with input format: {}
+[APP_SUBMISSION] 2025/09/01 17:08:54.211117 [tool_session_1756760934209472000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:08:54.211950 [tool_session_1756760934209472000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 17:08:54.211988 [tool_session_1756760934209472000] STEP 4: Executing tool 'increment' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 17:08:54.212012 [tool_session_1756760934209472000] STEP 5: Executing tool 'increment'
+[APP_SUBMISSION] 2025/09/01 17:08:54.261593 [tool_session_1756760934209472000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 17:08:54.261629 [tool_session_1756760934209472000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 17:08:54.261649 [tool_session_1756760934209472000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 17:09:10.941463 === NEW TOOL EXECUTION REQUEST [tool_session_1756760950941454000] ===
+[APP_SUBMISSION] 2025/09/01 17:09:10.941886 [tool_session_1756760950941454000] Client IP: [::1]:58701
+[APP_SUBMISSION] 2025/09/01 17:09:10.941949 [tool_session_1756760950941454000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 17:09:10.942059 [tool_session_1756760950941454000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 17:09:10.942116 [tool_session_1756760950941454000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 17:09:10.942195 [tool_session_1756760950941454000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 17:09:10.942214 [tool_session_1756760950941454000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 17:09:10.942295 [tool_session_1756760950941454000] Parsed request - AppID: counter_app, ToolName: get_count, InputLength: 18
+[APP_SUBMISSION] 2025/09/01 17:09:10.942322 [tool_session_1756760950941454000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 17:09:10.942343 [tool_session_1756760950941454000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:09:10.942361 [tool_session_1756760950941454000] Tool 'get_count' found with input format: {"user_id": "string"}
+[APP_SUBMISSION] 2025/09/01 17:09:10.942378 [tool_session_1756760950941454000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 17:09:10.942764 [tool_session_1756760950941454000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 17:09:10.942794 [tool_session_1756760950941454000] STEP 4: Executing tool 'get_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 17:09:10.942818 [tool_session_1756760950941454000] STEP 5: Executing tool 'get_count'
+[APP_SUBMISSION] 2025/09/01 17:09:10.970595 [tool_session_1756760950941454000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 17:09:10.970632 [tool_session_1756760950941454000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 17:09:10.970643 [tool_session_1756760950941454000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 20:31:24.194362 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 20:53:02.295215 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 20:57:27.297705 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 21:00:23.486193 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 21:00:30.704711 === NEW TOOL EXECUTION REQUEST [tool_session_1756774830704698000] ===
+[APP_SUBMISSION] 2025/09/01 21:00:30.705792 [tool_session_1756774830704698000] Client IP: [::1]:62388
+[APP_SUBMISSION] 2025/09/01 21:00:30.705840 [tool_session_1756774830704698000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 21:00:30.705868 [tool_session_1756774830704698000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 21:00:30.705892 [tool_session_1756774830704698000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 21:00:30.705933 [tool_session_1756774830704698000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 21:00:30.705955 [tool_session_1756774830704698000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 21:00:30.706092 [tool_session_1756774830704698000] Parsed request - AppID: counter_app, ToolName: get_count, InputLength: 18
+[APP_SUBMISSION] 2025/09/01 21:00:30.706133 [tool_session_1756774830704698000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 21:00:30.706165 [tool_session_1756774830704698000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 21:00:30.706188 [tool_session_1756774830704698000] Tool 'get_count' found with input format: {"user_id": "string"}
+[APP_SUBMISSION] 2025/09/01 21:00:30.706208 [tool_session_1756774830704698000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 21:00:30.706855 [tool_session_1756774830704698000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 21:00:30.706891 [tool_session_1756774830704698000] STEP 4: Executing tool 'get_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 21:00:30.706913 [tool_session_1756774830704698000] STEP 5: Executing tool 'get_count'
+[APP_SUBMISSION] 2025/09/01 21:00:30.736384 [tool_session_1756774830704698000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 21:00:30.736395 [tool_session_1756774830704698000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 21:00:30.736405 [tool_session_1756774830704698000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
