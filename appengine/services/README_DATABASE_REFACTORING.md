@@ -5,9 +5,10 @@ This document describes the database and scheduler refactoring that was implemen
 ## What Changed
 
 ### Database Layer
-- **Added interfaces**: `SystemDB` and `AppDB` interfaces for dependency injection
-- **Created DatabaseManager**: Struct that manages database connections and implements the interfaces
-- **Added mock implementations**: `MockSystemDB` and `MockAppDB` for testing
+- **Added interfaces**: `Database` interface for generic database operations
+- **Created SQLiteDatabase**: Implementation of Database interface with constructor
+- **Created DatabaseManager**: Manages both app and system database connections
+- **Added mock implementations**: `MockSystemDB` for testing schedules
 - **Maintained backward compatibility**: All existing global functions still work
 
 ### Scheduler Layer
@@ -52,17 +53,22 @@ if err := services.StartScheduler(); err != nil {
 }
 ```
 
-## Testing with Mocks
+## Testing
 
-Tests now use mocks instead of real databases:
+Tests use a combination of mocks for schedules and in-memory SQLite databases:
 
 ```go
 func TestYourFunction(t *testing.T) {
-    // Create mock database
+    // For schedule testing - use mock
     mockDB := services.NewMockSystemDB()
-    
-    // Create scheduler with mock
     scheduler := services.NewScheduler(mockDB)
+    
+    // For database functionality testing - use in-memory SQLite
+    db, err := services.NewSQLiteDatabase(":memory:")
+    if err != nil {
+        t.Fatal(err)
+    }
+    defer db.Close()
     
     // Test your function
     schedule, err := scheduler.CreateSchedule(req)
@@ -72,11 +78,12 @@ func TestYourFunction(t *testing.T) {
 
 ## Benefits
 
-1. **Better Testing**: Tests are isolated and don't require real databases
-2. **Improved Performance**: Mock tests run much faster
-3. **Dependency Injection**: Makes the code more modular and testable
+1. **Better Testing**: Tests use in-memory databases and mocks for isolation
+2. **Improved Performance**: In-memory database tests run very fast
+3. **Interface-based Design**: Generic Database interface supports multiple implementations
 4. **Thread Safety**: Proper mutex usage prevents race conditions
 5. **Backward Compatibility**: Existing code continues to work
+6. **Separation of Concerns**: Clean architecture with proper responsibility boundaries
 
 ## Migration Guide
 
@@ -84,7 +91,7 @@ If you want to migrate existing code:
 
 1. Replace `services.InitDatabases()` with `services.InitDatabasesWithManager()`
 2. Replace global scheduler functions with instance methods
-3. Update tests to use mock implementations
+3. Update tests to use in-memory SQLite databases instead of mocks where appropriate
 4. Ensure proper cleanup of database connections
 
 The old functions will continue to work but are now deprecated in favor of the new dependency injection approach.

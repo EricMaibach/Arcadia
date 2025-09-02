@@ -625,3 +625,77 @@ error: could not compile `food-tracker` (lib) due to 1 previous error; 5 warning
 [APP_SUBMISSION] 2025/09/01 22:02:22.051607 [tool_session_1756778542008224000] Tool execution completed successfully
 [APP_SUBMISSION] 2025/09/01 22:02:22.051629 [tool_session_1756778542008224000] STEP 6: Sending response
 [APP_SUBMISSION] 2025/09/01 22:02:22.051654 [tool_session_1756778542008224000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 22:32:09.280262 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 22:56:57.336950 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/01 23:02:04.055997 === NEW TOOL EXECUTION REQUEST [tool_session_1756782124055957000] ===
+[APP_SUBMISSION] 2025/09/01 23:02:04.056654 [tool_session_1756782124055957000] Client IP: [::1]:49928
+[APP_SUBMISSION] 2025/09/01 23:02:04.056712 [tool_session_1756782124055957000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 23:02:04.056744 [tool_session_1756782124055957000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 23:02:04.056771 [tool_session_1756782124055957000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 23:02:04.056810 [tool_session_1756782124055957000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 23:02:04.056832 [tool_session_1756782124055957000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 23:02:04.057055 [tool_session_1756782124055957000] Parsed request - AppID: counter_app, ToolName: get_count, InputLength: 18
+[APP_SUBMISSION] 2025/09/01 23:02:04.057095 [tool_session_1756782124055957000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 23:02:04.057121 [tool_session_1756782124055957000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:04.057419 [tool_session_1756782124055957000] Tool 'get_count' found with input format: {"user_id": "string"}
+[APP_SUBMISSION] 2025/09/01 23:02:04.057450 [tool_session_1756782124055957000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:04.058496 [tool_session_1756782124055957000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 23:02:04.058537 [tool_session_1756782124055957000] STEP 4: Executing tool 'get_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 23:02:04.058559 [tool_session_1756782124055957000] STEP 5: Executing tool 'get_count'
+[APP_SUBMISSION] 2025/09/01 23:02:04.093877 [tool_session_1756782124055957000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 23:02:04.093904 [tool_session_1756782124055957000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 23:02:04.093928 [tool_session_1756782124055957000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 23:02:24.957946 === NEW TOOL EXECUTION REQUEST [tool_session_1756782144957940000] ===
+[APP_SUBMISSION] 2025/09/01 23:02:24.959063 [tool_session_1756782144957940000] Client IP: [::1]:49928
+[APP_SUBMISSION] 2025/09/01 23:02:24.959138 [tool_session_1756782144957940000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 23:02:24.959177 [tool_session_1756782144957940000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 23:02:24.959204 [tool_session_1756782144957940000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 23:02:24.959239 [tool_session_1756782144957940000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 23:02:24.959261 [tool_session_1756782144957940000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 23:02:24.959354 [tool_session_1756782144957940000] Parsed request - AppID: counter_app, ToolName: increment, InputLength: 2
+[APP_SUBMISSION] 2025/09/01 23:02:24.959416 [tool_session_1756782144957940000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 23:02:24.959437 [tool_session_1756782144957940000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:24.959455 [tool_session_1756782144957940000] Tool 'increment' found with input format: {}
+[APP_SUBMISSION] 2025/09/01 23:02:24.959471 [tool_session_1756782144957940000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:24.960235 [tool_session_1756782144957940000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 23:02:24.960267 [tool_session_1756782144957940000] STEP 4: Executing tool 'increment' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 23:02:24.960283 [tool_session_1756782144957940000] STEP 5: Executing tool 'increment'
+[APP_SUBMISSION] 2025/09/01 23:02:24.991008 [tool_session_1756782144957940000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 23:02:24.991026 [tool_session_1756782144957940000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 23:02:24.991043 [tool_session_1756782144957940000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 23:02:33.848013 === NEW TOOL EXECUTION REQUEST [tool_session_1756782153847994000] ===
+[APP_SUBMISSION] 2025/09/01 23:02:33.848266 [tool_session_1756782153847994000] Client IP: [::1]:49928
+[APP_SUBMISSION] 2025/09/01 23:02:33.848296 [tool_session_1756782153847994000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 23:02:33.848309 [tool_session_1756782153847994000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 23:02:33.848319 [tool_session_1756782153847994000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 23:02:33.848334 [tool_session_1756782153847994000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 23:02:33.848342 [tool_session_1756782153847994000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 23:02:33.848389 [tool_session_1756782153847994000] Parsed request - AppID: counter_app, ToolName: get_count, InputLength: 18
+[APP_SUBMISSION] 2025/09/01 23:02:33.848402 [tool_session_1756782153847994000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 23:02:33.848413 [tool_session_1756782153847994000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:33.848425 [tool_session_1756782153847994000] Tool 'get_count' found with input format: {"user_id": "string"}
+[APP_SUBMISSION] 2025/09/01 23:02:33.848435 [tool_session_1756782153847994000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:02:33.848617 [tool_session_1756782153847994000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 23:02:33.848638 [tool_session_1756782153847994000] STEP 4: Executing tool 'get_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 23:02:33.848648 [tool_session_1756782153847994000] STEP 5: Executing tool 'get_count'
+[APP_SUBMISSION] 2025/09/01 23:02:33.874315 [tool_session_1756782153847994000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 23:02:33.874343 [tool_session_1756782153847994000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 23:02:33.874354 [tool_session_1756782153847994000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/01 23:03:02.086361 === NEW TOOL EXECUTION REQUEST [tool_session_1756782182086354000] ===
+[APP_SUBMISSION] 2025/09/01 23:03:02.086733 [tool_session_1756782182086354000] Client IP: [::1]:49928
+[APP_SUBMISSION] 2025/09/01 23:03:02.086794 [tool_session_1756782182086354000] Request Method: POST
+[APP_SUBMISSION] 2025/09/01 23:03:02.086835 [tool_session_1756782182086354000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/01 23:03:02.086863 [tool_session_1756782182086354000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/01 23:03:02.086915 [tool_session_1756782182086354000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/01 23:03:02.086934 [tool_session_1756782182086354000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/01 23:03:02.086997 [tool_session_1756782182086354000] Parsed request - AppID: counter_app, ToolName: ask_about_count, InputLength: 31
+[APP_SUBMISSION] 2025/09/01 23:03:02.087025 [tool_session_1756782182086354000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/01 23:03:02.087044 [tool_session_1756782182086354000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:03:02.087072 [tool_session_1756782182086354000] Tool 'ask_about_count' found with input format: {"question": "string"}
+[APP_SUBMISSION] 2025/09/01 23:03:02.087097 [tool_session_1756782182086354000] STEP 3: Loading WASM module from: artifacts/counter_app/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/01 23:03:02.087899 [tool_session_1756782182086354000] WASM module loaded successfully (111609 bytes)
+[APP_SUBMISSION] 2025/09/01 23:03:02.087964 [tool_session_1756782182086354000] STEP 4: Executing tool 'ask_about_count' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/01 23:03:02.088003 [tool_session_1756782182086354000] STEP 5: Executing tool 'ask_about_count'
+[APP_SUBMISSION] 2025/09/01 23:03:08.686040 [tool_session_1756782182086354000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/01 23:03:08.686194 [tool_session_1756782182086354000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/01 23:03:08.686249 [tool_session_1756782182086354000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===

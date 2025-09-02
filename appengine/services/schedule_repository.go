@@ -11,14 +11,61 @@ import (
 
 // ScheduleRepository handles persistence of schedules
 type ScheduleRepository struct {
-	db    *sql.DB
+	db    Database
 	mutex sync.RWMutex
 }
 
 // NewScheduleRepository creates a new schedule repository
-func NewScheduleRepository(db *sql.DB) *ScheduleRepository {
-	return &ScheduleRepository{
+func NewScheduleRepository(db Database) *ScheduleRepository {
+	repo := &ScheduleRepository{
 		db: db,
+	}
+	// Initialize tables
+	repo.initializeTables()
+	return repo
+}
+
+// initializeTables creates the necessary tables if they don't exist
+func (r *ScheduleRepository) initializeTables() {
+	if r.db == nil {
+		return // Skip table creation if database is nil
+	}
+	
+	queries := []string{
+		// App schedules table
+		`CREATE TABLE IF NOT EXISTS app_schedules (
+			id TEXT PRIMARY KEY,
+			app_id TEXT NOT NULL,
+			tool_name TEXT NOT NULL,
+			input_data TEXT,
+			schedule_type TEXT NOT NULL,
+			scheduled_time DATETIME NOT NULL,
+			recurrence_rule TEXT,
+			is_active BOOLEAN DEFAULT 1,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+			updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
+
+		// Scheduled runs table - tracks execution history
+		`CREATE TABLE IF NOT EXISTS scheduled_runs (
+			id TEXT PRIMARY KEY,
+			schedule_id TEXT NOT NULL,
+			app_id TEXT NOT NULL,
+			tool_name TEXT NOT NULL,
+			input_data TEXT,
+			started_at DATETIME NOT NULL,
+			completed_at DATETIME,
+			status TEXT DEFAULT 'pending',
+			output TEXT,
+			error TEXT,
+			FOREIGN KEY (schedule_id) REFERENCES app_schedules(id)
+		);`,
+	}
+
+	for _, query := range queries {
+		if _, err := r.db.Exec(query); err != nil {
+			log.Printf("Warning: failed to create schedule table: %v", err)
+		}
 	}
 }
 
@@ -260,7 +307,7 @@ func nullableTime(t *time.Time) interface{} {
 var defaultScheduleRepository *ScheduleRepository
 
 // InitScheduleRepository initializes the default schedule repository
-func InitScheduleRepository(db *sql.DB) {
+func InitScheduleRepository(db Database) {
 	defaultScheduleRepository = NewScheduleRepository(db)
 }
 

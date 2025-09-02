@@ -234,11 +234,22 @@ func TestMockSystemDB_UpdateScheduledRun(t *testing.T) {
 	}
 }
 
-func TestMockAppDB_Exec(t *testing.T) {
-	mockDB := NewMockAppDB()
+func TestSQLiteDatabase_Exec(t *testing.T) {
+	// Use in-memory SQLite database for testing
+	db, err := NewSQLiteDatabase(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create in-memory database: %v", err)
+	}
+	defer db.Close()
+	
+	// Create a test table
+	_, err = db.Exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
+	if err != nil {
+		t.Fatalf("Failed to create test table: %v", err)
+	}
 	
 	// Test successful execution
-	result, err := mockDB.Exec("INSERT INTO test (name) VALUES (?)", "test-value")
+	result, err := db.Exec("INSERT INTO test (name) VALUES (?)", "test-value")
 	if err != nil {
 		t.Fatalf("Exec failed: %v", err)
 	}
@@ -261,11 +272,16 @@ func TestMockAppDB_Exec(t *testing.T) {
 	}
 }
 
-func TestMockAppDB_ExecError(t *testing.T) {
-	mockDB := NewMockAppDB()
-	mockDB.ExecError = fmt.Errorf("exec error")
+func TestSQLiteDatabase_ExecError(t *testing.T) {
+	// Use in-memory SQLite database for testing
+	db, err := NewSQLiteDatabase(":memory:")
+	if err != nil {
+		t.Fatalf("Failed to create in-memory database: %v", err)
+	}
+	defer db.Close()
 	
-	result, err := mockDB.Exec("INSERT INTO test (name) VALUES (?)", "test-value")
+	// Test execution error with invalid SQL
+	result, err := db.Exec("INVALID SQL STATEMENT")
 	if err == nil {
 		t.Error("Expected exec error, got nil")
 	}
@@ -275,9 +291,8 @@ func TestMockAppDB_ExecError(t *testing.T) {
 }
 
 func TestDatabaseManagerIntegration(t *testing.T) {
-	// Test the DatabaseManager with mock interfaces
+	// Test the DatabaseManager with mock system database
 	mockSystemDB := NewMockSystemDB()
-	mockAppDB := NewMockAppDB()
 	
 	// Create a test schedule
 	schedule := &AppSchedule{
@@ -316,17 +331,59 @@ func TestDatabaseManagerIntegration(t *testing.T) {
 	if loadedSchedule.AppID != "test-app" {
 		t.Errorf("Expected AppID 'test-app', got '%s'", loadedSchedule.AppID)
 	}
-	
-	// Test app database operations with a simple statement
-	result, err := mockAppDB.Exec("SELECT 1")
+}
+
+func TestSQLiteDatabase_Query(t *testing.T) {
+	// Use in-memory SQLite database for testing
+	db, err := NewSQLiteDatabase(":memory:")
 	if err != nil {
-		t.Fatalf("Failed to exec on app database: %v", err)
+		t.Fatalf("Failed to create in-memory database: %v", err)
+	}
+	defer db.Close()
+	
+	// Create a test table with data
+	_, err = db.Exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
+	if err != nil {
+		t.Fatalf("Failed to create test table: %v", err)
 	}
 	
-	// For mock, we expect the configured result
-	rowsAffected, _ := result.RowsAffected()
-	if rowsAffected != 1 {
-		t.Errorf("Expected 1 row affected, got %d", rowsAffected)
+	_, err = db.Exec("INSERT INTO test (name) VALUES (?)", "test-value1")
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+	
+	_, err = db.Exec("INSERT INTO test (name) VALUES (?)", "test-value2")
+	if err != nil {
+		t.Fatalf("Failed to insert test data: %v", err)
+	}
+	
+	// Test successful query
+	rows, err := db.Query("SELECT id, name FROM test ORDER BY id")
+	if err != nil {
+		t.Fatalf("Query failed: %v", err)
+	}
+	defer rows.Close()
+	
+	count := 0
+	for rows.Next() {
+		var id int
+		var name string
+		err = rows.Scan(&id, &name)
+		if err != nil {
+			t.Fatalf("Scan failed: %v", err)
+		}
+		count++
+		
+		if count == 1 && name != "test-value1" {
+			t.Errorf("Expected first name 'test-value1', got '%s'", name)
+		}
+		if count == 2 && name != "test-value2" {
+			t.Errorf("Expected second name 'test-value2', got '%s'", name)
+		}
+	}
+	
+	if count != 2 {
+		t.Errorf("Expected 2 rows, got %d", count)
 	}
 }
 
@@ -476,36 +533,49 @@ func TestScheduleRepository_Methods(t *testing.T) {
 func TestDatabaseManager_Methods(t *testing.T) {
 	dm := NewDatabaseManager()
 	
-	t.Run("Query without init", func(t *testing.T) {
-		_, err := dm.Query("SELECT 1")
-		if err == nil {
-			t.Error("Expected error when database not initialized")
+	t.Run("GetAppDB without init", func(t *testing.T) {
+		db := dm.GetAppDB()
+		if db != nil {
+			t.Error("Expected nil app database when not initialized")
 		}
 	})
 	
-	t.Run("Exec without init", func(t *testing.T) {
-		_, err := dm.Exec("DELETE FROM test WHERE 1=0")
-		if err == nil {
-			t.Error("Expected error when database not initialized")
+	t.Run("GetSystemDB without init", func(t *testing.T) {
+		db := dm.GetSystemDB()
+		if db != nil {
+			t.Error("Expected nil system database when not initialized")
 		}
 	})
 	
-	t.Run("QueryRow without init", func(t *testing.T) {
-		// QueryRow returns a row that will fail when scanned
-		// We can't test this properly without initializing a real database
-		// So we'll just verify it doesn't panic
-		defer func() {
-			if r := recover(); r != nil {
-				// It's ok if it panics due to uninitialized DB
-				t.Logf("QueryRow panicked as expected: %v", r)
-			}
-		}()
+	t.Run("Database interface test", func(t *testing.T) {
+		// Test that we can create a temporary SQLite database
+		// This validates our Database interface works
+		tempDB, err := NewSQLiteDatabase(":memory:")
+		if err != nil {
+			t.Fatalf("Failed to create in-memory SQLite database: %v", err)
+		}
+		defer tempDB.Close()
 		
-		row := dm.QueryRow("SELECT 1")
-		if row != nil {
-			// Try to scan - it should fail
-			var result int
-			_ = row.Scan(&result)
+		// Test basic operations
+		_, err = tempDB.Exec("CREATE TABLE test (id INTEGER PRIMARY KEY, name TEXT)")
+		if err != nil {
+			t.Fatalf("Failed to create test table: %v", err)
+		}
+		
+		_, err = tempDB.Exec("INSERT INTO test (name) VALUES (?)", "test-value")
+		if err != nil {
+			t.Fatalf("Failed to insert test data: %v", err)
+		}
+		
+		row := tempDB.QueryRow("SELECT name FROM test WHERE id = 1")
+		var name string
+		err = row.Scan(&name)
+		if err != nil {
+			t.Fatalf("Failed to query test data: %v", err)
+		}
+		
+		if name != "test-value" {
+			t.Errorf("Expected 'test-value', got '%s'", name)
 		}
 	})
 	
@@ -517,53 +587,7 @@ func TestDatabaseManager_Methods(t *testing.T) {
 }
 
 
-func TestMockRow(t *testing.T) {
-	// Test MockRow with custom scan function
-	row := &MockRow{
-		ScanFunc: func(dest ...interface{}) error {
-			if len(dest) > 0 {
-				if v, ok := dest[0].(*int); ok {
-					*v = 42
-				}
-			}
-			return nil
-		},
-	}
-	
-	var result int
-	err := row.Scan(&result)
-	if err != nil {
-		t.Errorf("Scan failed: %v", err)
-	}
-	if result != 42 {
-		t.Errorf("Expected 42, got %d", result)
-	}
-	
-	// Test MockRow without scan function
-	row2 := &MockRow{}
-	err = row2.Scan(&result)
-	if err != nil {
-		t.Error("Expected nil error when ScanFunc is nil")
-	}
-}
 
-func TestMockResult(t *testing.T) {
-	// Test with errors
-	result := MockResult{
-		LastInsertIdError: fmt.Errorf("last insert error"),
-		RowsAffectedError: fmt.Errorf("rows affected error"),
-	}
-	
-	_, err := result.LastInsertId()
-	if err == nil {
-		t.Error("Expected last insert error")
-	}
-	
-	_, err = result.RowsAffected()
-	if err == nil {
-		t.Error("Expected rows affected error")
-	}
-}
 
 func TestErrorHandling(t *testing.T) {
 	mockDB := NewMockSystemDB()

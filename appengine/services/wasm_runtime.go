@@ -116,8 +116,8 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 		return -1 // Database not initialized
 	}
 
-	// Execute query using DatabaseManager
-	rows, err := wr.databaseManager.Query(query)
+	// Execute query using app database
+	rows, err := wr.databaseManager.GetAppDB().Query(query)
 	if err != nil {
 		log.Printf("[WASM DB] Database query error: %v", err)
 		return -2 // Query error
@@ -219,8 +219,8 @@ func (wr *WasmRuntime) dbExec(caller *wasmtime.Caller, stmtPtr, stmtLen int32) i
 		return -1 // Database not initialized
 	}
 
-	// Execute statement using DatabaseManager
-	result, err := wr.databaseManager.Exec(stmt)
+	// Execute statement using app database
+	result, err := wr.databaseManager.GetAppDB().Exec(stmt)
 	if err != nil {
 		log.Printf("Database exec error: %v", err)
 		return -2 // Execution error
@@ -258,8 +258,8 @@ func (wr *WasmRuntime) dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen
 		return -2 // Database not initialized
 	}
 
-	// Execute prepared statement using DatabaseManager
-	rows, err := wr.databaseManager.Query(stmt, params...)
+	// Execute prepared statement using app database
+	rows, err := wr.databaseManager.GetAppDB().Query(stmt, params...)
 	if err != nil {
 		log.Printf("Database prepared query error: %v", err)
 		return -3 // Query error
