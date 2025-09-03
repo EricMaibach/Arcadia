@@ -156,7 +156,7 @@ func (ar *appRunnerImpl) ExecuteAppTool(appID, toolName string, input json.RawMe
 type appCreatorImpl struct{}
 
 // CreateApp creates a new app (placeholder implementation)
-func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string) (string, error) {
+func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
 	// Convert tools back to the expected format
 	toolInfos := make([]ToolInfo, len(tools))
 	for i, tool := range tools {
@@ -170,7 +170,11 @@ func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []inte
 	
 	// Process the app creation (this would need to call the actual app creation logic)
 	// For now, return a placeholder response
-	return fmt.Sprintf("App %s created successfully with %d tools", appID, len(toolInfos)), nil
+	depCount := 0
+	if dependencies != nil {
+		depCount = len(dependencies)
+	}
+	return fmt.Sprintf("App %s created successfully with %d tools and %d dependencies", appID, len(toolInfos), depCount), nil
 }
 
 // Manager manages the registry and provides dependency injection implementations

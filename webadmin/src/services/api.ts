@@ -40,6 +40,7 @@ export interface AppRequest {
   runtime: string;
   tools: ToolInfo[];
   appSrc: string;
+  dependencies?: { [key: string]: string };
 }
 
 export interface RecurrenceRule {

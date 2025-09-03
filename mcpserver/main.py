@@ -81,15 +81,18 @@ Implement the ArcadiaApp trait and the system automatically handles all WASM boi
 REQUIRED JSON FORMAT:
 ```json
 {
-    "appId": "my-counter-app",
+    "appId": "my-text-analyzer",
     "version": "1.0.0", 
     "runtime": "wasm",
     "tools": [
-        {"name": "increment", "inputFormat": "{}"},
-        {"name": "get_count", "inputFormat": "{\"user_id\": \"string\"}"},
-        {"name": "ask_about_count", "inputFormat": "{\"question\": \"string?\"}"}
+        {"name": "analyze_text", "inputFormat": "{\"text\": \"string\", \"user_id\": \"string?\"}"},
+        {"name": "get_history", "inputFormat": "{\"user_id\": \"string\", \"limit\": \"number?\"}"},
+        {"name": "generate_report", "inputFormat": "{\"limit\": \"number?\"}"}
     ],
-    "appSrc": "/* Your Rust code here */"
+    "appSrc": "/* Your Rust code here */",
+    "dependencies": {
+        "regex": "1.9"
+    }
 }
 ```
 
@@ -101,75 +104,222 @@ REQUIRED METHODS:
 REQUIRED FACTORY FUNCTION:
 - `pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync>` (required) - Factory function to create your app instance
 
-EXAMPLE COUNTER APP:
+EXAMPLE TEXT ANALYZER APP WITH DEPENDENCIES:
 ```rust
 use serde_json::json;
+use regex::Regex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
-struct CounterApp {
-    count: i64,
+static COUNTER: AtomicU64 = AtomicU64::new(1000);
+
+struct TextAnalyzerApp {
+    word_pattern: Regex,
+    sentence_pattern: Regex,
 }
 
-impl CounterApp {
+impl TextAnalyzerApp {
     fn new() -> Self {
-        Self { count: 0 }
+        Self { 
+            word_pattern: Regex::new(r"\b\w+\b").unwrap(),
+            sentence_pattern: Regex::new(r"[.!?]+").unwrap(),
+        }
     }
 }
 
-impl ArcadiaApp for CounterApp {
+impl ArcadiaApp for TextAnalyzerApp {
     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
-        db.execute("CREATE TABLE IF NOT EXISTS counter_state (id INTEGER PRIMARY KEY, count INTEGER)")?;
+        // Create table for storing text analysis results
+        db.execute("CREATE TABLE IF NOT EXISTS text_analyses (
+            id TEXT PRIMARY KEY,
+            user_id TEXT,
+            text_content TEXT NOT NULL,
+            word_count INTEGER,
+            sentence_count INTEGER,
+            char_count INTEGER,
+            analysis_summary TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )")?;
         
-        let rows = db.query("SELECT count FROM counter_state WHERE id = 1")?;
-        if let Some(row) = rows.first() {
-            self.count = row["count"].as_i64().unwrap_or(0);
-        }
+        // Ask Claude to help set up the app
+        let welcome = claude.ask("Welcome! This is a text analysis app. Can you give me a brief description of what text analysis is useful for?")?;
+        
+        // Store the welcome message as an initial analysis using counter-based ID
+        let init_id = format!("init_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+        db.execute(&format!(
+            "INSERT INTO text_analyses (id, user_id, text_content, word_count, sentence_count, char_count, analysis_summary) 
+             VALUES ('{}', 'system', 'App initialized', 2, 1, 14, '{}')",
+            init_id, welcome.replace("'", "''")
+        ))?;
         
         Ok(())
     }
     
     fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String> {
         match tool_name {
-            "increment" => {
-                // Expects empty JSON object: {}
-                self.count += 1;
-                db.execute(&format!("INSERT OR REPLACE INTO counter_state (id, count) VALUES (1, {})", self.count))?;
-                Ok(json!({ "count": self.count }))
-            },
-            "get_count" => {
-                let user_id = data
-                  .as_ref()
-                  .and_then(|d| d.get("user_id"))
-                  .and_then(|uid| uid.as_str())
-                  .map(|s| s.to_string())
-                  .unwrap_or_else(|| "".to_string());
-
-                Ok(json!({ "count": self.count, "user_id": user_id }))
-            },
-            "ask_about_count" => {
-                // Example of using Claude AI to analyze the counter data
-                let question = data
+            "analyze_text" => {
+                let text = data
                     .as_ref()
-                    .and_then(|d| d.get("question"))
-                    .and_then(|q| q.as_str())
-                    .unwrap_or("What can you tell me about this counter?");
+                    .and_then(|d| d.get("text"))
+                    .and_then(|t| t.as_str())
+                    .ok_or("Text is required for analysis")?;
                 
-                let context = format!("The current count is {}. {}", self.count, question);
-                let analysis = claude.ask(&context)?;
+                let user_id = data
+                    .as_ref()
+                    .and_then(|d| d.get("user_id"))
+                    .and_then(|u| u.as_str())
+                    .unwrap_or("anonymous");
                 
-                Ok(json!({ "count": self.count, "analysis": analysis }))
+                // Use regex to count words and sentences
+                let word_count = self.word_pattern.find_iter(text).count() as i32;
+                let sentence_count = self.sentence_pattern.find_iter(text).count() as i32;
+                let char_count = text.chars().count() as i32;
+                
+                // Ask Claude to analyze the text content and provide insights
+                let claude_prompt = format!(
+                    "Please analyze this text and provide insights about its style, tone, and content. 
+                     Text: \"{}\"
+                     Word count: {}, Sentence count: {}, Character count: {}",
+                    text, word_count, sentence_count, char_count
+                );
+                
+                let analysis_summary = claude.ask(&claude_prompt)?;
+                
+                // Generate unique ID using counter and store in database
+                let analysis_id = format!("analysis_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+                
+                db.execute(&format!(
+                    "INSERT INTO text_analyses (id, user_id, text_content, word_count, sentence_count, char_count, analysis_summary) 
+                     VALUES ('{}', '{}', '{}', {}, {}, {}, '{}')",
+                    analysis_id, 
+                    user_id, 
+                    text.replace("'", "''"),
+                    word_count,
+                    sentence_count, 
+                    char_count,
+                    analysis_summary.replace("'", "''")
+                ))?;
+                
+                Ok(json!({
+                    "id": analysis_id,
+                    "user_id": user_id,
+                    "word_count": word_count,
+                    "sentence_count": sentence_count,
+                    "character_count": char_count,
+                    "analysis_summary": analysis_summary,
+                    "created": "stored in database with CURRENT_TIMESTAMP"
+                }))
+            },
+            "get_history" => {
+                let user_id = data
+                    .as_ref()
+                    .and_then(|d| d.get("user_id"))
+                    .and_then(|u| u.as_str())
+                    .ok_or("User ID is required")?;
+                
+                let limit = data
+                    .as_ref()
+                    .and_then(|d| d.get("limit"))
+                    .and_then(|l| l.as_i64())
+                    .unwrap_or(10) as i32;
+                
+                let query = format!(
+                    "SELECT id, text_content, word_count, sentence_count, char_count, analysis_summary, created_at
+                     FROM text_analyses 
+                     WHERE user_id = '{}' 
+                     ORDER BY created_at DESC 
+                     LIMIT {}",
+                    user_id, limit
+                );
+                
+                let results = db.query(&query)?;
+                
+                Ok(json!({
+                    "user_id": user_id,
+                    "history": results,
+                    "count": results.len()
+                }))
+            },
+            "generate_report" => {
+                let limit = data
+                    .as_ref()
+                    .and_then(|d| d.get("limit"))
+                    .and_then(|d| d.as_i64())
+                    .unwrap_or(50) as i32;
+                
+                let query = format!(
+                    "SELECT user_id, COUNT(*) as analysis_count, 
+                            AVG(word_count) as avg_words, 
+                            AVG(sentence_count) as avg_sentences,
+                            AVG(char_count) as avg_chars,
+                            MIN(created_at) as first_analysis,
+                            MAX(created_at) as last_analysis
+                     FROM text_analyses 
+                     WHERE user_id != 'system'
+                     GROUP BY user_id
+                     ORDER BY analysis_count DESC
+                     LIMIT {}",
+                    limit
+                );
+                
+                let stats = db.query(&query)?;
+                
+                // Use Claude to generate insights from the data
+                let claude_prompt = format!(
+                    "Generate a summary report for text analysis usage. 
+                     Here's the data: {:?}
+                     Please provide insights about user engagement, text complexity trends, and recommendations.",
+                    stats
+                );
+                
+                let insights = claude.ask(&claude_prompt)?;
+                
+                let report_id = format!("report_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+                
+                Ok(json!({
+                    "report_id": report_id,
+                    "statistics": stats,
+                    "insights": insights,
+                    "total_users": stats.len(),
+                    "query_limit": limit
+                }))
             },
             _ => Err(format!("Unknown tool: {}", tool_name))
         }
     }
     
     fn get_available_tools(&self) -> Vec<&'static str> {
-        vec!["increment", "get_count", "ask_about_count"]
+        vec!["analyze_text", "get_history", "generate_report"]
     }
 }
 
 pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync> {
-    Box::new(CounterApp::new())
+    Box::new(TextAnalyzerApp::new())
 }
+```
+
+DEPENDENCIES:
+The system automatically detects common Rust crate usage from 'use' statements.
+You can also explicitly specify dependencies in the request:
+
+```json
+"dependencies": {
+    "regex": "1.9",            // Regular expressions
+    "rand": "0.8",             // Random number generation
+    "base64": "0.21"           // Base64 encoding/decoding
+}
+```
+
+Common dependencies are auto-detected when you use them:
+- regex, rand, base64, hex, sha2, md5, bcrypt
+- serde and serde_json are always included
+- Dependencies are configured for server-side WASM compatibility
+- User-provided dependencies override auto-detected versions
+
+NOTE: For unique ID generation in server-side WASM, use atomic counters instead of timestamps:
+```rust
+use std::sync::atomic::{AtomicU64, Ordering};
+static COUNTER: AtomicU64 = AtomicU64::new(1000);
+let unique_id = format!("id_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
 ```
 
 INPUT FORMAT SPECIFICATIONS:
@@ -257,6 +407,14 @@ BENEFITS:
                     "appSrc": {
                         "type": "string",
                         "description": "Rust code implementing the ArcadiaApp trait (including struct definition, impl blocks, and create_app factory function)"
+                    },
+                    "dependencies": {
+                        "type": "object",
+                        "description": "Optional Rust crate dependencies to include in Cargo.toml. Common dependencies like chrono, regex, rand are auto-detected from 'use' statements. Format: {\"crate_name\": \"version_spec\"}",
+                        "additionalProperties": {
+                            "type": "string",
+                            "description": "Crate version specification (e.g., \"1.0\", \"{ version = \\\"1.0\\\", features = [\\\"feature1\\\"] }\")"
+                        }
                     }
                 },
                 "required": ["appId", "version", "runtime", "tools", "appSrc"]

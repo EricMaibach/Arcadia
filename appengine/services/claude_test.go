@@ -39,12 +39,12 @@ func (m *mockAppRunner) ExecuteAppTool(appID, toolName string, input json.RawMes
 }
 
 type mockAppCreator struct {
-	createFunc func(appID, version, runtime string, tools []interface{}, appSrc string) (string, error)
+	createFunc func(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error)
 }
 
-func (m *mockAppCreator) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string) (string, error) {
+func (m *mockAppCreator) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
 	if m.createFunc != nil {
-		return m.createFunc(appID, version, runtime, tools, appSrc)
+		return m.createFunc(appID, version, runtime, tools, appSrc, dependencies)
 	}
 	return fmt.Sprintf("Created app %s version %s", appID, version), nil
 }
@@ -371,8 +371,12 @@ func TestClaudeService_executeRunApp_NoRunner(t *testing.T) {
 func TestClaudeService_executeCreateApp(t *testing.T) {
 	// Set up mock app creator
 	mockCreator := &mockAppCreator{
-		createFunc: func(appID, version, runtime string, tools []interface{}, appSrc string) (string, error) {
-			return fmt.Sprintf("Created %s v%s with %d tools", appID, version, len(tools)), nil
+		createFunc: func(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
+			depCount := 0
+			if dependencies != nil {
+				depCount = len(dependencies)
+			}
+			return fmt.Sprintf("Created %s v%s with %d tools and %d dependencies", appID, version, len(tools), depCount), nil
 		},
 	}
 	SetAppCreator(mockCreator)
@@ -395,7 +399,7 @@ func TestClaudeService_executeCreateApp(t *testing.T) {
 		t.Errorf("executeCreateApp failed: %v", err)
 	}
 
-	if !strings.Contains(result, "test-app v1.0.0 with 1 tools") {
+	if !strings.Contains(result, "test-app v1.0.0 with 1 tools and 0 dependencies") {
 		t.Errorf("Expected app creation result, got: %s", result)
 	}
 }

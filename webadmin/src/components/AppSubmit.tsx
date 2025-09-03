@@ -7,6 +7,7 @@ const AppSubmit: React.FC = () => {
   const [runtime, setRuntime] = useState('wasm');
   const [appSrc, setAppSrc] = useState('');
   const [tools, setTools] = useState<ToolInfo[]>([{ name: '', inputFormat: '' }]);
+  const [dependencies, setDependencies] = useState<{ name: string; version: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -25,6 +26,21 @@ const AppSubmit: React.FC = () => {
       i === index ? { ...tool, [field]: value } : tool
     );
     setTools(updatedTools);
+  };
+
+  const addDependency = () => {
+    setDependencies([...dependencies, { name: '', version: '' }]);
+  };
+
+  const removeDependency = (index: number) => {
+    setDependencies(dependencies.filter((_, i) => i !== index));
+  };
+
+  const updateDependency = (index: number, field: 'name' | 'version', value: string) => {
+    const updatedDependencies = dependencies.map((dep, i) => 
+      i === index ? { ...dep, [field]: value } : dep
+    );
+    setDependencies(updatedDependencies);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,12 +64,20 @@ const AppSubmit: React.FC = () => {
       setResult(null);
       setFullResponse(null);
       
+      // Process dependencies
+      const validDependencies = dependencies.filter(dep => dep.name.trim() && dep.version.trim());
+      const dependenciesMap: { [key: string]: string } = {};
+      validDependencies.forEach(dep => {
+        dependenciesMap[dep.name.trim()] = dep.version.trim();
+      });
+      
       const request: AppRequest = {
         appId: appId.trim(),
         version: version.trim(),
         runtime,
         tools: validTools,
-        appSrc: appSrc.trim()
+        appSrc: appSrc.trim(),
+        ...(Object.keys(dependenciesMap).length > 0 && { dependencies: dependenciesMap })
       };
 
       console.log('Submitting request:', request);
@@ -72,6 +96,7 @@ const AppSubmit: React.FC = () => {
       setVersion('');
       setAppSrc('');
       setTools([{ name: '', inputFormat: '' }]);
+      setDependencies([]);
     } catch (err: any) {
       console.error('Error submitting app:', err);
       
@@ -181,6 +206,36 @@ const AppSubmit: React.FC = () => {
           ))}
           <button type="button" onClick={addTool} className="add-btn">
             Add Tool
+          </button>
+        </div>
+
+        <div className="form-group">
+          <label>Dependencies (optional):</label>
+          <div className="dependencies-info">
+            <p>Common dependencies like chrono, regex, rand are auto-detected from 'use' statements. 
+               Add explicit dependencies here to override versions or include additional crates.</p>
+          </div>
+          {dependencies.length > 0 && dependencies.map((dep, index) => (
+            <div key={index} className="dependency-input">
+              <input
+                type="text"
+                value={dep.name}
+                onChange={(e) => updateDependency(index, 'name', e.target.value)}
+                placeholder="Crate name (e.g., chrono)"
+              />
+              <input
+                type="text"
+                value={dep.version}
+                onChange={(e) => updateDependency(index, 'version', e.target.value)}
+                placeholder='Version (e.g., 0.4 or { version = "1.0", features = ["json"] })'
+              />
+              <button type="button" onClick={() => removeDependency(index)} className="remove-btn">
+                Remove
+              </button>
+            </div>
+          ))}
+          <button type="button" onClick={addDependency} className="add-btn">
+            Add Dependency
           </button>
         </div>
 

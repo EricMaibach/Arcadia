@@ -344,7 +344,7 @@ func TestAppCreator_CreateApp(t *testing.T) {
 		},
 	}
 	
-	result, err := creator.CreateApp("test-app", "1.0.0", "wasm", tools, "test source")
+	result, err := creator.CreateApp("test-app", "1.0.0", "wasm", tools, "test source", nil)
 	
 	if err != nil {
 		t.Errorf("CreateApp failed: %v", err)

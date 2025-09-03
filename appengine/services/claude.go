@@ -85,7 +85,7 @@ type AppRunner interface {
 }
 
 type AppCreator interface {
-	CreateApp(appID, version, runtime string, tools []interface{}, appSrc string) (string, error)
+	CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error)
 }
 
 var registryAccess RegistryAccess
@@ -262,6 +262,14 @@ func (cs *ClaudeService) loadMCPTools() {
 					"appSrc": map[string]interface{}{
 						"type":        "string",
 						"description": "Rust trait implementation source code",
+					},
+					"dependencies": map[string]interface{}{
+						"type":        "object",
+						"description": "Optional Rust crate dependencies to include in Cargo.toml (e.g., {\"chrono\": \"0.4\", \"regex\": \"1.9\"}). Common dependencies are auto-detected from 'use' statements.",
+						"additionalProperties": map[string]interface{}{
+							"type":        "string",
+							"description": "Version specification for the crate",
+						},
 					},
 				},
 				"required": []string{"appId", "version", "runtime", "tools", "appSrc"},
@@ -445,7 +453,8 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 			Name        string `json:"name"`
 			InputFormat string `json:"input_format"`
 		} `json:"tools"`
-		AppSrc string `json:"appSrc"`
+		AppSrc       string            `json:"appSrc"`
+		Dependencies map[string]string `json:"dependencies,omitempty"`
 	}
 	
 	if err := json.Unmarshal(inputJSON, &createReq); err != nil {
@@ -480,7 +489,7 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 			}
 		}
 		
-		return appCreator.CreateApp(createReq.AppID, createReq.Version, createReq.Runtime, tools, createReq.AppSrc)
+		return appCreator.CreateApp(createReq.AppID, createReq.Version, createReq.Runtime, tools, createReq.AppSrc, createReq.Dependencies)
 	}
 	
 	return fmt.Sprintf("App creation request received for %s (version %s)", createReq.AppID, createReq.Version), nil

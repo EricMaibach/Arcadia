@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
-	
+
 	"arcadia/services"
 )
 
@@ -323,8 +323,8 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	wasmPath, err := wasmCompiler.CompileTraitToWasm(req, buildDir)
 	if err != nil {
 		logAppSubmission("[%s] ERROR: Failed to compile trait to WASM: %v", sessionID, err)
-		logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
-		os.RemoveAll(buildDir)
+		//logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
+		//os.RemoveAll(buildDir)
 		logAppSubmission("[%s] RESPONSE: HTTP 500 - WASM compilation failed", sessionID)
 		http.Error(w, fmt.Sprintf("failed to compile trait to WASM: %v", err), http.StatusInternalServerError)
 		return
@@ -349,13 +349,13 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	})
-	
+
 	// Save registry to file for persistence
 	if err := registryManager.Save(); err != nil {
 		logAppSubmission("[%s] WARNING: Failed to save registry to file: %v", sessionID, err)
 		// Don't fail the request, app is already registered in memory
 	}
-	
+
 	registrySize := registry.GetAppCount()
 	logAppSubmission("[%s] App registered successfully. Registry now contains %d apps", sessionID, registrySize)
 

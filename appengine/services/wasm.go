@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -23,11 +24,12 @@ type ToolInfo struct {
 
 // AppRequest represents a request to create an application from Rust trait
 type AppRequest struct {
-	AppID   string     `json:"appId"`
-	Version string     `json:"version"`
-	Runtime string     `json:"runtime"`
-	Tools   []ToolInfo `json:"tools"`
-	AppSrc  string     `json:"appSrc"`
+	AppID        string            `json:"appId"`
+	Version      string            `json:"version"`
+	Runtime      string            `json:"runtime"`
+	Tools        []ToolInfo        `json:"tools"`
+	AppSrc       string            `json:"appSrc"`
+	Dependencies map[string]string `json:"dependencies,omitempty"`
 }
 
 // WasmCompiler handles the compilation of Rust traits to WASM
@@ -36,6 +38,145 @@ type WasmCompiler struct{}
 // NewWasmCompiler creates a new WASM compiler instance
 func NewWasmCompiler() *WasmCompiler {
 	return &WasmCompiler{}
+}
+
+// extractDependencies parses Rust code to detect used crates and returns a map of dependencies
+func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
+	// Start with base dependencies that are always needed
+	dependencies := map[string]string{
+		"serde":      `{ version = "1.0", features = ["derive"] }`,
+		"serde_json": `"1.0"`,
+	}
+
+	// Common crate mappings with their Cargo.toml versions
+	// This map covers the most commonly used Rust crates
+	crateMap := map[string]string{
+		// Date and time - NOTE: chrono is problematic in server-side WASM due to wasm-bindgen dependencies
+		// Consider using std::time or atomic counters for server-side WASM instead
+		"time":   `"0.3"`,
+
+		// Text processing
+		"regex":    `"1.9"`,
+		"lazy_static": `"1.4"`,
+		"once_cell":   `"1.19"`,
+
+		// Random and cryptography (server-side WASM compatible)
+		"rand":     `{ version = "0.8", default-features = false, features = ["small_rng"] }`,
+		// Note: uuid with v4 requires randomness that may not work in server-side WASM
+		// Consider using timestamp-based IDs instead
+		"sha2":     `"0.10"`,
+		"sha3":     `"0.10"`,
+		"md5":      `"0.7"`,
+		"hex":      `"0.4"`,
+		"base64":   `"0.21"`,
+		"bcrypt":   `"0.15"`,
+		"argon2":   `"0.5"`,
+
+		// Async runtime (note: tokio might be too heavy for WASM)
+		"tokio":    `{ version = "1.35", features = ["rt", "macros"] }`,
+		"async_std": `"1.12"`,
+		"futures":   `"0.3"`,
+
+		// HTTP and networking (may not work in WASM context)
+		"reqwest":  `{ version = "0.11", features = ["json"] }`,
+		"hyper":    `"0.14"`,
+		"url":      `"2.5"`,
+
+		// Serialization
+		"bincode":  `"1.3"`,
+		"toml":     `"0.8"`,
+		"csv":      `"1.3"`,
+		"ron":      `"0.8"`,
+
+		// Error handling
+		"anyhow":   `"1.0"`,
+		"thiserror": `"1.0"`,
+
+		// Logging
+		"log":      `"0.4"`,
+		"env_logger": `"0.11"`,
+		"tracing":   `"0.1"`,
+
+		// Data structures
+		"indexmap": `"2.1"`,
+		"hashbrown": `"0.14"`,
+		"petgraph":  `"0.6"`,
+
+		// Math and numerics
+		"num":      `"0.4"`,
+		"nalgebra": `"0.32"`,
+		"ndarray":  `"0.15"`,
+
+		// WebAssembly specific (server-side WASM, no browser dependencies)
+		"getrandom":    `{ version = "0.2", default-features = false }`,
+	}
+
+	// Parse use statements and extern crate declarations
+	lines := strings.Split(rustCode, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Check for 'use' statements
+		if strings.HasPrefix(line, "use ") {
+			// Extract crate name (first part before ::)
+			useContent := strings.TrimPrefix(line, "use ")
+			useContent = strings.TrimSuffix(useContent, ";")
+			
+			// Handle various use patterns:
+			// use chrono::DateTime;
+			// use std::collections::HashMap;  (skip std)
+			// use self::module;  (skip self)
+			// use super::module;  (skip super)
+			// use crate::module;  (skip crate - internal)
+			
+			parts := strings.Split(useContent, "::")
+			if len(parts) > 0 {
+				crateName := strings.TrimSpace(parts[0])
+				
+				// Skip standard library and internal references
+				if crateName == "std" || crateName == "core" || crateName == "alloc" ||
+					crateName == "self" || crateName == "super" || crateName == "crate" {
+					continue
+				}
+				
+				// Check if it's a known external crate
+				if dep, exists := crateMap[crateName]; exists {
+					dependencies[crateName] = dep
+				}
+			}
+		}
+
+		// Check for 'extern crate' statements (older Rust style)
+		if strings.HasPrefix(line, "extern crate ") {
+			crateName := strings.TrimPrefix(line, "extern crate ")
+			crateName = strings.TrimSuffix(crateName, ";")
+			crateName = strings.TrimSpace(crateName)
+			
+			if dep, exists := crateMap[crateName]; exists {
+				dependencies[crateName] = dep
+			}
+		}
+	}
+
+	return dependencies
+}
+
+// formatDependencyVersion ensures a dependency version is properly formatted for Cargo.toml
+func (wc *WasmCompiler) formatDependencyVersion(version string) string {
+	version = strings.TrimSpace(version)
+	
+	// If it's already a complex dependency specification (starts with { or contains quotes), return as-is
+	if strings.HasPrefix(version, "{") || strings.Contains(version, "\"") {
+		return version
+	}
+	
+	// If it looks like a simple version number (digits, dots, and common version chars), quote it
+	if matched, _ := regexp.MatchString(`^[0-9]+(\.[0-9]+)*([a-zA-Z0-9\-\.]*)?$`, version); matched {
+		return fmt.Sprintf(`"%s"`, version)
+	}
+	
+	// Otherwise, return as-is (assume user knows what they're doing)
+	return version
 }
 
 // GenerateRustProjectFromTrait creates a Rust project from a trait implementation
@@ -62,7 +203,44 @@ func (wc *WasmCompiler) GenerateRustProjectFromTrait(req AppRequest, buildDir st
 		return fmt.Errorf("failed to write lib.rs: %v", err)
 	}
 
-	// Create Cargo.toml
+	// Extract dependencies from the Rust code
+	codeDeps := wc.extractDependencies(req.AppSrc)
+
+	// Merge with user-provided dependencies (user deps override auto-detected)
+	allDeps := make(map[string]string)
+	for name, version := range codeDeps {
+		allDeps[name] = version
+	}
+	// User-provided dependencies override auto-detected ones
+	if req.Dependencies != nil {
+		for name, version := range req.Dependencies {
+			// Ensure user-provided versions are properly formatted for Cargo.toml
+			allDeps[name] = wc.formatDependencyVersion(version)
+		}
+	}
+
+	// Build the dependencies section for Cargo.toml
+	var depLines []string
+	// Sort dependency names for consistent output
+	depNames := make([]string, 0, len(allDeps))
+	for name := range allDeps {
+		depNames = append(depNames, name)
+	}
+	// Simple alphabetical sort
+	for i := 0; i < len(depNames); i++ {
+		for j := i + 1; j < len(depNames); j++ {
+			if depNames[i] > depNames[j] {
+				depNames[i], depNames[j] = depNames[j], depNames[i]
+			}
+		}
+	}
+
+	for _, name := range depNames {
+		version := allDeps[name]
+		depLines = append(depLines, fmt.Sprintf("%s = %s", name, version))
+	}
+
+	// Create Cargo.toml with dynamic dependencies
 	cargoToml := fmt.Sprintf(`[package]
 name = "%s"
 version = "%s"
@@ -72,13 +250,12 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
+%s
 
 [profile.release]
 opt-level = "s"
 lto = true
-`, req.AppID, req.Version)
+`, req.AppID, req.Version, strings.Join(depLines, "\n"))
 
 	cargoPath := filepath.Join(buildDir, "Cargo.toml")
 	if err := os.WriteFile(cargoPath, []byte(cargoToml), 0644); err != nil {
