@@ -9,21 +9,21 @@ import (
 	"strings"
 	"sync"
 	"time"
-	"unsafe"
-
-	"github.com/bytecodealliance/wasmtime-go"
 )
 
 // --- Claude Configuration ---
 
 type ClaudeConfig struct {
-	APIKey         string `json:"api_key"`
-	BaseURL        string `json:"base_url"`
-	Model          string `json:"model"`
-	MaxTokens      int    `json:"max_tokens"`
-	TimeoutSeconds int    `json:"timeout_seconds"`
-	EnableMCP      bool   `json:"enable_mcp"`
-	MCPServerCmd   string `json:"mcp_server_cmd"`
+	APIKey              string `json:"api_key"`
+	BaseURL             string `json:"base_url"`
+	Model               string `json:"model"`
+	MaxTokens           int    `json:"max_tokens"`
+	TimeoutSeconds      int    `json:"timeout_seconds"`
+	EnableMCP           bool   `json:"enable_mcp"`
+	MCPServerCmd        string `json:"mcp_server_cmd"`
+	MaxContextMessages  int    `json:"max_context_messages"`  // Max number of messages to retain in context
+	ContextCompaction   bool   `json:"context_compaction"`    // Enable smart context compaction
+	ContextTTLMinutes   int    `json:"context_ttl_minutes"`   // TTL for context in minutes (0 = no expiry)
 }
 
 // --- Claude API structures ---
@@ -63,12 +63,27 @@ type ClaudeResponse struct {
 	} `json:"usage"`
 }
 
+// --- Context Management ---
+
+type ConversationContext struct {
+	Messages     []ClaudeMessage `json:"messages"`
+	LastAccessed time.Time       `json:"last_accessed"`
+	TotalTokens  int             `json:"total_tokens"`
+}
+
+type ContextManager struct {
+	contexts map[string]*ConversationContext // Key is contextID (e.g., "wasm:<appID>", "web:<sessionID>")
+	mutex    sync.RWMutex
+	config   *ClaudeConfig
+}
+
 // --- Claude Service ---
 
 type ClaudeService struct {
-	config     ClaudeConfig
-	httpClient *http.Client
-	mcpTools   []ClaudeTool
+	config         ClaudeConfig
+	httpClient     *http.Client
+	mcpTools       []ClaudeTool
+	contextManager *ContextManager
 }
 
 // Global service instance (will be set by dependency injection)
@@ -105,12 +120,24 @@ func SetAppCreator(ac AppCreator) {
 }
 
 func NewClaudeService(config ClaudeConfig) *ClaudeService {
+	// Set defaults for context configuration
+	if config.MaxContextMessages == 0 {
+		config.MaxContextMessages = 20 // Default to retaining 20 messages
+	}
+	if config.ContextTTLMinutes == 0 {
+		config.ContextTTLMinutes = 60 // Default to 1 hour TTL
+	}
+	
 	service := &ClaudeService{
 		config: config,
 		httpClient: &http.Client{
 			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
 		},
 		mcpTools: []ClaudeTool{},
+		contextManager: &ContextManager{
+			contexts: make(map[string]*ConversationContext),
+			config:   &config,
+		},
 	}
 	
 	if config.EnableMCP {
@@ -120,6 +147,11 @@ func NewClaudeService(config ClaudeConfig) *ClaudeService {
 	// Set the global instance
 	claudeServiceInstance = service
 	
+	// Start background goroutine to clean up expired contexts
+	if config.ContextTTLMinutes > 0 {
+		go service.contextCleanupRoutine()
+	}
+	
 	return service
 }
 
@@ -128,17 +160,170 @@ func GetClaudeService() *ClaudeService {
 	return claudeServiceInstance
 }
 
+// --- Context Manager Methods ---
+
+func (cm *ContextManager) GetOrCreateContext(contextID string) *ConversationContext {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	context, exists := cm.contexts[contextID]
+	if !exists {
+		context = &ConversationContext{
+			Messages:     []ClaudeMessage{},
+			LastAccessed: time.Now(),
+			TotalTokens:  0,
+		}
+		cm.contexts[contextID] = context
+	}
+	
+	context.LastAccessed = time.Now()
+	return context
+}
+
+func (cm *ContextManager) AddMessage(contextID string, message ClaudeMessage) *ConversationContext {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	context, exists := cm.contexts[contextID]
+	if !exists {
+		context = &ConversationContext{
+			Messages:     []ClaudeMessage{},
+			LastAccessed: time.Now(),
+			TotalTokens:  0,
+		}
+		cm.contexts[contextID] = context
+	}
+	
+	context.Messages = append(context.Messages, message)
+	context.LastAccessed = time.Now()
+	
+	// Trim context if needed
+	if cm.config.MaxContextMessages > 0 && len(context.Messages) > cm.config.MaxContextMessages {
+		if cm.config.ContextCompaction {
+			cm.compactContext(context)
+		} else {
+			// Simple trimming: keep only the most recent messages
+			start := len(context.Messages) - cm.config.MaxContextMessages
+			context.Messages = context.Messages[start:]
+		}
+	}
+	
+	return context
+}
+
+func (cm *ContextManager) compactContext(context *ConversationContext) {
+	// Smart compaction strategy:
+	// 1. Keep the first message (initial context)
+	// 2. Keep the last N-1 messages in full
+	// 3. Summarize middle messages if needed
+	
+	maxMessages := cm.config.MaxContextMessages
+	if len(context.Messages) <= maxMessages {
+		return
+	}
+	
+	// Keep first message and last (maxMessages-1) messages
+	keepRecent := maxMessages - 1
+	if keepRecent < 1 {
+		keepRecent = 1
+	}
+	
+	firstMsg := context.Messages[0]
+	recentMsgs := context.Messages[len(context.Messages)-keepRecent:]
+	
+	// For now, simple strategy: just keep first and recent
+	// In production, you might want to summarize the middle messages
+	context.Messages = append([]ClaudeMessage{firstMsg}, recentMsgs...)
+}
+
+func (cm *ContextManager) UpdateTokenCount(contextID string, additionalTokens int) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	if context, exists := cm.contexts[contextID]; exists {
+		context.TotalTokens += additionalTokens
+	}
+}
+
+func (cm *ContextManager) ClearContext(contextID string) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	delete(cm.contexts, contextID)
+}
+
+func (cm *ContextManager) GetContext(contextID string) (*ConversationContext, bool) {
+	cm.mutex.RLock()
+	defer cm.mutex.RUnlock()
+	
+	context, exists := cm.contexts[contextID]
+	return context, exists
+}
+
+func (cm *ContextManager) CleanupExpiredContexts(ttlMinutes int) {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	if ttlMinutes <= 0 {
+		return
+	}
+	
+	expiry := time.Now().Add(-time.Duration(ttlMinutes) * time.Minute)
+	
+	for id, context := range cm.contexts {
+		if context.LastAccessed.Before(expiry) {
+			delete(cm.contexts, id)
+			log.Printf("[Claude Context] Expired context: %s", id)
+		}
+	}
+}
+
+// Background cleanup routine
+func (cs *ClaudeService) contextCleanupRoutine() {
+	ticker := time.NewTicker(5 * time.Minute) // Run every 5 minutes
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		cs.contextManager.CleanupExpiredContexts(cs.config.ContextTTLMinutes)
+	}
+}
+
+// Public methods for managing contexts
+
+func (cs *ClaudeService) ClearContext(contextID string) {
+	cs.contextManager.ClearContext(contextID)
+}
+
+func (cs *ClaudeService) GetContextStats(contextID string) (messages int, tokens int, exists bool) {
+	context, exists := cs.contextManager.GetContext(contextID)
+	if !exists {
+		return 0, 0, false
+	}
+	return len(context.Messages), context.TotalTokens, true
+}
+
 func (cs *ClaudeService) SendMessage(message string) (string, error) {
+	// Use a default context ID for backward compatibility
+	return cs.SendMessageWithContext(message, "default")
+}
+
+func (cs *ClaudeService) SendMessageWithContext(message string, contextID string) (string, error) {
+	// Get or create context
+	context := cs.contextManager.GetOrCreateContext(contextID)
+	
+	// Add the new user message to context
+	userMessage := ClaudeMessage{
+		Role:    "user",
+		Content: message,
+	}
+	context = cs.contextManager.AddMessage(contextID, userMessage)
+	
+	// Build the request with full context
 	request := ClaudeRequest{
 		Model:     cs.config.Model,
 		MaxTokens: cs.config.MaxTokens,
-		Messages: []ClaudeMessage{
-			{
-				Role:    "user",
-				Content: message,
-			},
-		},
-		Tools: cs.mcpTools,
+		Messages:  context.Messages,
+		Tools:     cs.mcpTools,
 	}
 
 	jsonData, err := json.Marshal(request)
@@ -175,19 +360,35 @@ func (cs *ClaudeService) SendMessage(message string) (string, error) {
 		return "", fmt.Errorf("no content in Claude response")
 	}
 
+	// Extract response text
+	var responseText string
+	for _, content := range claudeResp.Content {
+		if content.Type == "text" {
+			responseText = content.Text
+			break
+		}
+	}
+	
+	// Add assistant's response to context
+	if responseText != "" {
+		assistantMessage := ClaudeMessage{
+			Role:    "assistant",
+			Content: responseText,
+		}
+		cs.contextManager.AddMessage(contextID, assistantMessage)
+		
+		// Update token count if available
+		if claudeResp.Usage.InputTokens > 0 || claudeResp.Usage.OutputTokens > 0 {
+			cs.contextManager.UpdateTokenCount(contextID, claudeResp.Usage.InputTokens+claudeResp.Usage.OutputTokens)
+		}
+	}
+
 	// Check if Claude wants to use tools
 	if claudeResp.StopReason == "tool_use" {
 		return cs.handleToolUse(claudeResp, message)
 	}
 
-	// Return the first text content
-	for _, content := range claudeResp.Content {
-		if content.Type == "text" {
-			return content.Text, nil
-		}
-	}
-
-	return "", fmt.Errorf("no text content in Claude response")
+	return responseText, nil
 }
 
 func (cs *ClaudeService) loadMCPTools() {
@@ -573,7 +774,8 @@ func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request)
 	}
 
 	var request struct {
-		Message string `json:"message"`
+		Message   string `json:"message"`
+		SessionID string `json:"session_id"` // Optional session ID from web client
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -581,84 +783,29 @@ func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	response, err := cs.SendMessage(request.Message)
+	// Generate context ID for web users
+	contextID := "web:default"
+	if request.SessionID != "" {
+		contextID = "web:" + request.SessionID
+	}
+
+	response, err := cs.SendMessageWithContext(request.Message, contextID)
 	if err != nil {
 		log.Printf("Claude API error: %v", err)
 		http.Error(w, "Failed to get Claude response", http.StatusInternalServerError)
 		return
 	}
 
+	// Include context stats in response
+	messages, tokens, _ := cs.GetContextStats(contextID)
+	
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"response": response})
-}
-
-// ClaudeQuery is the WASM host function for Claude AI integration
-func ClaudeQuery(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
-	// Extract message from WASM memory
-	message := ""
-	if mem := caller.GetExport("memory").Memory(); mem != nil {
-		data := mem.UnsafeData(caller)
-		if int(messagePtr+messageLen) <= len(data) {
-			message = string(data[messagePtr : messagePtr+messageLen])
-		} else {
-			log.Printf("[WASM Claude] Invalid memory range")
-			return -3 // Invalid memory range
-		}
-	}
-
-	log.Printf("[WASM Claude] claudeQuery called with message: %s", message)
-
-	// Check if Claude service is available
-	if claudeServiceInstance == nil {
-		log.Printf("[WASM Claude] Claude service not initialized")
-		return -1 // Claude service not initialized
-	}
-
-	// Send message to Claude
-	response, err := claudeServiceInstance.SendMessage(message)
-	if err != nil {
-		log.Printf("[WASM Claude] Claude API error: %v", err)
-		return -2 // Claude API error
-	}
-
-	// Create response JSON
-	responseJSON := map[string]string{
+	json.NewEncoder(w).Encode(map[string]interface{}{
 		"response": response,
-	}
-	jsonBytes, err := json.Marshal(responseJSON)
-	if err != nil {
-		log.Printf("[WASM Claude] JSON marshal error: %v", err)
-		return -4 // JSON marshal error
-	}
-
-	// Allocate memory in WASM for the response
-	if mem := caller.GetExport("memory").Memory(); mem != nil {
-		allocFunc := caller.GetExport("allocate").Func()
-		if allocFunc == nil {
-			log.Printf("[WASM Claude] Memory allocation error: allocate function not found")
-			return -5 // Memory allocation error
-		}
-		
-		results, err := allocFunc.Call(caller, int32(len(jsonBytes)))
-		if err != nil {
-			log.Printf("[WASM Claude] Memory allocation failed: %v", err)
-			return -5
-		}
-		
-		resultVals, ok := results.([]wasmtime.Val)
-		if !ok || len(resultVals) == 0 {
-			log.Printf("[WASM Claude] Invalid allocation result")
-			return -5
-		}
-		
-		ptr := resultVals[0].I32()
-		data := mem.UnsafeData(caller)
-		copy(data[ptr:ptr+int32(len(jsonBytes))], jsonBytes)
-		
-		// Write the pointer to the result
-		*(*int32)(unsafe.Pointer(&data[resultPtrPtr])) = ptr
-	}
-
-	log.Printf("[WASM Claude] Claude query completed successfully")
-	return int32(len(jsonBytes))
+		"context_stats": map[string]int{
+			"message_count": messages,
+			"total_tokens":  tokens,
+		},
+	})
 }
+

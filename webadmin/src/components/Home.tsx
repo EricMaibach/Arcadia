@@ -10,6 +10,11 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+interface ContextStats {
+  message_count: number;
+  total_tokens: number;
+}
+
 const Home: React.FC = () => {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
@@ -19,6 +24,18 @@ const Home: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [contextStats, setContextStats] = useState<ContextStats | null>(null);
+  
+  // Generate a session ID that persists for this session
+  const [sessionId] = useState(() => {
+    // Try to get existing session from sessionStorage or generate new one
+    let id = sessionStorage.getItem('arcadia-session-id');
+    if (!id) {
+      id = `session-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      sessionStorage.setItem('arcadia-session-id', id);
+    }
+    return id;
+  });
 
   useEffect(() => {
     loadApps();
@@ -59,7 +76,10 @@ const Home: React.FC = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: userMessage.content }),
+        body: JSON.stringify({ 
+          message: userMessage.content,
+          session_id: sessionId 
+        }),
       });
 
       if (!response.ok) {
@@ -67,6 +87,11 @@ const Home: React.FC = () => {
       }
 
       const data = await response.json();
+      
+      // Update context stats if provided
+      if (data.context_stats) {
+        setContextStats(data.context_stats);
+      }
       
       const claudeMessage: ChatMessage = {
         id: Date.now().toString() + '-claude',
@@ -102,6 +127,30 @@ const Home: React.FC = () => {
   return (
     <div className="home">
       <div className="claude-chat">
+        {contextStats && (
+          <div className="context-stats" style={{
+            padding: '0.5rem 1rem',
+            background: 'linear-gradient(135deg, rgba(74, 124, 89, 0.1), rgba(127, 176, 105, 0.1))',
+            borderBottom: '1px solid rgba(244, 211, 94, 0.3)',
+            fontSize: '0.85rem',
+            color: '#6c757d',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <div>
+              <span>Context: {contextStats.message_count} messages</span>
+              {contextStats.total_tokens > 0 && (
+                <span style={{ marginLeft: '1rem' }}>
+                  • {contextStats.total_tokens.toLocaleString()} tokens
+                </span>
+              )}
+            </div>
+            <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>
+              Session: {sessionId.slice(-8)}
+            </div>
+          </div>
+        )}
         <div className="chat-messages">
             {messages.length === 0 && (
               <div className="chat-placeholder">

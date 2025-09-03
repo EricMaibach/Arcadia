@@ -161,15 +161,22 @@ func TestClaudeService_SendMessage_Success(t *testing.T) {
 		},
 	}
 
+	config := ClaudeConfig{
+		APIKey:    "test-key",
+		BaseURL:   "https://api.anthropic.com",
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 4096,
+		MaxContextMessages: 10,
+	}
+	
 	service := &ClaudeService{
-		config: ClaudeConfig{
-			APIKey:    "test-key",
-			BaseURL:   "https://api.anthropic.com",
-			Model:     "claude-3-5-sonnet-20241022",
-			MaxTokens: 4096,
-		},
+		config:     config,
 		httpClient: mockClient,
 		mcpTools:   []ClaudeTool{},
+		contextManager: &ContextManager{
+			contexts: make(map[string]*ConversationContext),
+			config:   &config,
+		},
 	}
 
 	response, err := service.SendMessage("Test message")
@@ -195,15 +202,22 @@ func TestClaudeService_SendMessage_HTTPError(t *testing.T) {
 		},
 	}
 
+	config := ClaudeConfig{
+		APIKey:    "test-key",
+		BaseURL:   "https://api.anthropic.com",
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 4096,
+		MaxContextMessages: 10,
+	}
+	
 	service := &ClaudeService{
-		config: ClaudeConfig{
-			APIKey:    "test-key",
-			BaseURL:   "https://api.anthropic.com",
-			Model:     "claude-3-5-sonnet-20241022",
-			MaxTokens: 4096,
-		},
+		config:     config,
 		httpClient: mockClient,
 		mcpTools:   []ClaudeTool{},
+		contextManager: &ContextManager{
+			contexts: make(map[string]*ConversationContext),
+			config:   &config,
+		},
 	}
 
 	_, err := service.SendMessage("Test message")
@@ -253,15 +267,22 @@ func TestClaudeService_SendMessage_ToolUse(t *testing.T) {
 		},
 	}
 
+	config := ClaudeConfig{
+		APIKey:    "test-key",
+		BaseURL:   "https://api.anthropic.com",
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 4096,
+		MaxContextMessages: 10,
+	}
+	
 	service := &ClaudeService{
-		config: ClaudeConfig{
-			APIKey:    "test-key",
-			BaseURL:   "https://api.anthropic.com",
-			Model:     "claude-3-5-sonnet-20241022",
-			MaxTokens: 4096,
-		},
+		config:     config,
 		httpClient: mockClient,
 		mcpTools:   []ClaudeTool{},
+		contextManager: &ContextManager{
+			contexts: make(map[string]*ConversationContext),
+			config:   &config,
+		},
 	}
 
 	response, err := service.SendMessage("List apps")
@@ -476,15 +497,22 @@ func TestClaudeService_HandleClaudeAPI(t *testing.T) {
 		},
 	}
 
+	config := ClaudeConfig{
+		APIKey:    "test-key",
+		BaseURL:   "https://api.anthropic.com",
+		Model:     "claude-3-5-sonnet-20241022",
+		MaxTokens: 4096,
+		MaxContextMessages: 10,
+	}
+	
 	service := &ClaudeService{
-		config: ClaudeConfig{
-			APIKey:    "test-key",
-			BaseURL:   "https://api.anthropic.com",
-			Model:     "claude-3-5-sonnet-20241022",
-			MaxTokens: 4096,
-		},
+		config:     config,
 		httpClient: mockClient,
 		mcpTools:   []ClaudeTool{},
+		contextManager: &ContextManager{
+			contexts: make(map[string]*ConversationContext),
+			config:   &config,
+		},
 	}
 
 	// Test successful request
@@ -498,13 +526,18 @@ func TestClaudeService_HandleClaudeAPI(t *testing.T) {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 
-	var response map[string]string
+	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Errorf("Failed to parse response JSON: %v", err)
 	}
 
 	if response["response"] != "API response" {
-		t.Errorf("Expected 'API response', got '%s'", response["response"])
+		t.Errorf("Expected 'API response', got '%v'", response["response"])
+	}
+	
+	// Verify context_stats is present
+	if _, ok := response["context_stats"]; !ok {
+		t.Error("Expected context_stats in response")
 	}
 }
 

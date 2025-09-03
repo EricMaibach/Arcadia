@@ -38,7 +38,7 @@ func (wr *WasmRuntime) GetEngine() *wasmtime.Engine {
 }
 
 // claudeQuery sends a message to Claude AI and returns the response
-func (wr *WasmRuntime) claudeQuery(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
+func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32, appID string) int32 {
 	// Get memory instance
 	memory := caller.GetExport("memory").Memory()
 	data := memory.UnsafeData(caller)
@@ -47,7 +47,7 @@ func (wr *WasmRuntime) claudeQuery(caller *wasmtime.Caller, messagePtr, messageL
 	messageBytes := data[messagePtr : messagePtr+messageLen]
 	message := string(messageBytes)
 
-	log.Printf("[WASM Claude] claudeQuery called with message: %s", message)
+	log.Printf("[WASM Claude] claudeQuery called from app %s with message: %s", appID, message)
 
 	// Check if Claude service is available
 	claudeService := wr.configManager.GetClaudeService()
@@ -56,8 +56,11 @@ func (wr *WasmRuntime) claudeQuery(caller *wasmtime.Caller, messagePtr, messageL
 		return -1 // Claude service not initialized
 	}
 
-	// Send message to Claude
-	response, err := claudeService.SendMessage(message)
+	// Generate context ID for this WASM app
+	contextID := "wasm:" + appID
+
+	// Send message to Claude with app-specific context
+	response, err := claudeService.SendMessageWithContext(message, contextID)
 	if err != nil {
 		log.Printf("[WASM Claude] Claude API error: %v", err)
 		return -2 // Claude API error
@@ -332,7 +335,7 @@ func (wr *WasmRuntime) dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen
 }
 
 // setupHostFunctions configures all host functions for WASM execution
-func (wr *WasmRuntime) setupHostFunctions(linker *wasmtime.Linker, store *wasmtime.Store) {
+func (wr *WasmRuntime) setupHostFunctions(linker *wasmtime.Linker, store *wasmtime.Store, appID string) {
 	// Define database host functions
 	linker.DefineFunc(store, "env", "db_query", func(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) int32 {
 		return wr.dbQuery(caller, queryPtr, queryLen, resultPtrPtr)
@@ -344,9 +347,9 @@ func (wr *WasmRuntime) setupHostFunctions(linker *wasmtime.Linker, store *wasmti
 		return wr.dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
 	})
 
-	// Define Claude AI host function
+	// Define Claude AI host function with app-specific context
 	linker.DefineFunc(store, "env", "claude_query", func(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
-		return wr.claudeQuery(caller, messagePtr, messageLen, resultPtrPtr)
+		return wr.claudeQueryWithAppID(caller, messagePtr, messageLen, resultPtrPtr, appID)
 	})
 }
 
@@ -385,8 +388,8 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 
 	linker := wasmtime.NewLinker(wr.engine)
 
-	// Setup all host functions
-	wr.setupHostFunctions(linker, store)
+	// Setup all host functions with app ID for context isolation
+	wr.setupHostFunctions(linker, store, appID)
 
 	instance, err := linker.Instantiate(store, module)
 	if err != nil {
