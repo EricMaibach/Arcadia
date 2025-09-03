@@ -14,7 +14,6 @@ import (
 type Database interface {
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	Exec(stmt string, args ...interface{}) (sql.Result, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
 	Close() error
 }
 
@@ -65,13 +64,6 @@ func (s *SQLiteDatabase) Exec(stmt string, args ...interface{}) (sql.Result, err
 	return s.db.Exec(stmt, args...)
 }
 
-// QueryRow executes a query that is expected to return at most one row
-func (s *SQLiteDatabase) QueryRow(query string, args ...interface{}) *sql.Row {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-	return s.db.QueryRow(query, args...)
-}
-
 // Close closes the database connection
 func (s *SQLiteDatabase) Close() error {
 	s.mutex.Lock()
@@ -100,11 +92,10 @@ func (dm *DatabaseManager) GetAppDB() Database {
 	return dm.appDB
 }
 
-// GetSystemDB returns the system database instance  
+// GetSystemDB returns the system database instance
 func (dm *DatabaseManager) GetSystemDB() Database {
 	return dm.systemDB
 }
-
 
 // Initialize initializes both app and system databases
 func (dm *DatabaseManager) Initialize() error {
@@ -183,26 +174,20 @@ func (dm *DatabaseManager) Close() {
 	}
 }
 
-
 // InitDatabasesWithManager initializes databases using the new DatabaseManager
 func InitDatabasesWithManager() (*DatabaseManager, error) {
 	dm := NewDatabaseManager()
 	if err := dm.Initialize(); err != nil {
 		return nil, err
 	}
-	
+
 	// Initialize the schedule repository with the system database
 	InitScheduleRepository(dm.GetSystemDB())
-	
+
 	// Initialize the default scheduler with the schedule repository
 	if repo := GetScheduleRepository(); repo != nil {
 		InitDefaultScheduler(repo)
 	}
-	
+
 	return dm, nil
 }
-
-
-
-
-
