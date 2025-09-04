@@ -8,48 +8,20 @@ import { appApi, App as AppType } from './services/api';
 import ArcadiaIcon from './ArcadiaIcon.jpg';
 
 function App() {
-  const [apps, setApps] = useState<AppType[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadApps();
-  }, []);
-
-  const loadApps = async () => {
-    try {
-      const appList = await appApi.listApps();
-      setApps(appList);
-    } catch (err) {
-      console.error('Failed to load apps:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   return (
     <Router>
       <div className="App">
-        <header className="App-header">
-          <Link to="/" className="logo-link">
-            <img src={ArcadiaIcon} alt="Arcadia Tree" className="logo-icon" />
-            <h1>Arcadia</h1>
+        {/* Discrete floating navigation */}
+        <div className="floating-nav">
+          <Link to="/admin" className="floating-nav-btn admin-btn" title="Admin">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+              <circle cx="12" cy="12" r="3"/>
+            </svg>
           </Link>
-          <nav className="nav">
-            <Link to="/" className="nav-link">Home</Link>
-            {!loading && apps.map((app) => (
-              <Link 
-                key={app.appId} 
-                to={`/app/${encodeURIComponent(app.appId)}`} 
-                className="nav-link app-nav-link"
-              >
-                {app.appId}
-              </Link>
-            ))}
-            <Link to="/admin" className="nav-link admin-link">Admin</Link>
-          </nav>
-        </header>
+        </div>
         
-        <main className="main-content">
+        <main className="main-content-fullscreen">
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/app/:appId" element={<AppPage />} />
