@@ -174,7 +174,7 @@ func TestManager_applyDefaultsAndValidate(t *testing.T) {
 				if config.Claude.MaxTokens != 4096 {
 					t.Error("MaxTokens default not applied")
 				}
-				if config.Claude.TimeoutSeconds != 30 {
+				if config.Claude.TimeoutSeconds != 240 {
 					t.Error("TimeoutSeconds default not applied")
 				}
 				if !config.Claude.EnableMCP {
@@ -339,6 +339,10 @@ func (m *MockAppRunner) ExecuteAppTool(appID, toolName string, input json.RawMes
 }
 
 type MockAppCreator struct{}
+
+func (m *MockAppCreator) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
+	return "test app created", nil
+}
 
 func TestServerConfig(t *testing.T) {
 	config := ServerConfig{

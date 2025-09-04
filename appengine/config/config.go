@@ -124,9 +124,9 @@ func (m *Manager) GetServerHost() string {
 func (m *Manager) SetupDependencyInjection(
 	registryAccess services.RegistryAccess,
 	appRunner services.AppRunner,
-	appCreator interface{}, // AppCreator interface may not exist yet
+	appCreator services.AppCreator,
 ) {
 	services.SetRegistryAccess(registryAccess)
 	services.SetAppRunner(appRunner)
-	// Note: SetAppCreator might need to be implemented if interface exists
+	services.SetAppCreator(appCreator)
 }

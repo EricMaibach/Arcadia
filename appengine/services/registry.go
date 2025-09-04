@@ -182,7 +182,7 @@ type RegistryManager struct {
 	registry     *Registry
 	registryAccess RegistryAccess
 	appRunner      AppRunner
-	appCreator     interface{}
+	appCreator     AppCreator
 }
 
 // NewRegistryManager creates a new registry manager
@@ -213,7 +213,7 @@ func (rm *RegistryManager) GetAppRunner() AppRunner {
 }
 
 // GetAppCreator returns the AppCreator implementation
-func (rm *RegistryManager) GetAppCreator() interface{} {
+func (rm *RegistryManager) GetAppCreator() AppCreator {
 	return rm.appCreator
 }
 

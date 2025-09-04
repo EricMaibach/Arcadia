@@ -733,11 +733,15 @@ func (cs *ClaudeService) executeRunApp(input interface{}) (string, error) {
 }
 
 func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
+	log.Printf("[Claude MCP] executeCreateApp called with input type: %T", input)
+	
 	// Convert input to expected structure
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
+		log.Printf("[Claude MCP] Failed to marshal input: %v", err)
 		return "", fmt.Errorf("failed to marshal input: %w", err)
 	}
+	log.Printf("[Claude MCP] Input JSON: %s", string(inputJSON))
 	
 	var createReq struct {
 		AppID   string `json:"appId"`
@@ -752,28 +756,41 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 	}
 	
 	if err := json.Unmarshal(inputJSON, &createReq); err != nil {
+		log.Printf("[Claude MCP] Failed to parse create app request: %v", err)
 		return "", fmt.Errorf("failed to parse create app request: %w", err)
 	}
 	
+	log.Printf("[Claude MCP] Parsed request - AppID: %s, Version: %s, Runtime: %s, Tools: %d, Dependencies: %d", 
+		createReq.AppID, createReq.Version, createReq.Runtime, len(createReq.Tools), len(createReq.Dependencies))
+	
 	// Validate required fields
 	if createReq.AppID == "" {
+		log.Printf("[Claude MCP] Validation failed: appId is empty")
 		return "", fmt.Errorf("appId is required")
 	}
 	if createReq.Version == "" {
+		log.Printf("[Claude MCP] Validation failed: version is empty")
 		return "", fmt.Errorf("version is required")
 	}
 	if createReq.Runtime != "wasm" {
+		log.Printf("[Claude MCP] Validation failed: runtime is '%s', expected 'wasm'", createReq.Runtime)
 		return "", fmt.Errorf("runtime must be 'wasm'")
 	}
 	if createReq.AppSrc == "" {
+		log.Printf("[Claude MCP] Validation failed: appSrc is empty")
 		return "", fmt.Errorf("appSrc is required")
 	}
 	if len(createReq.Tools) == 0 {
+		log.Printf("[Claude MCP] Validation failed: no tools provided")
 		return "", fmt.Errorf("at least one tool is required")
 	}
 	
+	log.Printf("[Claude MCP] All validations passed, checking appCreator dependency")
+	
 	// Use dependency injection to create the app
 	if appCreator != nil {
+		log.Printf("[Claude MCP] appCreator is available, proceeding with app creation")
+		
 		// Convert tools to interface{} slice
 		tools := make([]interface{}, len(createReq.Tools))
 		for i, tool := range createReq.Tools {
@@ -783,9 +800,18 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 			}
 		}
 		
-		return appCreator.CreateApp(createReq.AppID, createReq.Version, createReq.Runtime, tools, createReq.AppSrc, createReq.Dependencies)
+		log.Printf("[Claude MCP] Calling appCreator.CreateApp with %d tools", len(tools))
+		result, err := appCreator.CreateApp(createReq.AppID, createReq.Version, createReq.Runtime, tools, createReq.AppSrc, createReq.Dependencies)
+		if err != nil {
+			log.Printf("[Claude MCP] appCreator.CreateApp failed: %v", err)
+			return "", fmt.Errorf("app creation failed: %w", err)
+		}
+		
+		log.Printf("[Claude MCP] App creation successful: %s", result)
+		return result, nil
 	}
 	
+	log.Printf("[Claude MCP] appCreator is nil - dependency injection not properly configured")
 	return fmt.Sprintf("App creation request received for %s (version %s)", createReq.AppID, createReq.Version), nil
 }
 
