@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
 )
@@ -56,10 +57,11 @@ func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr,
 		return -1 // Claude service not initialized
 	}
 
-	// Generate context ID for this WASM app
-	contextID := "wasm:" + appID
+	// Generate a unique context ID for this specific WASM query
+	// Don't reuse the main conversation context to avoid tool_use/tool_result conflicts
+	contextID := fmt.Sprintf("wasm:%s:%d", appID, time.Now().UnixNano())
 
-	// Send message to Claude with app-specific context
+	// Send message to Claude with a fresh context for this WASM app query
 	response, err := claudeService.SendMessageWithContext(message, contextID)
 	if err != nil {
 		log.Printf("[WASM Claude] Claude API error: %v", err)
@@ -381,12 +383,27 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 	}
 
 	store := wasmtime.NewStore(wr.engine)
+	
 	module, err := wasmtime.NewModule(wr.engine, wasmBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to compile WASM module: %v", err)
 	}
 
 	linker := wasmtime.NewLinker(wr.engine)
+	
+	// Define memory with larger limits - 512 pages (32MB) instead of default ~24 pages (1.5MB)
+	memoryType := wasmtime.NewMemoryType(1, true, 512) // min=1 page, max=512 pages (32MB)
+	memory, err := wasmtime.NewMemory(store, memoryType)
+	if err != nil {
+		return "", fmt.Errorf("failed to create custom memory: %v", err)
+	}
+	err = linker.Define("env", "memory", memory)
+	if err != nil {
+		log.Printf("[WASM Memory] Warning: failed to define custom memory, module may use its own: %v", err)
+		// Don't return error, let module use its own memory
+	} else {
+		log.Printf("[WASM Memory] Successfully defined custom memory with 512 pages (32MB)")
+	}
 
 	// Setup all host functions with app ID for context isolation
 	wr.setupHostFunctions(linker, store, appID)
@@ -425,8 +442,8 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 	}
 	inputPtr := inputPtrResult.(int32)
 
-	memory := instance.GetExport(store, "memory").Memory()
-	data := memory.UnsafeData(store)
+	moduleMemory := instance.GetExport(store, "memory").Memory()
+	data := moduleMemory.UnsafeData(store)
 	copy(data[inputPtr:inputPtr+int32(inputLen)], []byte(inputStr))
 
 	// Execute
@@ -444,6 +461,21 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 		return "", fmt.Errorf("failed to get result pointer: %v", err)
 	}
 	resultPtr := resultPtrResult.(int32)
+
+	// Check memory bounds and log details
+	memorySize := moduleMemory.DataSize(store)
+	log.Printf("[WASM Memory] Result pointer: %d, length: %d, memory size: %d", resultPtr, resultLen, memorySize)
+	
+	if uint64(resultPtr) >= uint64(memorySize) || uint64(resultPtr+resultLen) > uint64(memorySize) {
+		deallocateFunc.Call(store, inputPtr, inputLen)
+		return "", fmt.Errorf("result pointer out of bounds: ptr=%d, len=%d, memory size=%d", resultPtr, resultLen, memorySize)
+	}
+
+	// Additional safety check for negative values
+	if resultPtr < 0 || resultLen < 0 {
+		deallocateFunc.Call(store, inputPtr, inputLen)
+		return "", fmt.Errorf("invalid result pointer or length: ptr=%d, len=%d", resultPtr, resultLen)
+	}
 
 	resultBytes := make([]byte, resultLen)
 	copy(resultBytes, data[resultPtr:resultPtr+resultLen])

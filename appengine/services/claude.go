@@ -29,8 +29,8 @@ type ClaudeConfig struct {
 // --- Claude API structures ---
 
 type ClaudeMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role    string      `json:"role"`
+	Content interface{} `json:"content"` // Can be string or array of content blocks
 }
 
 type ClaudeTool struct {
@@ -309,14 +309,29 @@ func (cs *ClaudeService) SendMessage(message string) (string, error) {
 
 func (cs *ClaudeService) SendMessageWithContext(message string, contextID string) (string, error) {
 	// Get or create context
-	context := cs.contextManager.GetOrCreateContext(contextID)
+	_ = cs.contextManager.GetOrCreateContext(contextID)
 	
 	// Add the new user message to context
 	userMessage := ClaudeMessage{
 		Role:    "user",
 		Content: message,
 	}
-	context = cs.contextManager.AddMessage(contextID, userMessage)
+	cs.contextManager.AddMessage(contextID, userMessage)
+	
+	// Call Claude API with context
+	return cs.callClaudeWithContext(contextID)
+}
+
+func (cs *ClaudeService) callClaudeWithContext(contextID string) (string, error) {
+	return cs.callClaudeWithContextInternal(contextID, 0)
+}
+
+func (cs *ClaudeService) callClaudeWithContextInternal(contextID string, depth int) (string, error) {
+	// Get context
+	context, exists := cs.contextManager.GetContext(contextID)
+	if !exists {
+		return "", fmt.Errorf("context not found: %s", contextID)
+	}
 	
 	// Build the request with full context
 	request := ClaudeRequest{
@@ -360,22 +375,46 @@ func (cs *ClaudeService) SendMessageWithContext(message string, contextID string
 		return "", fmt.Errorf("no content in Claude response")
 	}
 
-	// Extract response text
+	// Build assistant message content (may include both text and tool use)
+	var assistantContent []interface{}
 	var responseText string
+	var hasToolUse bool
+	
 	for _, content := range claudeResp.Content {
 		if content.Type == "text" {
 			responseText = content.Text
-			break
+			assistantContent = append(assistantContent, map[string]interface{}{
+				"type": "text",
+				"text": content.Text,
+			})
+		} else if content.Type == "tool_use" {
+			hasToolUse = true
+			assistantContent = append(assistantContent, map[string]interface{}{
+				"type":  "tool_use",
+				"id":    content.ID,
+				"name":  content.Name,
+				"input": content.Input,
+			})
 		}
 	}
 	
-	// Add assistant's response to context
-	if responseText != "" {
-		assistantMessage := ClaudeMessage{
-			Role:    "assistant",
-			Content: responseText,
+	// Add assistant's response to context (including tool use)
+	if len(assistantContent) > 0 {
+		// Store as content array for tool use, string for plain text
+		var messageContent interface{}
+		if hasToolUse {
+			messageContent = assistantContent
+		} else if responseText != "" {
+			messageContent = responseText
 		}
-		cs.contextManager.AddMessage(contextID, assistantMessage)
+		
+		if messageContent != nil {
+			assistantMessage := ClaudeMessage{
+				Role:    "assistant",
+				Content: messageContent,
+			}
+			cs.contextManager.AddMessage(contextID, assistantMessage)
+		}
 		
 		// Update token count if available
 		if claudeResp.Usage.InputTokens > 0 || claudeResp.Usage.OutputTokens > 0 {
@@ -383,9 +422,9 @@ func (cs *ClaudeService) SendMessageWithContext(message string, contextID string
 		}
 	}
 
-	// Check if Claude wants to use tools
-	if claudeResp.StopReason == "tool_use" {
-		return cs.handleToolUse(claudeResp, message)
+	// If Claude wants to use tools, handle them and continue conversation
+	if hasToolUse || claudeResp.StopReason == "tool_use" {
+		return cs.handleToolUseWithLoopInternal(claudeResp, contextID, depth)
 	}
 
 	return responseText, nil
@@ -551,25 +590,75 @@ func (cs *ClaudeService) loadMCPTools() {
 	}
 }
 
-func (cs *ClaudeService) handleToolUse(response ClaudeResponse, originalMessage string) (string, error) {
-	var results []string
+func (cs *ClaudeService) handleToolUseWithLoop(response ClaudeResponse, contextID string) (string, error) {
+	return cs.handleToolUseWithLoopInternal(response, contextID, 0)
+}
+
+func (cs *ClaudeService) handleToolUseWithLoopInternal(response ClaudeResponse, contextID string, depth int) (string, error) {
+	// Prevent infinite loops - limit recursion depth
+	const maxDepth = 10
+	if depth >= maxDepth {
+		log.Printf("[Claude MCP] Warning: Max tool use depth reached (%d), stopping recursion", maxDepth)
+		// Return tool results as final response to avoid infinite loop
+		var results []string
+		for _, content := range response.Content {
+			if content.Type == "tool_use" {
+				result, err := cs.executeMCPTool(content.Name, content.Input)
+				if err != nil {
+					results = append(results, fmt.Sprintf("Tool %s failed: %v", content.Name, err))
+				} else {
+					results = append(results, fmt.Sprintf("Tool %s result: %s", content.Name, result))
+				}
+			}
+		}
+		return strings.Join(results, "\n\n"), nil
+	}
 	
+	var toolResults []map[string]interface{}
+	
+	log.Printf("[Claude MCP] Handling tool use response with %d content items (depth: %d)", len(response.Content), depth)
+	
+	// Execute each tool and collect results
 	for _, content := range response.Content {
 		if content.Type == "tool_use" {
+			log.Printf("[Claude MCP] Executing tool: %s", content.Name)
 			result, err := cs.executeMCPTool(content.Name, content.Input)
-			if err != nil {
-				results = append(results, fmt.Sprintf("Tool %s failed: %v", content.Name, err))
-			} else {
-				results = append(results, fmt.Sprintf("Tool %s result: %s", content.Name, result))
+			
+			// Create tool result message
+			toolResult := map[string]interface{}{
+				"type":        "tool_result",
+				"tool_use_id": content.ID,
 			}
+			
+			if err != nil {
+				toolResult["is_error"] = true
+				toolResult["content"] = fmt.Sprintf("Tool execution failed: %v", err)
+				log.Printf("[Claude MCP] Tool %s failed: %v", content.Name, err)
+			} else {
+				toolResult["content"] = result
+				log.Printf("[Claude MCP] Tool %s succeeded, result length: %d", content.Name, len(result))
+			}
+			
+			toolResults = append(toolResults, toolResult)
 		}
 	}
 	
-	if len(results) == 0 {
+	if len(toolResults) == 0 {
 		return "", fmt.Errorf("no tool use content found")
 	}
 	
-	return strings.Join(results, "\n\n"), nil
+	log.Printf("[Claude MCP] Sending %d tool results back to Claude", len(toolResults))
+	
+	// Add tool results to context as a user message with content array
+	toolResultMessage := ClaudeMessage{
+		Role:    "user",
+		Content: toolResults,
+	}
+	cs.contextManager.AddMessage(contextID, toolResultMessage)
+	
+	// Call Claude again with the tool results to get the final response
+	log.Printf("[Claude MCP] Calling Claude again with tool results...")
+	return cs.callClaudeWithContextInternal(contextID, depth+1)
 }
 
 func (cs *ClaudeService) executeMCPTool(toolName string, input interface{}) (string, error) {

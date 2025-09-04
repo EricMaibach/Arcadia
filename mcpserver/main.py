@@ -110,8 +110,6 @@ use serde_json::json;
 use regex::Regex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-static COUNTER: AtomicU64 = AtomicU64::new(1000);
-
 struct TextAnalyzerApp {
     word_pattern: Regex,
     sentence_pattern: Regex,
@@ -139,17 +137,6 @@ impl ArcadiaApp for TextAnalyzerApp {
             analysis_summary TEXT,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )")?;
-        
-        // Ask Claude to help set up the app
-        let welcome = claude.ask("Welcome! This is a text analysis app. Can you give me a brief description of what text analysis is useful for?")?;
-        
-        // Store the welcome message as an initial analysis using counter-based ID
-        let init_id = format!("init_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
-        db.execute(&format!(
-            "INSERT INTO text_analyses (id, user_id, text_content, word_count, sentence_count, char_count, analysis_summary) 
-             VALUES ('{}', 'system', 'App initialized', 2, 1, 14, '{}')",
-            init_id, welcome.replace("'", "''")
-        ))?;
         
         Ok(())
     }
@@ -184,8 +171,12 @@ impl ArcadiaApp for TextAnalyzerApp {
                 
                 let analysis_summary = claude.ask(&claude_prompt)?;
                 
-                // Generate unique ID using counter and store in database
-                let analysis_id = format!("analysis_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+                // Generate unique ID based on text hash to avoid collisions
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                format!("{}{}{}", user_id, text, word_count).hash(&mut hasher);
+                let analysis_id = format!("analysis_{:x}", hasher.finish());
                 
                 db.execute(&format!(
                     "INSERT INTO text_analyses (id, user_id, text_content, word_count, sentence_count, char_count, analysis_summary) 
@@ -273,7 +264,12 @@ impl ArcadiaApp for TextAnalyzerApp {
                 
                 let insights = claude.ask(&claude_prompt)?;
                 
-                let report_id = format!("report_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+                // Generate unique report ID using statistics hash
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                format!("{:?}{}", stats, limit).hash(&mut hasher);
+                let report_id = format!("report_{:x}", hasher.finish());
                 
                 Ok(json!({
                     "report_id": report_id,
@@ -304,6 +300,7 @@ You can also explicitly specify dependencies in the request:
 ```json
 "dependencies": {
     "regex": "1.9",            // Regular expressions
+    "chrono": "0.4",           // Date and time handling
     "rand": "0.8",             // Random number generation
     "base64": "0.21"           // Base64 encoding/decoding
 }
@@ -315,11 +312,13 @@ Common dependencies are auto-detected when you use them:
 - Dependencies are configured for server-side WASM compatibility
 - User-provided dependencies override auto-detected versions
 
-NOTE: For unique ID generation in server-side WASM, use atomic counters instead of timestamps:
+NOTE: For unique ID generation in WASM apps, use content hashing for uniqueness across module instances:
 ```rust
-use std::sync::atomic::{AtomicU64, Ordering};
-static COUNTER: AtomicU64 = AtomicU64::new(1000);
-let unique_id = format!("id_{}", COUNTER.fetch_add(1, Ordering::SeqCst));
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
+let mut hasher = DefaultHasher::new();
+format!("{}{}", user_data, content).hash(&mut hasher);
+let unique_id = format!("id_{:x}", hasher.finish());
 ```
 
 INPUT FORMAT SPECIFICATIONS:
