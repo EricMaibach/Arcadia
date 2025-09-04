@@ -128,10 +128,13 @@ func NewClaudeService(config ClaudeConfig) *ClaudeService {
 		config.ContextTTLMinutes = 60 // Default to 1 hour TTL
 	}
 	
+	httpTimeout := time.Duration(config.TimeoutSeconds) * time.Second
+	log.Printf("[Claude Service] HTTP client timeout set to: %v", httpTimeout)
+	
 	service := &ClaudeService{
 		config: config,
 		httpClient: &http.Client{
-			Timeout: time.Duration(config.TimeoutSeconds) * time.Second,
+			Timeout: httpTimeout,
 		},
 		mcpTools: []ClaudeTool{},
 		contextManager: &ContextManager{
@@ -355,6 +358,7 @@ func (cs *ClaudeService) callClaudeWithContextInternal(contextID string, depth i
 	req.Header.Set("x-api-key", cs.config.APIKey)
 	req.Header.Set("anthropic-version", "2023-06-01")
 
+	log.Printf("[Claude Service] Making request with timeout: %v", cs.httpClient.Timeout)
 	resp, err := cs.httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to send request: %w", err)
