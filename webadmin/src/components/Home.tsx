@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { appApi, App } from '../services/api';
 import ArcadiaIcon from '../ArcadiaIcon.jpg';
+import ReactMarkdown from 'react-markdown';
 
 interface ChatMessage {
   id: string;
@@ -200,7 +201,11 @@ const Home: React.FC = () => {
                   className={`chat-message ${message.isUser ? 'user' : 'claude'}`}
                 >
                   <div className="message-content">
-                    {message.content}
+                    {message.isUser ? (
+                      message.content
+                    ) : (
+                      <ReactMarkdown>{message.content}</ReactMarkdown>
+                    )}
                   </div>
                   <div className="message-timestamp">
                     {message.timestamp.toLocaleTimeString()}

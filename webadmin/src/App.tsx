@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import './App.css';
 import Home from './components/Home';
 import AppPage from './components/AppPage';
 import Admin from './components/Admin';
-import { appApi, App as AppType } from './services/api';
-import ArcadiaIcon from './ArcadiaIcon.jpg';
 
 function App() {
   return (
