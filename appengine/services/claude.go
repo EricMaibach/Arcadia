@@ -44,6 +44,7 @@ type ClaudeRequest struct {
 	MaxTokens int             `json:"max_tokens"`
 	Messages  []ClaudeMessage `json:"messages"`
 	Tools     []ClaudeTool    `json:"tools,omitempty"`
+	System    string          `json:"system,omitempty"`
 }
 
 type ClaudeContent struct {
@@ -336,12 +337,18 @@ func (cs *ClaudeService) callClaudeWithContextInternal(contextID string, depth i
 		return "", fmt.Errorf("context not found: %s", contextID)
 	}
 	
-	// Build the request with full context
+	// Build the request with full context and current date/time
+	now := time.Now()
+	systemPrompt := fmt.Sprintf("Current date and time: %s (UTC: %s). You are Claude, an AI assistant integrated into the Arcadia App Engine system.", 
+		now.Format("Monday, January 2, 2006 at 3:04 PM MST"), 
+		now.UTC().Format("2006-01-02 15:04:05 UTC"))
+	
 	request := ClaudeRequest{
 		Model:     cs.config.Model,
 		MaxTokens: cs.config.MaxTokens,
 		Messages:  context.Messages,
 		Tools:     cs.mcpTools,
+		System:    systemPrompt,
 	}
 
 	jsonData, err := json.Marshal(request)
