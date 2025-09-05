@@ -330,12 +330,13 @@ func TestGlobalRegistryManager(t *testing.T) {
 }
 
 func TestAppCreator_CreateApp(t *testing.T) {
-	executeFunc := func(appID, toolName string, input json.RawMessage) (string, error) {
-		return "test", nil
-	}
+	// Create a mock app creation service that doesn't actually compile
+	mockAppCreationService := &MockAppCreationService{}
 	
-	manager := NewRegistryManager(executeFunc)
-	creator := manager.GetAppCreator().(*appCreatorImpl)
+	creator := &appCreatorImpl{
+		registryManager:    nil, // Not needed for this test
+		appCreationService: mockAppCreationService,
+	}
 	
 	tools := []interface{}{
 		map[string]interface{}{
@@ -354,7 +355,17 @@ func TestAppCreator_CreateApp(t *testing.T) {
 		t.Error("CreateApp result doesn't contain app ID")
 	}
 	
-	if !strings.Contains(result, "1 tools") {
-		t.Error("CreateApp result doesn't mention tools")
+	if !strings.Contains(result, "1.0.0") {
+		t.Error("CreateApp result doesn't contain version")
 	}
 }
+
+// Mock app creation service for testing
+type MockAppCreationService struct{}
+
+func (m *MockAppCreationService) CreateApp(req AppCreationRequest, sessionID string) (string, error) {
+	return fmt.Sprintf("App %s version %s created successfully at mock/path/%s.wasm", req.AppID, req.Version, req.Version), nil
+}
+
+// Ensure MockAppCreationService implements the interface
+var _ AppCreationServiceInterface = (*MockAppCreationService)(nil)

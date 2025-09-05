@@ -74,7 +74,7 @@ async def handle_list_tools() -> List[types.Tool]:
         types.Tool(
             name="create_app",
             title="Create App",
-            description="""Submit a Rust trait implementation to compile and register a new WASM application.
+            description="""Submit a Rust trait implementation to compile and register a new server side WASM application.  Since it is server side WASM the Rust code does not have access to system functions, so you can't use libraries like chrono that need that, or make system calls like SystemTime.  Write coded that is server side WASM compatible.
 
 Implement the ArcadiaApp trait and the system automatically handles all WASM boilerplate, memory management, and database integration.
 
@@ -294,14 +294,12 @@ pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync> {
 ```
 
 DEPENDENCIES:
-The system automatically detects common Rust crate usage from 'use' statements.
+The system automatically detects common Rust crate usage from 'use' statements.  The code will run as a server side WASM package.  So do not use any packages that cannot run as server side WASM with not system access.
 You can also explicitly specify dependencies in the request:
 
 ```json
 "dependencies": {
     "regex": "1.9",            // Regular expressions
-    "chrono": "0.4",           // Date and time handling
-    "rand": "0.8",             // Random number generation
     "base64": "0.21"           // Base64 encoding/decoding
 }
 ```

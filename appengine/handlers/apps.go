@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,10 +15,11 @@ import (
 
 // Dependencies that will be injected
 var (
-	registryManager  *services.RegistryManager
-	wasmEngineRef    *wasmtime.Engine
-	logAppSubmission func(format string, args ...interface{})
-	executeAppTool   func(appID, toolName string, input json.RawMessage) (string, error)
+	registryManager    *services.RegistryManager
+	wasmEngineRef      *wasmtime.Engine
+	logAppSubmission   func(format string, args ...interface{})
+	executeAppTool     func(appID, toolName string, input json.RawMessage) (string, error)
+	appCreationService *services.AppCreationService
 )
 
 // Types needed for handlers
@@ -68,6 +68,7 @@ func SetAppDependencies(
 	wasmEngineRef = engine
 	logAppSubmission = logFunc
 	executeAppTool = execFunc
+	appCreationService = services.NewAppCreationService(regManager, logFunc)
 }
 
 // ListAppsHandler handles GET /list_apps
@@ -187,7 +188,7 @@ func RunToolHandler(w http.ResponseWriter, r *http.Request) {
 
 // SubmitAppSrcHandler handles POST /submit_app_src
 func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
-	sessionID := fmt.Sprintf("session_%d", time.Now().UnixNano())
+	sessionID := fmt.Sprintf("rest_api_%d", time.Now().UnixNano())
 	clientIP := r.RemoteAddr
 	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
 		clientIP = forwarded
@@ -200,12 +201,11 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	logAppSubmission("[%s] User-Agent: %s", sessionID, r.Header.Get("User-Agent"))
 	logAppSubmission("[%s] Content-Type: %s", sessionID, r.Header.Get("Content-Type"))
 
-	// Step 1: Parse and validate request
-	logAppSubmission("[%s] STEP 1: Parsing request body", sessionID)
+	// Parse request
+	logAppSubmission("[%s] Parsing request body", sessionID)
 	var req services.AppRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		logAppSubmission("[%s] ERROR: Failed to decode request body: %v", sessionID, err)
-		logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid JSON", sessionID)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -226,144 +226,43 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	}, "", "  ")
 	logAppSubmission("[%s] Parsed request: %s", sessionID, string(reqJSON))
 
-	// Step 2: Validate required fields
-	logAppSubmission("[%s] STEP 2: Validating request fields", sessionID)
-	if strings.TrimSpace(req.AppSrc) == "" {
-		logAppSubmission("[%s] ERROR: AppSrc field is empty or whitespace only", sessionID)
-		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing app source", sessionID)
-		http.Error(w, "trait implementation is required", http.StatusBadRequest)
-		return
+	// Convert to standardized request
+	creationReq := services.AppCreationRequest{
+		AppID:        req.AppID,
+		Version:      req.Version,
+		Runtime:      req.Runtime,
+		Tools:        req.Tools,
+		AppSrc:       req.AppSrc,
+		Dependencies: req.Dependencies,
 	}
 
-	if req.AppID == "" {
-		logAppSubmission("[%s] ERROR: AppID field is empty", sessionID)
-		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing AppID", sessionID)
-		http.Error(w, "appId is required", http.StatusBadRequest)
-		return
-	}
-
-	if req.Version == "" {
-		logAppSubmission("[%s] ERROR: Version field is empty", sessionID)
-		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing Version", sessionID)
-		http.Error(w, "version is required", http.StatusBadRequest)
-		return
-	}
-
-	if len(req.Tools) == 0 {
-		logAppSubmission("[%s] ERROR: Tools array is empty", sessionID)
-		logAppSubmission("[%s] RESPONSE: HTTP 400 - Missing tools", sessionID)
-		http.Error(w, "at least one tool is required", http.StatusBadRequest)
-		return
-	}
-
-	// Validate each tool has both name and input format
-	for i, tool := range req.Tools {
-		if strings.TrimSpace(tool.Name) == "" {
-			logAppSubmission("[%s] ERROR: Tool %d has empty name", sessionID, i)
-			logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid tool name", sessionID)
-			http.Error(w, fmt.Sprintf("tool %d: name is required", i), http.StatusBadRequest)
-			return
-		}
-		if strings.TrimSpace(tool.InputFormat) == "" {
-			logAppSubmission("[%s] ERROR: Tool %d (%s) has empty input format", sessionID, i, tool.Name)
-			logAppSubmission("[%s] RESPONSE: HTTP 400 - Invalid tool input format", sessionID)
-			http.Error(w, fmt.Sprintf("tool %d (%s): input format is required", i, tool.Name), http.StatusBadRequest)
-			return
-		}
-	}
-
-	logAppSubmission("[%s] All validation passed", sessionID)
-
-	// Step 3: Check for existing compiled WASM
-	logAppSubmission("[%s] STEP 3: Checking for existing compiled WASM", sessionID)
-	artifactsDir := filepath.Join("artifacts", req.AppID)
-	wasmFilename := fmt.Sprintf("%s.wasm", req.Version)
-	finalWasmPath := filepath.Join(artifactsDir, wasmFilename)
-	logAppSubmission("[%s] Checking path: %s", sessionID, finalWasmPath)
-
-	if _, err := os.Stat(finalWasmPath); err == nil {
-		logAppSubmission("[%s] ERROR: WASM file already exists at %s", sessionID, finalWasmPath)
-		logAppSubmission("[%s] RESPONSE: HTTP 409 - Conflict", sessionID)
-		http.Error(w, fmt.Sprintf("app %s version %s already compiled and exists", req.AppID, req.Version), http.StatusConflict)
-		return
-	}
-	logAppSubmission("[%s] No existing WASM found - proceeding with compilation", sessionID)
-
-	// Step 4: Prepare build directory
-	logAppSubmission("[%s] STEP 4: Setting up build directory", sessionID)
-	buildDir := filepath.Join("build", req.AppID, req.Version)
-	logAppSubmission("[%s] Build directory: %s", sessionID, buildDir)
-
-	// Clear build directory if it exists
-	if _, err := os.Stat(buildDir); err == nil {
-		logAppSubmission("[%s] Existing build directory found, removing: %s", sessionID, buildDir)
-		if err := os.RemoveAll(buildDir); err != nil {
-			logAppSubmission("[%s] ERROR: Failed to remove existing build directory: %v", sessionID, err)
-			logAppSubmission("[%s] RESPONSE: HTTP 500 - Build directory cleanup failed", sessionID)
-			http.Error(w, fmt.Sprintf("failed to clear existing build directory: %v", err), http.StatusInternalServerError)
-			return
-		}
-		logAppSubmission("[%s] Successfully removed existing build directory", sessionID)
-	}
-
-	// Create build directory
-	logAppSubmission("[%s] Creating build directory: %s", sessionID, buildDir)
-	if err := os.MkdirAll(buildDir, 0755); err != nil {
-		logAppSubmission("[%s] ERROR: Failed to create build directory: %v", sessionID, err)
-		logAppSubmission("[%s] RESPONSE: HTTP 500 - Build directory creation failed", sessionID)
-		http.Error(w, fmt.Sprintf("failed to create build directory: %v", err), http.StatusInternalServerError)
-		return
-	}
-	logAppSubmission("[%s] Build directory created successfully", sessionID)
-
-	// Step 5: Compile trait to WASM using services
-	logAppSubmission("[%s] STEP 5: Compiling Rust trait to WASM", sessionID)
-	startTime := time.Now()
-	wasmCompiler := services.NewWasmCompiler()
-	wasmPath, err := wasmCompiler.CompileTraitToWasm(req, buildDir)
+	// Use centralized app creation service
+	logAppSubmission("[%s] Using centralized app creation service", sessionID)
+	result, err := appCreationService.CreateApp(creationReq, sessionID)
 	if err != nil {
-		logAppSubmission("[%s] ERROR: Failed to compile trait to WASM: %v", sessionID, err)
-		//logAppSubmission("[%s] Cleaning up build directory: %s", sessionID, buildDir)
-		//os.RemoveAll(buildDir)
-		logAppSubmission("[%s] RESPONSE: HTTP 500 - WASM compilation failed", sessionID)
-		http.Error(w, fmt.Sprintf("failed to compile trait to WASM: %v", err), http.StatusInternalServerError)
+		logAppSubmission("[%s] ERROR: App creation failed: %v", sessionID, err)
+		
+		// Map specific errors to HTTP status codes
+		var statusCode int
+		errorMsg := err.Error()
+		
+		if strings.Contains(errorMsg, "is required") {
+			statusCode = http.StatusBadRequest
+		} else if strings.Contains(errorMsg, "already exists") {
+			statusCode = http.StatusConflict
+		} else {
+			statusCode = http.StatusInternalServerError
+		}
+		
+		http.Error(w, errorMsg, statusCode)
 		return
 	}
-	logAppSubmission("[%s] WASM compilation completed successfully in %v", sessionID, time.Since(startTime))
-	logAppSubmission("[%s] Compiled WASM path: %s", sessionID, wasmPath)
 
-	// Step 6: Register app in registry and save to file
-	logAppSubmission("[%s] STEP 6: Registering app in registry", sessionID)
-	registry := registryManager.GetRegistry()
-	registry.RegisterApp(&services.App{
-		AppID:          req.AppID,
-		Version:        req.Version,
-		Runtime:        req.Runtime,
-		Tools:          req.Tools,
-		ArtifactURI:    wasmPath,
-		SourceLanguage: "rust",
-		Files: []services.File{
-			{
-				Name:    "src/lib.rs",
-				Content: "Generated from trait implementation",
-			},
-		},
-	})
-
-	// Save registry to file for persistence
-	if err := registryManager.Save(); err != nil {
-		logAppSubmission("[%s] WARNING: Failed to save registry to file: %v", sessionID, err)
-		// Don't fail the request, app is already registered in memory
-	}
-
-	registrySize := registry.GetAppCount()
-	logAppSubmission("[%s] App registered successfully. Registry now contains %d apps", sessionID, registrySize)
-
-	// Step 7: Send success response
-	logAppSubmission("[%s] STEP 7: Sending success response", sessionID)
+	// Send success response
+	logAppSubmission("[%s] App creation successful: %s", sessionID, result)
 	response := map[string]string{
-		"status":   "app trait implementation submitted and compiled",
-		"wasmPath": wasmPath,
+		"status": "app trait implementation submitted and compiled",
+		"result": result,
 	}
 
 	w.Header().Set("Content-Type", "application/json")

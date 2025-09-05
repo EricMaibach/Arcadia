@@ -468,8 +468,281 @@ func (cs *ClaudeService) loadMCPTools() {
 			},
 		},
 		{
-			Name:        "create_app",
-			Description: "Submit a Rust trait implementation to compile and register a new WASM application",
+			Name: "create_app",
+			Description: "Submit a Rust trait implementation to compile and register a new WASM application.\n\n" +
+				"Implement the ArcadiaApp trait and the system automatically handles all WASM boilerplate, memory management, and database integration.\n\n" +
+				"REQUIRED JSON FORMAT:\n" +
+				"```json\n" +
+				"{\n" +
+				"    \"appId\": \"my-text-analyzer\",\n" +
+				"    \"version\": \"1.0.0\", \n" +
+				"    \"runtime\": \"wasm\",\n" +
+				"    \"tools\": [\n" +
+				"        {\"name\": \"analyze_text\", \"inputFormat\": \"{\\\"text\\\": \\\"string\\\", \\\"user_id\\\": \\\"string?\\\"}\"},\n" +
+				"        {\"name\": \"get_history\", \"inputFormat\": \"{\\\"user_id\\\": \\\"string\\\", \\\"limit\\\": \\\"number?\\\"}\"},\n" +
+				"        {\"name\": \"generate_report\", \"inputFormat\": \"{\\\"limit\\\": \\\"number?\\\"}\"}\n" +
+				"    ],\n" +
+				"    \"appSrc\": \"/* Your Rust code here */\",\n" +
+				"    \"dependencies\": {\n" +
+				"        \"regex\": \"1.9\"\n" +
+				"    }\n" +
+				"}\n" +
+				"```\n\n" +
+				"REQUIRED METHODS:\n" +
+				"- `fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String>` (optional)\n" +
+				"- `fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String>` (required)\n" +
+				"- `fn get_available_tools(&self) -> Vec<&'static str>` (required)\n\n" +
+				"REQUIRED FACTORY FUNCTION:\n" +
+				"- `pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync>` (required) - Factory function to create your app instance\n\n" +
+				"EXAMPLE TEXT ANALYZER APP WITH DEPENDENCIES:\n" +
+				"```rust\n" +
+				"use serde_json::json;\n" +
+				"use regex::Regex;\n" +
+				"use std::sync::atomic::{AtomicU64, Ordering};\n\n" +
+				"struct TextAnalyzerApp {\n" +
+				"    word_pattern: Regex,\n" +
+				"    sentence_pattern: Regex,\n" +
+				"}\n\n" +
+				"impl TextAnalyzerApp {\n" +
+				"    fn new() -> Self {\n" +
+				"        Self { \n" +
+				"            word_pattern: Regex::new(r\"\\\\b\\\\w+\\\\b\").unwrap(),\n" +
+				"            sentence_pattern: Regex::new(r\"[.!?]+\").unwrap(),\n" +
+				"        }\n" +
+				"    }\n" +
+				"}\n\n" +
+				"impl ArcadiaApp for TextAnalyzerApp {\n" +
+				"    fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {\n" +
+				"        // Create table for storing text analysis results\n" +
+				"        db.execute(\"CREATE TABLE IF NOT EXISTS text_analyses (\n" +
+				"            id TEXT PRIMARY KEY,\n" +
+				"            user_id TEXT,\n" +
+				"            text_content TEXT NOT NULL,\n" +
+				"            word_count INTEGER,\n" +
+				"            sentence_count INTEGER,\n" +
+				"            char_count INTEGER,\n" +
+				"            analysis_summary TEXT,\n" +
+				"            created_at DATETIME DEFAULT CURRENT_TIMESTAMP\n" +
+				"        )\")?;\n" +
+				"        \n" +
+				"        Ok(())\n" +
+				"    }\n" +
+				"    \n" +
+				"    fn handle_tool(&mut self, tool_name: &str, data: Option<serde_json::Value>, db: &DatabaseConnection, claude: &ClaudeService) -> Result<serde_json::Value, String> {\n" +
+				"        match tool_name {\n" +
+				"            \"analyze_text\" => {\n" +
+				"                let text = data\n" +
+				"                    .as_ref()\n" +
+				"                    .and_then(|d| d.get(\"text\"))\n" +
+				"                    .and_then(|t| t.as_str())\n" +
+				"                    .ok_or(\"Text is required for analysis\")?;\n" +
+				"                \n" +
+				"                let user_id = data\n" +
+				"                    .as_ref()\n" +
+				"                    .and_then(|d| d.get(\"user_id\"))\n" +
+				"                    .and_then(|u| u.as_str())\n" +
+				"                    .unwrap_or(\"anonymous\");\n" +
+				"                \n" +
+				"                // Use regex to count words and sentences\n" +
+				"                let word_count = self.word_pattern.find_iter(text).count() as i32;\n" +
+				"                let sentence_count = self.sentence_pattern.find_iter(text).count() as i32;\n" +
+				"                let char_count = text.chars().count() as i32;\n" +
+				"                \n" +
+				"                // Ask Claude to analyze the text content and provide insights\n" +
+				"                let claude_prompt = format!(\n" +
+				"                    \"Please analyze this text and provide insights about its style, tone, and content. \n" +
+				"                     Text: \\\"{}\\\"\n" +
+				"                     Word count: {}, Sentence count: {}, Character count: {}\",\n" +
+				"                    text, word_count, sentence_count, char_count\n" +
+				"                );\n" +
+				"                \n" +
+				"                let analysis_summary = claude.ask(&claude_prompt)?;\n" +
+				"                \n" +
+				"                // Generate unique ID based on text hash to avoid collisions\n" +
+				"                use std::collections::hash_map::DefaultHasher;\n" +
+				"                use std::hash::{Hash, Hasher};\n" +
+				"                let mut hasher = DefaultHasher::new();\n" +
+				"                format!(\"{}{}{}\", user_id, text, word_count).hash(&mut hasher);\n" +
+				"                let analysis_id = format!(\"analysis_{:x}\", hasher.finish());\n" +
+				"                \n" +
+				"                db.execute(&format!(\n" +
+				"                    \"INSERT INTO text_analyses (id, user_id, text_content, word_count, sentence_count, char_count, analysis_summary) \n" +
+				"                     VALUES ('{}', '{}', '{}', {}, {}, {}, '{}')\",\n" +
+				"                    analysis_id, \n" +
+				"                    user_id, \n" +
+				"                    text.replace(\"'\", \"''\"),\n" +
+				"                    word_count,\n" +
+				"                    sentence_count, \n" +
+				"                    char_count,\n" +
+				"                    analysis_summary.replace(\"'\", \"''\")\n" +
+				"                ))?;\n" +
+				"                \n" +
+				"                Ok(json!({\n" +
+				"                    \"id\": analysis_id,\n" +
+				"                    \"user_id\": user_id,\n" +
+				"                    \"word_count\": word_count,\n" +
+				"                    \"sentence_count\": sentence_count,\n" +
+				"                    \"character_count\": char_count,\n" +
+				"                    \"analysis_summary\": analysis_summary,\n" +
+				"                    \"created\": \"stored in database with CURRENT_TIMESTAMP\"\n" +
+				"                }))\n" +
+				"            },\n" +
+				"            \"get_history\" => {\n" +
+				"                let user_id = data\n" +
+				"                    .as_ref()\n" +
+				"                    .and_then(|d| d.get(\"user_id\"))\n" +
+				"                    .and_then(|u| u.as_str())\n" +
+				"                    .ok_or(\"User ID is required\")?;\n" +
+				"                \n" +
+				"                let limit = data\n" +
+				"                    .as_ref()\n" +
+				"                    .and_then(|d| d.get(\"limit\"))\n" +
+				"                    .and_then(|l| l.as_i64())\n" +
+				"                    .unwrap_or(10) as i32;\n" +
+				"                \n" +
+				"                let query = format!(\n" +
+				"                    \"SELECT id, text_content, word_count, sentence_count, char_count, analysis_summary, created_at\n" +
+				"                     FROM text_analyses \n" +
+				"                     WHERE user_id = '{}' \n" +
+				"                     ORDER BY created_at DESC \n" +
+				"                     LIMIT {}\",\n" +
+				"                    user_id, limit\n" +
+				"                );\n" +
+				"                \n" +
+				"                let results = db.query(&query)?;\n" +
+				"                \n" +
+				"                Ok(json!({\n" +
+				"                    \"user_id\": user_id,\n" +
+				"                    \"history\": results,\n" +
+				"                    \"count\": results.len()\n" +
+				"                }))\n" +
+				"            },\n" +
+				"            \"generate_report\" => {\n" +
+				"                let limit = data\n" +
+				"                    .as_ref()\n" +
+				"                    .and_then(|d| d.get(\"limit\"))\n" +
+				"                    .and_then(|d| d.as_i64())\n" +
+				"                    .unwrap_or(50) as i32;\n" +
+				"                \n" +
+				"                let query = format!(\n" +
+				"                    \"SELECT user_id, COUNT(*) as analysis_count, \n" +
+				"                            AVG(word_count) as avg_words, \n" +
+				"                            AVG(sentence_count) as avg_sentences,\n" +
+				"                            AVG(char_count) as avg_chars,\n" +
+				"                            MIN(created_at) as first_analysis,\n" +
+				"                            MAX(created_at) as last_analysis\n" +
+				"                     FROM text_analyses \n" +
+				"                     WHERE user_id != 'system'\n" +
+				"                     GROUP BY user_id\n" +
+				"                     ORDER BY analysis_count DESC\n" +
+				"                     LIMIT {}\",\n" +
+				"                    limit\n" +
+				"                );\n" +
+				"                \n" +
+				"                let stats = db.query(&query)?;\n" +
+				"                \n" +
+				"                // Use Claude to generate insights from the data\n" +
+				"                let claude_prompt = format!(\n" +
+				"                    \"Generate a summary report for text analysis usage. \n" +
+				"                     Here's the data: {:?}\n" +
+				"                     Please provide insights about user engagement, text complexity trends, and recommendations.\",\n" +
+				"                    stats\n" +
+				"                );\n" +
+				"                \n" +
+				"                let insights = claude.ask(&claude_prompt)?;\n" +
+				"                \n" +
+				"                // Generate unique report ID using statistics hash\n" +
+				"                use std::collections::hash_map::DefaultHasher;\n" +
+				"                use std::hash::{Hash, Hasher};\n" +
+				"                let mut hasher = DefaultHasher::new();\n" +
+				"                format!(\"{:?}{}\", stats, limit).hash(&mut hasher);\n" +
+				"                let report_id = format!(\"report_{:x}\", hasher.finish());\n" +
+				"                \n" +
+				"                Ok(json!({\n" +
+				"                    \"report_id\": report_id,\n" +
+				"                    \"statistics\": stats,\n" +
+				"                    \"insights\": insights,\n" +
+				"                    \"total_users\": stats.len(),\n" +
+				"                    \"query_limit\": limit\n" +
+				"                }))\n" +
+				"            },\n" +
+				"            _ => Err(format!(\"Unknown tool: {}\", tool_name))\n" +
+				"        }\n" +
+				"    }\n" +
+				"    \n" +
+				"    fn get_available_tools(&self) -> Vec<&'static str> {\n" +
+				"        vec![\"analyze_text\", \"get_history\", \"generate_report\"]\n" +
+				"    }\n" +
+				"}\n\n" +
+				"pub fn create_app() -> Box<dyn ArcadiaApp + Send + Sync> {\n" +
+				"    Box::new(TextAnalyzerApp::new())\n" +
+				"}\n" +
+				"```\n\n" +
+				"DEPENDENCIES:\n" +
+				"The system automatically detects common Rust crate usage from 'use' statements.\n" +
+				"You can also explicitly specify dependencies in the request:\n\n" +
+				"```json\n" +
+				"\"dependencies\": {\n" +
+				"    \"regex\": \"1.9\",            // Regular expressions\n" +
+				"    \"chrono\": \"0.4\",           // Date and time handling\n" +
+				"    \"rand\": \"0.8\",             // Random number generation\n" +
+				"    \"base64\": \"0.21\"           // Base64 encoding/decoding\n" +
+				"}\n" +
+				"```\n\n" +
+				"Common dependencies are auto-detected when you use them:\n" +
+				"- regex, rand, base64, hex, sha2, md5, bcrypt\n" +
+				"- serde and serde_json are always included\n" +
+				"- Dependencies are configured for server-side WASM compatibility\n" +
+				"- User-provided dependencies override auto-detected versions\n\n" +
+				"NOTE: For unique ID generation in WASM apps, use content hashing for uniqueness across module instances:\n" +
+				"```rust\n" +
+				"use std::collections::hash_map::DefaultHasher;\n" +
+				"use std::hash::{Hash, Hasher};\n" +
+				"let mut hasher = DefaultHasher::new();\n" +
+				"format!(\"{}{}\", user_data, content).hash(&mut hasher);\n" +
+				"let unique_id = format!(\"id_{:x}\", hasher.finish());\n" +
+				"```\n\n" +
+				"INPUT FORMAT SPECIFICATIONS:\n" +
+				"The inputFormat field should describe the exact JSON structure each tool expects as input:\n\n" +
+				"EXAMPLES:\n" +
+				"- `\"{}\"` - Tool expects an empty JSON object (no parameters)\n" +
+				"- `\"{\\\"name\\\": \\\"string\\\"}\"` - Tool expects JSON with a name field\n" +
+				"- `\"{\\\"amount\\\": \\\"number\\\", \\\"currency\\\": \\\"string\\\"}\"` - Tool expects amount and currency fields\n" +
+				"- `\"{\\\"items\\\": [\\\"string\\\"], \\\"limit\\\": \\\"number?\\\"}\"` - Tool expects array of items, optional limit\n" +
+				"- `\"{\\\"query\\\": \\\"string\\\", \\\"filters\\\": {\\\"status\\\": \\\"string?\\\"}}\"` - Tool expects nested objects\n\n" +
+				"FORMAT GUIDELINES:\n" +
+				"- Use actual JSON structure examples, not just \"json\"\n" +
+				"- Mark optional fields with \"?\" (e.g., \"field_name?\")\n" +
+				"- Use descriptive type names: \"string\", \"number\", \"boolean\", \"array\", \"object\"\n" +
+				"- Show nested structures when needed\n" +
+				"- Keep it concise but complete\n\n" +
+				"DATABASE ACCESS:\n" +
+				"The DatabaseConnection provides these methods:\n" +
+				"- `query(&self, sql: &str) -> Result<Vec<serde_json::Value>, String>` - Execute SELECT queries\n" +
+				"- `execute(&self, sql: &str) -> Result<i32, String>` - Execute INSERT/UPDATE/DELETE statements\n" +
+				"- `prepared_query(&self, sql: &str, params: &[serde_json::Value]) -> Result<Vec<serde_json::Value>, String>` - Execute prepared statements\n\n" +
+				"CLAUDE AI INTEGRATION:\n" +
+				"The ClaudeService provides these methods:\n" +
+				"- `query(&self, message: &str) -> Result<String, String>` - Send any message to Claude AI\n" +
+				"- `ask(&self, question: &str) -> Result<String, String>` - Semantic alias for asking questions\n\n" +
+				"CLAUDE AI EXAMPLES:\n" +
+				"```rust\n" +
+				"// Basic Claude interaction\n" +
+				"let response = claude.ask(\"Explain this data structure\")?;\n\n" +
+				"// Combine database and AI analysis\n" +
+				"let data = db.query(\"SELECT * FROM sales_data\")?;\n" +
+				"let analysis = claude.query(&format!(\"Analyze this sales data: {:?}\", data))?;\n\n" +
+				"// Use Claude for intelligent decision making\n" +
+				"let recommendation = claude.ask(\"Based on the current count, what should the next action be?\")?;\n" +
+				"```\n\n" +
+				"BENEFITS:\n" +
+				"- No WASM boilerplate required\n" +
+				"- Automatic memory management\n" +
+				"- Built-in database integration\n" +
+				"- Claude AI integration for intelligent features\n" +
+				"- Type-safe JSON handling\n" +
+				"- Easy testing and development\n" +
+				"- Input format specification for better API documentation",
 			InputSchema: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{

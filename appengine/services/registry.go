@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 )
 
 const registryFilePath = "app_registry.json"
@@ -152,10 +153,13 @@ func (ar *appRunnerImpl) ExecuteAppTool(appID, toolName string, input json.RawMe
 	return ar.executeAppTool(appID, toolName, input)
 }
 
-// appCreatorImpl implements the services.AppCreator interface (if it exists)
-type appCreatorImpl struct{}
+// appCreatorImpl implements the services.AppCreator interface
+type appCreatorImpl struct {
+	registryManager     *RegistryManager
+	appCreationService  AppCreationServiceInterface
+}
 
-// CreateApp creates a new app (placeholder implementation)
+// CreateApp creates a new app using the centralized app creation service
 func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
 	// Convert tools back to the expected format
 	toolInfos := make([]ToolInfo, len(tools))
@@ -168,13 +172,19 @@ func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []inte
 		}
 	}
 	
-	// Process the app creation (this would need to call the actual app creation logic)
-	// For now, return a placeholder response
-	depCount := 0
-	if dependencies != nil {
-		depCount = len(dependencies)
+	// Create standardized request
+	req := AppCreationRequest{
+		AppID:        appID,
+		Version:      version,
+		Runtime:      runtime,
+		Tools:        toolInfos,
+		AppSrc:       appSrc,
+		Dependencies: dependencies,
 	}
-	return fmt.Sprintf("App %s created successfully with %d tools and %d dependencies", appID, len(toolInfos), depCount), nil
+	
+	// Use centralized service to create the app
+	sessionID := fmt.Sprintf("claude_mcp_%d", time.Now().UnixNano())
+	return ac.appCreationService.CreateApp(req, sessionID)
 }
 
 // Manager manages the registry and provides dependency injection implementations
@@ -189,12 +199,25 @@ type RegistryManager struct {
 func NewRegistryManager(executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)) *RegistryManager {
 	registry := NewRegistry()
 	
-	return &RegistryManager{
+	rm := &RegistryManager{
 		registry:       registry,
 		registryAccess: &registryAccessImpl{registry: registry},
 		appRunner:      &appRunnerImpl{executeAppTool: executeAppTool},
-		appCreator:     &appCreatorImpl{},
 	}
+	
+	// Create app creation service with logging function
+	logFunc := func(format string, args ...interface{}) {
+		log.Printf(format, args...)
+	}
+	appCreationService := NewAppCreationService(rm, logFunc)
+	
+	// Initialize app creator with dependencies
+	rm.appCreator = &appCreatorImpl{
+		registryManager:    rm,
+		appCreationService: appCreationService,
+	}
+	
+	return rm
 }
 
 // GetRegistry returns the registry instance

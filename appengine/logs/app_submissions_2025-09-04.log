@@ -1,2 +1,715 @@
 [APP_SUBMISSION] 2025/09/04 01:14:32.387888 === App Submission Logger Initialized ===
 [APP_SUBMISSION] 2025/09/04 01:21:01.663692 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 01:41:08.454266 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 01:43:36.705044 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 01:45:33.188003 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 01:47:35.214347 === NEW APP SUBMISSION REQUEST [rest_api_1756964855214326000] ===
+[APP_SUBMISSION] 2025/09/04 01:47:35.214577 [rest_api_1756964855214326000] Client IP: [::1]:50888
+[APP_SUBMISSION] 2025/09/04 01:47:35.214608 [rest_api_1756964855214326000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 01:47:35.214627 [rest_api_1756964855214326000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/04 01:47:35.214640 [rest_api_1756964855214326000] User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15
+[APP_SUBMISSION] 2025/09/04 01:47:35.214655 [rest_api_1756964855214326000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 01:47:35.214666 [rest_api_1756964855214326000] Parsing request body
+[APP_SUBMISSION] 2025/09/04 01:47:35.215952 [rest_api_1756964855214326000] Parsed request: {
+  "appId": "my-text-analyzer",
+  "appSrcLength": 7453,
+  "appSrcPreview": "use serde_json::json;\nuse regex::Regex;\nuse std::sync::atomic::{AtomicU64, Ordering};\n\nstruct TextAn...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "analyze_text",
+      "inputFormat": "{\"text\": \"string\", \"user_id\": \"string?\"}"
+    },
+    {
+      "name": "get_history",
+      "inputFormat": "{\"user_id\": \"string\", \"limit\": \"number?\"}"
+    },
+    {
+      "name": "generate_report",
+      "inputFormat": "{\"limit\": \"number?\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/04 01:47:35.215986 [rest_api_1756964855214326000] Using centralized app creation service
+[APP_SUBMISSION] 2025/09/04 01:47:35.216002 [rest_api_1756964855214326000] Validating app creation request
+[APP_SUBMISSION] 2025/09/04 01:47:35.216014 [rest_api_1756964855214326000] Request validation passed
+[APP_SUBMISSION] 2025/09/04 01:47:35.216026 [rest_api_1756964855214326000] Checking for existing app version
+[APP_SUBMISSION] 2025/09/04 01:47:35.216058 [rest_api_1756964855214326000] No existing version found - proceeding
+[APP_SUBMISSION] 2025/09/04 01:47:35.216071 [rest_api_1756964855214326000] Setting up build directory
+[APP_SUBMISSION] 2025/09/04 01:47:35.216559 [rest_api_1756964855214326000] Build directory created: build/my-text-analyzer/1.0.0
+[APP_SUBMISSION] 2025/09/04 01:47:35.216579 [rest_api_1756964855214326000] Compiling to WASM
+[APP_SUBMISSION] 2025/09/04 01:47:44.290474 [rest_api_1756964855214326000] WASM compilation completed in 9.073895583s: artifacts/my-text-analyzer/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 01:47:44.290636 [rest_api_1756964855214326000] Registering app in registry
+[APP_SUBMISSION] 2025/09/04 01:47:44.290794 [rest_api_1756964855214326000] App registered successfully. Registry has 1 apps
+[APP_SUBMISSION] 2025/09/04 01:47:44.290807 [rest_api_1756964855214326000] App creation successful: App my-text-analyzer version 1.0.0 created successfully at artifacts/my-text-analyzer/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 01:47:44.290829 [rest_api_1756964855214326000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 01:56:53.298515 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 02:01:48.815470 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 02:04:47.404129 === NEW APP SUBMISSION REQUEST [rest_api_1756965887404111000] ===
+[APP_SUBMISSION] 2025/09/04 02:04:47.404982 [rest_api_1756965887404111000] Client IP: [::1]:51047
+[APP_SUBMISSION] 2025/09/04 02:04:47.405025 [rest_api_1756965887404111000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:04:47.405056 [rest_api_1756965887404111000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/04 02:04:47.405080 [rest_api_1756965887404111000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:04:47.405130 [rest_api_1756965887404111000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:04:47.405147 [rest_api_1756965887404111000] Parsing request body
+[APP_SUBMISSION] 2025/09/04 02:04:47.406329 [rest_api_1756965887404111000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 26596,
+  "appSrcPreview": "use serde_json::json;\nuse chrono::{NaiveDate, Local};\nuse std::collections::HashMap;\n\nstruct FoodTra...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "log_food",
+      "inputFormat": "{\"food_name\": \"string\", \"meal\": \"string\", \"date\": \"string?\", \"calories\": \"number?\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"serving_size\": \"string?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_meal_history",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\", \"meal\": \"string?\", \"limit\": \"number?\"}"
+    },
+    {
+      "name": "analyze_nutrition",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\"}"
+    },
+    {
+      "name": "search_food",
+      "inputFormat": "{\"food_name\": \"string\"}"
+    },
+    {
+      "name": "delete_entry",
+      "inputFormat": "{\"entry_id\": \"string\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/04 02:04:47.406424 [rest_api_1756965887404111000] Using centralized app creation service
+[APP_SUBMISSION] 2025/09/04 02:04:47.406445 [rest_api_1756965887404111000] Validating app creation request
+[APP_SUBMISSION] 2025/09/04 02:04:47.406462 [rest_api_1756965887404111000] Request validation passed
+[APP_SUBMISSION] 2025/09/04 02:04:47.406478 [rest_api_1756965887404111000] Checking for existing app version
+[APP_SUBMISSION] 2025/09/04 02:04:47.406548 [rest_api_1756965887404111000] No existing version found - proceeding
+[APP_SUBMISSION] 2025/09/04 02:04:47.406567 [rest_api_1756965887404111000] Setting up build directory
+[APP_SUBMISSION] 2025/09/04 02:04:47.407096 [rest_api_1756965887404111000] Build directory created: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/04 02:04:47.407114 [rest_api_1756965887404111000] Compiling to WASM
+[APP_SUBMISSION] 2025/09/04 02:04:56.432930 [rest_api_1756965887404111000] ERROR: WASM compilation failed: failed to build Rust to WASM: cargo build failed: exit status 101
+Output:     Updating crates.io index
+     Locking 39 packages to latest compatible versions
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.18
+   Compiling wasm-bindgen-shared v0.2.100
+   Compiling log v0.4.28
+   Compiling bumpalo v3.19.0
+   Compiling rustversion v1.0.22
+   Compiling wasm-bindgen v0.2.100
+   Compiling autocfg v1.5.0
+   Compiling cfg-if v1.0.3
+   Compiling once_cell v1.21.3
+   Compiling serde v1.0.219
+   Compiling serde_json v1.0.143
+   Compiling itoa v1.0.15
+   Compiling num-traits v0.2.19
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.5
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling wasm-bindgen-backend v0.2.100
+   Compiling serde_derive v1.0.219
+   Compiling wasm-bindgen-macro-support v0.2.100
+   Compiling wasm-bindgen-macro v0.2.100
+   Compiling js-sys v0.3.77
+   Compiling chrono v0.4.41
+   Compiling food-tracker v1.0.0 (/Users/ericmaibach/Documents/repos/Arcadia/appengine/build/food-tracker/1.0.0)
+warning: unused import: `std::collections::HashMap`
+   --> src/lib.rs:200:5
+    |
+200 | use std::collections::HashMap;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> src/lib.rs:90:9
+   |
+90 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+   |         ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:133:9
+    |
+133 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:170:9
+    |
+170 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `db`
+   --> src/lib.rs:188:30
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                              ^^ help: if this is intentional, prefix it with an underscore: `_db`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `claude`
+   --> src/lib.rs:188:55
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+warning: unused variable: `claude`
+   --> src/lib.rs:220:55
+    |
+220 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+error[E0716]: temporary value dropped while borrowed
+   --> src/lib.rs:281:33
+    |
+281 |                     .unwrap_or(&Self::get_current_date());
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^ - temporary value is freed at the end of this statement
+    |                                 |
+    |                                 creates a temporary value which is freed while still in use
+...
+284 |                 Self::parse_date(date)?;
+    |                                  ---- borrow later used here
+    |
+    = note: consider using a `let` binding to create a longer lived value
+
+For more information about this error, try `rustc --explain E0716`.
+warning: `food-tracker` (lib) generated 7 warnings
+error: could not compile `food-tracker` (lib) due to 1 previous error; 7 warnings emitted
+[APP_SUBMISSION] 2025/09/04 02:04:56.433192 [rest_api_1756965887404111000] ERROR: App creation failed: WASM compilation failed: failed to build Rust to WASM: cargo build failed: exit status 101
+Output:     Updating crates.io index
+     Locking 39 packages to latest compatible versions
+   Compiling proc-macro2 v1.0.101
+   Compiling unicode-ident v1.0.18
+   Compiling wasm-bindgen-shared v0.2.100
+   Compiling log v0.4.28
+   Compiling bumpalo v3.19.0
+   Compiling rustversion v1.0.22
+   Compiling wasm-bindgen v0.2.100
+   Compiling autocfg v1.5.0
+   Compiling cfg-if v1.0.3
+   Compiling once_cell v1.21.3
+   Compiling serde v1.0.219
+   Compiling serde_json v1.0.143
+   Compiling itoa v1.0.15
+   Compiling num-traits v0.2.19
+   Compiling ryu v1.0.20
+   Compiling memchr v2.7.5
+   Compiling quote v1.0.40
+   Compiling syn v2.0.106
+   Compiling wasm-bindgen-backend v0.2.100
+   Compiling serde_derive v1.0.219
+   Compiling wasm-bindgen-macro-support v0.2.100
+   Compiling wasm-bindgen-macro v0.2.100
+   Compiling js-sys v0.3.77
+   Compiling chrono v0.4.41
+   Compiling food-tracker v1.0.0 (/Users/ericmaibach/Documents/repos/Arcadia/appengine/build/food-tracker/1.0.0)
+warning: unused import: `std::collections::HashMap`
+   --> src/lib.rs:200:5
+    |
+200 | use std::collections::HashMap;
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` on by default
+
+warning: unnecessary `unsafe` block
+  --> src/lib.rs:90:9
+   |
+90 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+   |         ^^^^^^ unnecessary `unsafe` block
+   |
+   = note: `#[warn(unused_unsafe)]` on by default
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:133:9
+    |
+133 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unnecessary `unsafe` block
+   --> src/lib.rs:170:9
+    |
+170 |         unsafe { deallocate(result_ptr as *mut u8, result as usize) };
+    |         ^^^^^^ unnecessary `unsafe` block
+
+warning: unused variable: `db`
+   --> src/lib.rs:188:30
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                              ^^ help: if this is intentional, prefix it with an underscore: `_db`
+    |
+    = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `claude`
+   --> src/lib.rs:188:55
+    |
+188 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+warning: unused variable: `claude`
+   --> src/lib.rs:220:55
+    |
+220 |     fn initialize(&mut self, db: &DatabaseConnection, claude: &ClaudeService) -> Result<(), String> {
+    |                                                       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_claude`
+
+error[E0716]: temporary value dropped while borrowed
+   --> src/lib.rs:281:33
+    |
+281 |                     .unwrap_or(&Self::get_current_date());
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^ - temporary value is freed at the end of this statement
+    |                                 |
+    |                                 creates a temporary value which is freed while still in use
+...
+284 |                 Self::parse_date(date)?;
+    |                                  ---- borrow later used here
+    |
+    = note: consider using a `let` binding to create a longer lived value
+
+For more information about this error, try `rustc --explain E0716`.
+warning: `food-tracker` (lib) generated 7 warnings
+error: could not compile `food-tracker` (lib) due to 1 previous error; 7 warnings emitted
+[APP_SUBMISSION] 2025/09/04 02:07:07.717966 === NEW APP SUBMISSION REQUEST [rest_api_1756966027717939000] ===
+[APP_SUBMISSION] 2025/09/04 02:07:07.718999 [rest_api_1756966027717939000] Client IP: [::1]:51054
+[APP_SUBMISSION] 2025/09/04 02:07:07.719027 [rest_api_1756966027717939000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:07:07.719055 [rest_api_1756966027717939000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/04 02:07:07.719075 [rest_api_1756966027717939000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:07:07.719085 [rest_api_1756966027717939000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:07:07.719094 [rest_api_1756966027717939000] Parsing request body
+[APP_SUBMISSION] 2025/09/04 02:07:07.719593 [rest_api_1756966027717939000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 26701,
+  "appSrcPreview": "use serde_json::json;\nuse chrono::{NaiveDate, Local};\n\nstruct FoodTrackerApp {}\n\nimpl FoodTrackerApp...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "log_food",
+      "inputFormat": "{\"food_name\": \"string\", \"meal\": \"string\", \"date\": \"string?\", \"calories\": \"number?\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"serving_size\": \"string?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_meal_history",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\", \"meal\": \"string?\", \"limit\": \"number?\"}"
+    },
+    {
+      "name": "analyze_nutrition",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\"}"
+    },
+    {
+      "name": "search_food",
+      "inputFormat": "{\"food_name\": \"string\"}"
+    },
+    {
+      "name": "delete_entry",
+      "inputFormat": "{\"entry_id\": \"string\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/04 02:07:07.719639 [rest_api_1756966027717939000] Using centralized app creation service
+[APP_SUBMISSION] 2025/09/04 02:07:07.719650 [rest_api_1756966027717939000] Validating app creation request
+[APP_SUBMISSION] 2025/09/04 02:07:07.719659 [rest_api_1756966027717939000] Request validation passed
+[APP_SUBMISSION] 2025/09/04 02:07:07.719702 [rest_api_1756966027717939000] Checking for existing app version
+[APP_SUBMISSION] 2025/09/04 02:07:07.719972 [rest_api_1756966027717939000] No existing version found - proceeding
+[APP_SUBMISSION] 2025/09/04 02:07:07.720004 [rest_api_1756966027717939000] Setting up build directory
+[APP_SUBMISSION] 2025/09/04 02:07:07.720038 [rest_api_1756966027717939000] Removing existing build directory: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/04 02:07:07.750332 [rest_api_1756966027717939000] Build directory created: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/04 02:07:07.750356 [rest_api_1756966027717939000] Compiling to WASM
+[APP_SUBMISSION] 2025/09/04 02:07:18.174001 [rest_api_1756966027717939000] WASM compilation completed in 10.423676625s: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:07:18.174151 [rest_api_1756966027717939000] Registering app in registry
+[APP_SUBMISSION] 2025/09/04 02:07:18.174833 [rest_api_1756966027717939000] App registered successfully. Registry has 2 apps
+[APP_SUBMISSION] 2025/09/04 02:07:18.174954 [rest_api_1756966027717939000] App creation successful: App food-tracker version 1.0.0 created successfully at artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:07:18.174992 [rest_api_1756966027717939000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:10:18.091128 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 02:10:37.709451 === NEW TOOL EXECUTION REQUEST [tool_session_1756966237709440000] ===
+[APP_SUBMISSION] 2025/09/04 02:10:37.709720 [tool_session_1756966237709440000] Client IP: [::1]:51072
+[APP_SUBMISSION] 2025/09/04 02:10:37.709744 [tool_session_1756966237709440000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:10:37.709827 [tool_session_1756966237709440000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:10:37.709917 [tool_session_1756966237709440000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:10:37.709934 [tool_session_1756966237709440000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:10:37.709945 [tool_session_1756966237709440000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:10:37.710044 [tool_session_1756966237709440000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 234
+[APP_SUBMISSION] 2025/09/04 02:10:37.710066 [tool_session_1756966237709440000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:10:37.710081 [tool_session_1756966237709440000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:10:37.710098 [tool_session_1756966237709440000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string?", "calories": "number?", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "serving_size": "string?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:10:37.710116 [tool_session_1756966237709440000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:10:37.710875 [tool_session_1756966237709440000] WASM module loaded successfully (450871 bytes)
+[APP_SUBMISSION] 2025/09/04 02:10:37.710906 [tool_session_1756966237709440000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:10:37.710921 [tool_session_1756966237709440000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:10:37.795251 [tool_session_1756966237709440000] ERROR: Tool execution failed: failed to instantiate WASM module: unknown import: `__wbindgen_placeholder__::__wbg_new0_f788a2397c7ca929` has not been defined
+[APP_SUBMISSION] 2025/09/04 02:10:37.795281 [tool_session_1756966237709440000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/04 02:10:52.239827 === NEW TOOL EXECUTION REQUEST [tool_session_1756966252239803000] ===
+[APP_SUBMISSION] 2025/09/04 02:10:52.241458 [tool_session_1756966252239803000] Client IP: [::1]:51074
+[APP_SUBMISSION] 2025/09/04 02:10:52.241543 [tool_session_1756966252239803000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:10:52.241568 [tool_session_1756966252239803000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:10:52.241593 [tool_session_1756966252239803000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:10:52.241611 [tool_session_1756966252239803000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:10:52.241628 [tool_session_1756966252239803000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:10:52.241757 [tool_session_1756966252239803000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 234
+[APP_SUBMISSION] 2025/09/04 02:10:52.241787 [tool_session_1756966252239803000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:10:52.241809 [tool_session_1756966252239803000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:10:52.241834 [tool_session_1756966252239803000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string?", "calories": "number?", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "serving_size": "string?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:10:52.241857 [tool_session_1756966252239803000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:10:52.242813 [tool_session_1756966252239803000] WASM module loaded successfully (450871 bytes)
+[APP_SUBMISSION] 2025/09/04 02:10:52.242839 [tool_session_1756966252239803000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:10:52.242850 [tool_session_1756966252239803000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:10:52.308544 [tool_session_1756966252239803000] ERROR: Tool execution failed: failed to instantiate WASM module: unknown import: `__wbindgen_placeholder__::__wbg_new0_f788a2397c7ca929` has not been defined
+[APP_SUBMISSION] 2025/09/04 02:10:52.308569 [tool_session_1756966252239803000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/04 02:18:31.223736 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 02:20:52.135689 === NEW APP SUBMISSION REQUEST [rest_api_1756966852135152000] ===
+[APP_SUBMISSION] 2025/09/04 02:20:52.136035 [rest_api_1756966852135152000] Client IP: [::1]:51206
+[APP_SUBMISSION] 2025/09/04 02:20:52.136048 [rest_api_1756966852135152000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:20:52.136776 [rest_api_1756966852135152000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/04 02:20:52.136791 [rest_api_1756966852135152000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:20:52.136796 [rest_api_1756966852135152000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:20:52.136800 [rest_api_1756966852135152000] Parsing request body
+[APP_SUBMISSION] 2025/09/04 02:20:52.142684 [rest_api_1756966852135152000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 18656,
+  "appSrcPreview": "use serde_json::json;\nuse std::collections::hash_map::DefaultHasher;\nuse std::hash::{Hash, Hasher};\n...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "log_food",
+      "inputFormat": "{\"food_name\": \"string\", \"meal\": \"string\", \"date\": \"string\", \"calories\": \"number\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_meal_history",
+      "inputFormat": "{\"start_date\": \"string?\", \"end_date\": \"string?\", \"meal_type\": \"string?\", \"limit\": \"number?\"}"
+    },
+    {
+      "name": "search_foods",
+      "inputFormat": "{\"query\": \"string\"}"
+    },
+    {
+      "name": "delete_entry",
+      "inputFormat": "{\"entry_id\": \"string\"}"
+    },
+    {
+      "name": "update_entry",
+      "inputFormat": "{\"entry_id\": \"string\", \"food_name\": \"string?\", \"meal\": \"string?\", \"date\": \"string?\", \"calories\": \"number?\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_nutrition_insights",
+      "inputFormat": "{\"days\": \"number?\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/04 02:20:52.142844 [rest_api_1756966852135152000] Using centralized app creation service
+[APP_SUBMISSION] 2025/09/04 02:20:52.143546 [rest_api_1756966852135152000] Validating app creation request
+[APP_SUBMISSION] 2025/09/04 02:20:52.143559 [rest_api_1756966852135152000] Request validation passed
+[APP_SUBMISSION] 2025/09/04 02:20:52.143563 [rest_api_1756966852135152000] Checking for existing app version
+[APP_SUBMISSION] 2025/09/04 02:20:52.146611 [rest_api_1756966852135152000] No existing version found - proceeding
+[APP_SUBMISSION] 2025/09/04 02:20:52.146624 [rest_api_1756966852135152000] Setting up build directory
+[APP_SUBMISSION] 2025/09/04 02:20:52.147064 [rest_api_1756966852135152000] Build directory created: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/04 02:20:52.147073 [rest_api_1756966852135152000] Compiling to WASM
+[APP_SUBMISSION] 2025/09/04 02:20:59.657704 [rest_api_1756966852135152000] WASM compilation completed in 7.510615292s: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:20:59.660003 [rest_api_1756966852135152000] Registering app in registry
+[APP_SUBMISSION] 2025/09/04 02:20:59.660196 [rest_api_1756966852135152000] App registered successfully. Registry has 1 apps
+[APP_SUBMISSION] 2025/09/04 02:20:59.661612 [rest_api_1756966852135152000] App creation successful: App food-tracker version 1.0.0 created successfully at artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:20:59.661644 [rest_api_1756966852135152000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:21:13.257558 === NEW TOOL EXECUTION REQUEST [tool_session_1756966873257547000] ===
+[APP_SUBMISSION] 2025/09/04 02:21:13.259723 [tool_session_1756966873257547000] Client IP: [::1]:51210
+[APP_SUBMISSION] 2025/09/04 02:21:13.259750 [tool_session_1756966873257547000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:21:13.259762 [tool_session_1756966873257547000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:21:13.259772 [tool_session_1756966873257547000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:21:13.259782 [tool_session_1756966873257547000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:21:13.259790 [tool_session_1756966873257547000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:21:13.259856 [tool_session_1756966873257547000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 153
+[APP_SUBMISSION] 2025/09/04 02:21:13.259874 [tool_session_1756966873257547000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:21:13.259897 [tool_session_1756966873257547000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:21:13.259908 [tool_session_1756966873257547000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:21:13.259917 [tool_session_1756966873257547000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:21:13.260442 [tool_session_1756966873257547000] WASM module loaded successfully (179042 bytes)
+[APP_SUBMISSION] 2025/09/04 02:21:13.260458 [tool_session_1756966873257547000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:21:13.260479 [tool_session_1756966873257547000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:21:13.322690 [tool_session_1756966873257547000] ERROR: Tool execution failed: execution failed: wasm trap: wasm `unreachable` instruction executed
+wasm backtrace:
+    0: 0x1bfac - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_panic
+    1: 0x1bfa0 - food_tracker.wasm!std::panicking::rust_panic_with_hook::h4fa3daead9c4e0a7
+    2: 0x1c06e - food_tracker.wasm!std::panicking::begin_panic_handler::{{closure}}::hd6c1b2d9392231ac
+    3: 0x1bfb2 - food_tracker.wasm!std::sys::backtrace::__rust_end_short_backtrace::h59d6c402e40a1685
+    4: 0xfa0b - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_begin_unwind
+    5: 0xe62c - food_tracker.wasm!core::panicking::panic_fmt::hd3052a3662d50c95
+    6: 0xc1cd - food_tracker.wasm!std::time::SystemTime::now::hd5dfb4538437f36e
+    7: 0x9557 - food_tracker.wasm!<food_tracker::FoodTrackerApp as food_tracker::ArcadiaApp>::handle_tool::h3b216ccaaa32b0f5
+    8: 0xd49b - food_tracker.wasm!run
+[APP_SUBMISSION] 2025/09/04 02:21:13.322712 [tool_session_1756966873257547000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/04 02:21:27.122655 === NEW TOOL EXECUTION REQUEST [tool_session_1756966887122649000] ===
+[APP_SUBMISSION] 2025/09/04 02:21:27.123800 [tool_session_1756966887122649000] Client IP: [::1]:51212
+[APP_SUBMISSION] 2025/09/04 02:21:27.123848 [tool_session_1756966887122649000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:21:27.123875 [tool_session_1756966887122649000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:21:27.123900 [tool_session_1756966887122649000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:21:27.123923 [tool_session_1756966887122649000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:21:27.123944 [tool_session_1756966887122649000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:21:27.124005 [tool_session_1756966887122649000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 153
+[APP_SUBMISSION] 2025/09/04 02:21:27.124021 [tool_session_1756966887122649000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:21:27.124045 [tool_session_1756966887122649000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:21:27.124059 [tool_session_1756966887122649000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:21:27.124071 [tool_session_1756966887122649000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:21:27.124355 [tool_session_1756966887122649000] WASM module loaded successfully (179042 bytes)
+[APP_SUBMISSION] 2025/09/04 02:21:27.124375 [tool_session_1756966887122649000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:21:27.124387 [tool_session_1756966887122649000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:21:27.162127 [tool_session_1756966887122649000] ERROR: Tool execution failed: execution failed: wasm trap: wasm `unreachable` instruction executed
+wasm backtrace:
+    0: 0x1bfac - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_panic
+    1: 0x1bfa0 - food_tracker.wasm!std::panicking::rust_panic_with_hook::h4fa3daead9c4e0a7
+    2: 0x1c06e - food_tracker.wasm!std::panicking::begin_panic_handler::{{closure}}::hd6c1b2d9392231ac
+    3: 0x1bfb2 - food_tracker.wasm!std::sys::backtrace::__rust_end_short_backtrace::h59d6c402e40a1685
+    4: 0xfa0b - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_begin_unwind
+    5: 0xe62c - food_tracker.wasm!core::panicking::panic_fmt::hd3052a3662d50c95
+    6: 0xc1cd - food_tracker.wasm!std::time::SystemTime::now::hd5dfb4538437f36e
+    7: 0x9557 - food_tracker.wasm!<food_tracker::FoodTrackerApp as food_tracker::ArcadiaApp>::handle_tool::h3b216ccaaa32b0f5
+    8: 0xd49b - food_tracker.wasm!run
+[APP_SUBMISSION] 2025/09/04 02:21:27.162211 [tool_session_1756966887122649000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/04 02:22:05.287239 === NEW TOOL EXECUTION REQUEST [tool_session_1756966925287222000] ===
+[APP_SUBMISSION] 2025/09/04 02:22:05.287647 [tool_session_1756966925287222000] Client IP: [::1]:51220
+[APP_SUBMISSION] 2025/09/04 02:22:05.287714 [tool_session_1756966925287222000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:22:05.287747 [tool_session_1756966925287222000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:22:05.287775 [tool_session_1756966925287222000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:22:05.287799 [tool_session_1756966925287222000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:22:05.287821 [tool_session_1756966925287222000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:22:05.287947 [tool_session_1756966925287222000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 203
+[APP_SUBMISSION] 2025/09/04 02:22:05.287981 [tool_session_1756966925287222000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:22:05.288008 [tool_session_1756966925287222000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:22:05.288041 [tool_session_1756966925287222000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:22:05.288065 [tool_session_1756966925287222000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:22:05.289021 [tool_session_1756966925287222000] WASM module loaded successfully (179042 bytes)
+[APP_SUBMISSION] 2025/09/04 02:22:05.289084 [tool_session_1756966925287222000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:22:05.289113 [tool_session_1756966925287222000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:22:05.326383 [tool_session_1756966925287222000] ERROR: Tool execution failed: execution failed: wasm trap: wasm `unreachable` instruction executed
+wasm backtrace:
+    0: 0x1bfac - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_panic
+    1: 0x1bfa0 - food_tracker.wasm!std::panicking::rust_panic_with_hook::h4fa3daead9c4e0a7
+    2: 0x1c06e - food_tracker.wasm!std::panicking::begin_panic_handler::{{closure}}::hd6c1b2d9392231ac
+    3: 0x1bfb2 - food_tracker.wasm!std::sys::backtrace::__rust_end_short_backtrace::h59d6c402e40a1685
+    4: 0xfa0b - food_tracker.wasm!__rustc[5224e6b81cd82a8f]::rust_begin_unwind
+    5: 0xe62c - food_tracker.wasm!core::panicking::panic_fmt::hd3052a3662d50c95
+    6: 0xc1cd - food_tracker.wasm!std::time::SystemTime::now::hd5dfb4538437f36e
+    7: 0x9557 - food_tracker.wasm!<food_tracker::FoodTrackerApp as food_tracker::ArcadiaApp>::handle_tool::h3b216ccaaa32b0f5
+    8: 0xd49b - food_tracker.wasm!run
+[APP_SUBMISSION] 2025/09/04 02:22:05.326423 [tool_session_1756966925287222000] RESPONSE: HTTP 500 - Tool execution failed
+[APP_SUBMISSION] 2025/09/04 02:26:13.399252 === App Submission Logger Initialized ===
+[APP_SUBMISSION] 2025/09/04 02:28:54.025392 === NEW APP SUBMISSION REQUEST [rest_api_1756967334025384000] ===
+[APP_SUBMISSION] 2025/09/04 02:28:54.026090 [rest_api_1756967334025384000] Client IP: [::1]:51283
+[APP_SUBMISSION] 2025/09/04 02:28:54.026116 [rest_api_1756967334025384000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:28:54.026129 [rest_api_1756967334025384000] Request URL: /submit_app_src
+[APP_SUBMISSION] 2025/09/04 02:28:54.026141 [rest_api_1756967334025384000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:28:54.026150 [rest_api_1756967334025384000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:28:54.026173 [rest_api_1756967334025384000] Parsing request body
+[APP_SUBMISSION] 2025/09/04 02:28:54.027703 [rest_api_1756967334025384000] Parsed request: {
+  "appId": "food-tracker",
+  "appSrcLength": 20549,
+  "appSrcPreview": "use serde_json::json;\nuse std::collections::HashMap;\n\nstruct FoodTrackerApp {\n    initialized: bool,...",
+  "runtime": "wasm",
+  "tools": [
+    {
+      "name": "log_food",
+      "inputFormat": "{\"food_name\": \"string\", \"meal\": \"string\", \"date\": \"string\", \"calories\": \"number\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_daily_summary",
+      "inputFormat": "{\"date\": \"string\"}"
+    },
+    {
+      "name": "get_meal_history",
+      "inputFormat": "{\"meal\": \"string?\", \"start_date\": \"string?\", \"end_date\": \"string?\", \"limit\": \"number?\"}"
+    },
+    {
+      "name": "search_foods",
+      "inputFormat": "{\"search_term\": \"string\"}"
+    },
+    {
+      "name": "delete_entry",
+      "inputFormat": "{\"entry_id\": \"string\"}"
+    },
+    {
+      "name": "update_entry",
+      "inputFormat": "{\"entry_id\": \"string\", \"calories\": \"number?\", \"protein_g\": \"number?\", \"carbs_g\": \"number?\", \"fat_g\": \"number?\", \"fiber_g\": \"number?\", \"sugar_g\": \"number?\", \"sodium_mg\": \"number?\", \"notes\": \"string?\"}"
+    },
+    {
+      "name": "get_weekly_report",
+      "inputFormat": "{\"start_date\": \"string\"}"
+    },
+    {
+      "name": "analyze_nutrition",
+      "inputFormat": "{\"start_date\": \"string\", \"end_date\": \"string\"}"
+    }
+  ],
+  "version": "1.0.0"
+}
+[APP_SUBMISSION] 2025/09/04 02:28:54.027887 [rest_api_1756967334025384000] Using centralized app creation service
+[APP_SUBMISSION] 2025/09/04 02:28:54.027937 [rest_api_1756967334025384000] Validating app creation request
+[APP_SUBMISSION] 2025/09/04 02:28:54.027950 [rest_api_1756967334025384000] Request validation passed
+[APP_SUBMISSION] 2025/09/04 02:28:54.027957 [rest_api_1756967334025384000] Checking for existing app version
+[APP_SUBMISSION] 2025/09/04 02:28:54.028516 [rest_api_1756967334025384000] No existing version found - proceeding
+[APP_SUBMISSION] 2025/09/04 02:28:54.028536 [rest_api_1756967334025384000] Setting up build directory
+[APP_SUBMISSION] 2025/09/04 02:28:54.029140 [rest_api_1756967334025384000] Build directory created: build/food-tracker/1.0.0
+[APP_SUBMISSION] 2025/09/04 02:28:54.029158 [rest_api_1756967334025384000] Compiling to WASM
+[APP_SUBMISSION] 2025/09/04 02:29:01.029259 [rest_api_1756967334025384000] WASM compilation completed in 7.000085958s: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:29:01.029420 [rest_api_1756967334025384000] Registering app in registry
+[APP_SUBMISSION] 2025/09/04 02:29:01.029618 [rest_api_1756967334025384000] App registered successfully. Registry has 1 apps
+[APP_SUBMISSION] 2025/09/04 02:29:01.029630 [rest_api_1756967334025384000] App creation successful: App food-tracker version 1.0.0 created successfully at artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:29:01.029648 [rest_api_1756967334025384000] === APP SUBMISSION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:29:59.187667 === NEW TOOL EXECUTION REQUEST [tool_session_1756967399187641000] ===
+[APP_SUBMISSION] 2025/09/04 02:29:59.188126 [tool_session_1756967399187641000] Client IP: [::1]:51288
+[APP_SUBMISSION] 2025/09/04 02:29:59.188178 [tool_session_1756967399187641000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:29:59.188210 [tool_session_1756967399187641000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:29:59.188234 [tool_session_1756967399187641000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:29:59.188257 [tool_session_1756967399187641000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:29:59.188279 [tool_session_1756967399187641000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:29:59.188525 [tool_session_1756967399187641000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 215
+[APP_SUBMISSION] 2025/09/04 02:29:59.188559 [tool_session_1756967399187641000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:29:59.188580 [tool_session_1756967399187641000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:29:59.188598 [tool_session_1756967399187641000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:29:59.188620 [tool_session_1756967399187641000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:29:59.189522 [tool_session_1756967399187641000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:29:59.189554 [tool_session_1756967399187641000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:29:59.189571 [tool_session_1756967399187641000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:29:59.233722 [tool_session_1756967399187641000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:29:59.233732 [tool_session_1756967399187641000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:29:59.233745 [tool_session_1756967399187641000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:30:39.359516 === NEW TOOL EXECUTION REQUEST [tool_session_1756967439359496000] ===
+[APP_SUBMISSION] 2025/09/04 02:30:39.359928 [tool_session_1756967439359496000] Client IP: [::1]:51290
+[APP_SUBMISSION] 2025/09/04 02:30:39.360021 [tool_session_1756967439359496000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:30:39.360072 [tool_session_1756967439359496000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:30:39.360102 [tool_session_1756967439359496000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:30:39.360124 [tool_session_1756967439359496000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:30:39.360145 [tool_session_1756967439359496000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:30:39.360229 [tool_session_1756967439359496000] Parsed request - AppID: food-tracker, ToolName: get_weekly_report, InputLength: 27
+[APP_SUBMISSION] 2025/09/04 02:30:39.360263 [tool_session_1756967439359496000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:30:39.360292 [tool_session_1756967439359496000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:30:39.360317 [tool_session_1756967439359496000] Tool 'get_weekly_report' found with input format: {"start_date": "string"}
+[APP_SUBMISSION] 2025/09/04 02:30:39.360338 [tool_session_1756967439359496000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:30:39.361160 [tool_session_1756967439359496000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:30:39.361184 [tool_session_1756967439359496000] STEP 4: Executing tool 'get_weekly_report' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:30:39.361196 [tool_session_1756967439359496000] STEP 5: Executing tool 'get_weekly_report'
+[APP_SUBMISSION] 2025/09/04 02:30:39.395234 [tool_session_1756967439359496000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:30:39.395257 [tool_session_1756967439359496000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:30:39.395273 [tool_session_1756967439359496000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:31:33.475726 === NEW TOOL EXECUTION REQUEST [tool_session_1756967493475715000] ===
+[APP_SUBMISSION] 2025/09/04 02:31:33.476314 [tool_session_1756967493475715000] Client IP: [::1]:51292
+[APP_SUBMISSION] 2025/09/04 02:31:33.476361 [tool_session_1756967493475715000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:31:33.476386 [tool_session_1756967493475715000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:31:33.476404 [tool_session_1756967493475715000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:31:33.476421 [tool_session_1756967493475715000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:31:33.476437 [tool_session_1756967493475715000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:31:33.476530 [tool_session_1756967493475715000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 207
+[APP_SUBMISSION] 2025/09/04 02:31:33.476557 [tool_session_1756967493475715000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:31:33.476576 [tool_session_1756967493475715000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:33.476595 [tool_session_1756967493475715000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:31:33.476613 [tool_session_1756967493475715000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:33.477537 [tool_session_1756967493475715000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:31:33.477583 [tool_session_1756967493475715000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:31:33.477605 [tool_session_1756967493475715000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:31:33.510312 [tool_session_1756967493475715000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:31:33.510323 [tool_session_1756967493475715000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:31:33.510334 [tool_session_1756967493475715000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:31:42.421717 === NEW TOOL EXECUTION REQUEST [tool_session_1756967502421711000] ===
+[APP_SUBMISSION] 2025/09/04 02:31:42.421836 [tool_session_1756967502421711000] Client IP: [::1]:51293
+[APP_SUBMISSION] 2025/09/04 02:31:42.421866 [tool_session_1756967502421711000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:31:42.421886 [tool_session_1756967502421711000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:31:42.421908 [tool_session_1756967502421711000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:31:42.421924 [tool_session_1756967502421711000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:31:42.421944 [tool_session_1756967502421711000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:31:42.422017 [tool_session_1756967502421711000] Parsed request - AppID: food-tracker, ToolName: log_food, InputLength: 214
+[APP_SUBMISSION] 2025/09/04 02:31:42.422045 [tool_session_1756967502421711000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:31:42.422068 [tool_session_1756967502421711000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:42.422084 [tool_session_1756967502421711000] Tool 'log_food' found with input format: {"food_name": "string", "meal": "string", "date": "string", "calories": "number", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:31:42.422106 [tool_session_1756967502421711000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:42.422364 [tool_session_1756967502421711000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:31:42.422437 [tool_session_1756967502421711000] STEP 4: Executing tool 'log_food' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:31:42.422461 [tool_session_1756967502421711000] STEP 5: Executing tool 'log_food'
+[APP_SUBMISSION] 2025/09/04 02:31:42.457263 [tool_session_1756967502421711000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:31:42.457275 [tool_session_1756967502421711000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:31:42.457287 [tool_session_1756967502421711000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:31:47.774957 === NEW TOOL EXECUTION REQUEST [tool_session_1756967507774951000] ===
+[APP_SUBMISSION] 2025/09/04 02:31:47.775065 [tool_session_1756967507774951000] Client IP: [::1]:51294
+[APP_SUBMISSION] 2025/09/04 02:31:47.775090 [tool_session_1756967507774951000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:31:47.775111 [tool_session_1756967507774951000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:31:47.775128 [tool_session_1756967507774951000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:31:47.775149 [tool_session_1756967507774951000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:31:47.775165 [tool_session_1756967507774951000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:31:47.775223 [tool_session_1756967507774951000] Parsed request - AppID: food-tracker, ToolName: get_daily_summary, InputLength: 21
+[APP_SUBMISSION] 2025/09/04 02:31:47.775249 [tool_session_1756967507774951000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:31:47.775268 [tool_session_1756967507774951000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:47.775285 [tool_session_1756967507774951000] Tool 'get_daily_summary' found with input format: {"date": "string"}
+[APP_SUBMISSION] 2025/09/04 02:31:47.775302 [tool_session_1756967507774951000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:31:47.775573 [tool_session_1756967507774951000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:31:47.775609 [tool_session_1756967507774951000] STEP 4: Executing tool 'get_daily_summary' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:31:47.775627 [tool_session_1756967507774951000] STEP 5: Executing tool 'get_daily_summary'
+[APP_SUBMISSION] 2025/09/04 02:31:47.808907 [tool_session_1756967507774951000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:31:47.808936 [tool_session_1756967507774951000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:31:47.808951 [tool_session_1756967507774951000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:32:30.895953 === NEW TOOL EXECUTION REQUEST [tool_session_1756967550895933000] ===
+[APP_SUBMISSION] 2025/09/04 02:32:30.896371 [tool_session_1756967550895933000] Client IP: [::1]:51295
+[APP_SUBMISSION] 2025/09/04 02:32:30.896417 [tool_session_1756967550895933000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:32:30.896447 [tool_session_1756967550895933000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:32:30.896471 [tool_session_1756967550895933000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:32:30.896494 [tool_session_1756967550895933000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:32:30.896514 [tool_session_1756967550895933000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:32:30.896596 [tool_session_1756967550895933000] Parsed request - AppID: food-tracker, ToolName: update_entry, InputLength: 164
+[APP_SUBMISSION] 2025/09/04 02:32:30.896628 [tool_session_1756967550895933000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:32:30.896654 [tool_session_1756967550895933000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:30.896677 [tool_session_1756967550895933000] Tool 'update_entry' found with input format: {"entry_id": "string", "calories": "number?", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:32:30.896754 [tool_session_1756967550895933000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:30.898484 [tool_session_1756967550895933000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:32:30.898558 [tool_session_1756967550895933000] STEP 4: Executing tool 'update_entry' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:32:30.898581 [tool_session_1756967550895933000] STEP 5: Executing tool 'update_entry'
+[APP_SUBMISSION] 2025/09/04 02:32:30.931442 [tool_session_1756967550895933000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:32:30.931456 [tool_session_1756967550895933000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:32:30.931469 [tool_session_1756967550895933000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:32:36.803134 === NEW TOOL EXECUTION REQUEST [tool_session_1756967556803126000] ===
+[APP_SUBMISSION] 2025/09/04 02:32:36.803255 [tool_session_1756967556803126000] Client IP: [::1]:51296
+[APP_SUBMISSION] 2025/09/04 02:32:36.803287 [tool_session_1756967556803126000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:32:36.803308 [tool_session_1756967556803126000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:32:36.803326 [tool_session_1756967556803126000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:32:36.803342 [tool_session_1756967556803126000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:32:36.803358 [tool_session_1756967556803126000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:32:36.803444 [tool_session_1756967556803126000] Parsed request - AppID: food-tracker, ToolName: update_entry, InputLength: 172
+[APP_SUBMISSION] 2025/09/04 02:32:36.803473 [tool_session_1756967556803126000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:32:36.803494 [tool_session_1756967556803126000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:36.803513 [tool_session_1756967556803126000] Tool 'update_entry' found with input format: {"entry_id": "string", "calories": "number?", "protein_g": "number?", "carbs_g": "number?", "fat_g": "number?", "fiber_g": "number?", "sugar_g": "number?", "sodium_mg": "number?", "notes": "string?"}
+[APP_SUBMISSION] 2025/09/04 02:32:36.803531 [tool_session_1756967556803126000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:36.803837 [tool_session_1756967556803126000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:32:36.803871 [tool_session_1756967556803126000] STEP 4: Executing tool 'update_entry' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:32:36.803890 [tool_session_1756967556803126000] STEP 5: Executing tool 'update_entry'
+[APP_SUBMISSION] 2025/09/04 02:32:36.839189 [tool_session_1756967556803126000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:32:36.839200 [tool_session_1756967556803126000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:32:36.839210 [tool_session_1756967556803126000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 02:32:42.170663 === NEW TOOL EXECUTION REQUEST [tool_session_1756967562170648000] ===
+[APP_SUBMISSION] 2025/09/04 02:32:42.171001 [tool_session_1756967562170648000] Client IP: [::1]:51297
+[APP_SUBMISSION] 2025/09/04 02:32:42.171060 [tool_session_1756967562170648000] Request Method: POST
+[APP_SUBMISSION] 2025/09/04 02:32:42.171093 [tool_session_1756967562170648000] Request URL: /run_tool
+[APP_SUBMISSION] 2025/09/04 02:32:42.171119 [tool_session_1756967562170648000] User-Agent: python-httpx/0.28.1
+[APP_SUBMISSION] 2025/09/04 02:32:42.171173 [tool_session_1756967562170648000] Content-Type: application/json
+[APP_SUBMISSION] 2025/09/04 02:32:42.171191 [tool_session_1756967562170648000] STEP 1: Parsing tool execution request
+[APP_SUBMISSION] 2025/09/04 02:32:42.171286 [tool_session_1756967562170648000] Parsed request - AppID: food-tracker, ToolName: get_daily_summary, InputLength: 21
+[APP_SUBMISSION] 2025/09/04 02:32:42.171319 [tool_session_1756967562170648000] STEP 2: Looking up app in registry
+[APP_SUBMISSION] 2025/09/04 02:32:42.171341 [tool_session_1756967562170648000] App found - Version: 1.0.0, Runtime: wasm, ArtifactURI: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:42.171359 [tool_session_1756967562170648000] Tool 'get_daily_summary' found with input format: {"date": "string"}
+[APP_SUBMISSION] 2025/09/04 02:32:42.171375 [tool_session_1756967562170648000] STEP 3: Loading WASM module from: artifacts/food-tracker/1.0.0.wasm
+[APP_SUBMISSION] 2025/09/04 02:32:42.171749 [tool_session_1756967562170648000] WASM module loaded successfully (165174 bytes)
+[APP_SUBMISSION] 2025/09/04 02:32:42.171778 [tool_session_1756967562170648000] STEP 4: Executing tool 'get_daily_summary' (delegating to executeAppTool)
+[APP_SUBMISSION] 2025/09/04 02:32:42.171795 [tool_session_1756967562170648000] STEP 5: Executing tool 'get_daily_summary'
+[APP_SUBMISSION] 2025/09/04 02:32:42.209617 [tool_session_1756967562170648000] Tool execution completed successfully
+[APP_SUBMISSION] 2025/09/04 02:32:42.209642 [tool_session_1756967562170648000] STEP 6: Sending response
+[APP_SUBMISSION] 2025/09/04 02:32:42.209655 [tool_session_1756967562170648000] === TOOL EXECUTION COMPLETED SUCCESSFULLY ===
+[APP_SUBMISSION] 2025/09/04 21:08:02.710120 === App Submission Logger Initialized ===
