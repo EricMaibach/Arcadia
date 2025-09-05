@@ -205,6 +205,9 @@ func (acs *AppCreationService) registerApp(req AppCreationRequest, wasmPath, ses
 
 	registry.RegisterApp(app)
 
+	// Trigger Claude tool refresh to include new app tools
+	TriggerClaudeToolRefresh()
+
 	// Save registry to file for persistence
 	if err := acs.registryManager.Save(); err != nil {
 		acs.logFunc("[%s] WARNING: Failed to save registry: %v", sessionID, err)

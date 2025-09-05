@@ -72,6 +72,9 @@ func main() {
 		registryManager.GetAppCreator(),
 	)
 
+	// Trigger initial Claude tool refresh now that registry access is set up
+	services.TriggerClaudeToolRefresh()
+
 	// Start the scheduler (now properly initialized)
 	if err := services.StartScheduler(); err != nil {
 		log.Fatalf("Failed to start scheduler: %v", err)

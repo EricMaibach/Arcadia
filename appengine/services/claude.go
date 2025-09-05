@@ -298,6 +298,16 @@ func (cs *ClaudeService) ClearContext(contextID string) {
 	cs.contextManager.ClearContext(contextID)
 }
 
+// TriggerToolRefresh refreshes the MCP tools list from the current registry state
+// This should be called whenever apps are added, removed, or updated
+func (cs *ClaudeService) TriggerToolRefresh() {
+	log.Printf("[Claude MCP] Refreshing MCP tools due to registry change")
+	cs.RefreshMCPTools()
+	
+	// Log the updated tool count for debugging
+	log.Printf("[Claude MCP] Tool refresh complete, now have %d total tools", len(cs.mcpTools))
+}
+
 func (cs *ClaudeService) GetContextStats(contextID string) (messages int, tokens int, exists bool) {
 	context, exists := cs.contextManager.GetContext(contextID)
 	if !exists {
@@ -349,6 +359,12 @@ func (cs *ClaudeService) callClaudeWithContextInternal(contextID string, depth i
 		Messages:  context.Messages,
 		Tools:     cs.mcpTools,
 		System:    systemPrompt,
+	}
+	
+	// Log tools being sent to Claude for debugging
+	log.Printf("[Claude Tools] Sending %d tools to Claude:", len(cs.mcpTools))
+	for i, tool := range cs.mcpTools {
+		log.Printf("[Claude Tools] %d. %s - %s", i+1, tool.Name, tool.Description)
 	}
 
 	jsonData, err := json.Marshal(request)
@@ -441,37 +457,21 @@ func (cs *ClaudeService) callClaudeWithContextInternal(contextID string, depth i
 	return responseText, nil
 }
 
+func (cs *ClaudeService) RefreshMCPTools() {
+	if cs.config.EnableMCP {
+		cs.loadMCPTools()
+	}
+}
+
 func (cs *ClaudeService) loadMCPTools() {
-	// Define tools directly in Go, no longer using Python MCP server
-	cs.mcpTools = []ClaudeTool{
+	// Start with static tools
+	staticTools := []ClaudeTool{
 		{
 			Name:        "list_apps",
 			Description: "List all registered applications in the Arcadia App Engine",
 			InputSchema: map[string]interface{}{
 				"type":       "object",
 				"properties": map[string]interface{}{},
-			},
-		},
-		{
-			Name:        "run_app",
-			Description: "Execute a tool from a registered application",
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"app_id": map[string]interface{}{
-						"type":        "string",
-						"description": "The ID of the application to run",
-					},
-					"tool_name": map[string]interface{}{
-						"type":        "string",
-						"description": "The name of the tool to execute",
-					},
-					"input_data": map[string]interface{}{
-						"type":        "object",
-						"description": "Input data to pass to the tool",
-					},
-				},
-				"required": []string{"app_id", "tool_name", "input_data"},
 			},
 		},
 		{
@@ -872,6 +872,132 @@ func (cs *ClaudeService) loadMCPTools() {
 			},
 		},
 	}
+	
+	// Add dynamic tools from registered apps
+	cs.mcpTools = append(staticTools, cs.loadDynamicAppTools()...)
+}
+
+func (cs *ClaudeService) loadDynamicAppTools() []ClaudeTool {
+	var dynamicTools []ClaudeTool
+	
+	// Get registry access
+	if registryAccess == nil {
+		log.Printf("[Claude Tools] Warning: registryAccess is nil, no dynamic tools will be loaded")
+		return dynamicTools
+	}
+	
+	registry := registryAccess.GetRegistry()
+	mutex := registryAccess.GetRegistryMutex()
+	
+	mutex.RLock()
+	defer mutex.RUnlock()
+	
+	log.Printf("[Claude Tools] Loading dynamic tools from registry with %d registered apps", len(registry))
+	
+	// Iterate through all registered apps
+	for appID, appInterface := range registry {
+		// Try to handle as *App struct first (the actual format)
+		if app, ok := appInterface.(*App); ok {
+			log.Printf("[Claude Tools] App '%s' has %d tools", appID, len(app.Tools))
+			for _, tool := range app.Tools {
+				// Create namespaced tool name
+				namespacedName := fmt.Sprintf("%s_%s", appID, tool.Name)
+				
+				// Extract description and input format
+				description := fmt.Sprintf("Execute %s tool from %s application", tool.Name, appID)
+				
+				// Create input schema from inputFormat if available
+				inputSchema := map[string]interface{}{
+					"type": "object",
+					"properties": map[string]interface{}{},
+				}
+				
+				if tool.InputFormat != "" {
+					// Try to parse the input format as JSON schema
+					// For now, use a generic object schema with description
+					inputSchema = map[string]interface{}{
+						"type": "object",
+						"description": fmt.Sprintf("Input data for %s. Expected format: %s", tool.Name, tool.InputFormat),
+						"properties": map[string]interface{}{},
+					}
+				}
+				
+				// Create the dynamic tool
+				dynamicTool := ClaudeTool{
+					Name:        namespacedName,
+					Description: description,
+					InputSchema: inputSchema,
+				}
+				
+				log.Printf("[Claude Tools] Created dynamic tool: %s", namespacedName)
+				dynamicTools = append(dynamicTools, dynamicTool)
+			}
+		} else if appData, ok := appInterface.(map[string]interface{}); ok {
+			// Fallback: handle as map[string]interface{} (for backward compatibility)
+			if toolsInterface, exists := appData["tools"]; exists {
+				if tools, ok := toolsInterface.([]interface{}); ok {
+					log.Printf("[Claude Tools] App '%s' has %d tools (map format)", appID, len(tools))
+					for _, toolInterface := range tools {
+						if tool, ok := toolInterface.(map[string]interface{}); ok {
+							// Extract tool information
+							toolName, hasName := tool["name"].(string)
+							if !hasName {
+								log.Printf("[Claude Tools] Skipping tool in app '%s' - no name found", appID)
+								continue
+							}
+							
+							// Create namespaced tool name
+							namespacedName := fmt.Sprintf("%s_%s", appID, toolName)
+							
+							// Extract description and input format
+							description := fmt.Sprintf("Execute %s tool from %s application", toolName, appID)
+							if desc, ok := tool["description"].(string); ok && desc != "" {
+								description = desc
+							}
+							
+							// Create input schema from inputFormat if available
+							inputSchema := map[string]interface{}{
+								"type": "object",
+								"properties": map[string]interface{}{},
+							}
+							
+							if inputFormat, ok := tool["inputFormat"].(string); ok && inputFormat != "" {
+								// Try to parse the input format as JSON schema
+								// For now, use a generic object schema with description
+								inputSchema = map[string]interface{}{
+									"type": "object",
+									"description": fmt.Sprintf("Input data for %s. Expected format: %s", toolName, inputFormat),
+									"properties": map[string]interface{}{},
+								}
+							}
+							
+							// Create the dynamic tool
+							dynamicTool := ClaudeTool{
+								Name:        namespacedName,
+								Description: description,
+								InputSchema: inputSchema,
+							}
+							
+							log.Printf("[Claude Tools] Created dynamic tool: %s", namespacedName)
+							dynamicTools = append(dynamicTools, dynamicTool)
+						} else {
+							log.Printf("[Claude Tools] Skipping invalid tool in app '%s' - not a map", appID)
+						}
+					}
+				} else {
+					log.Printf("[Claude Tools] App '%s' tools field is not an array", appID)
+				}
+			} else {
+				log.Printf("[Claude Tools] App '%s' has no tools field", appID)
+			}
+		} else {
+			log.Printf("[Claude Tools] App '%s' data is neither *App nor map (type: %T)", appID, appInterface)
+		}
+	}
+	
+	log.Printf("[Claude Tools] Loaded %d dynamic tools total", len(dynamicTools))
+	
+	return dynamicTools
 }
 
 func (cs *ClaudeService) handleToolUseWithLoop(response ClaudeResponse, contextID string) (string, error) {
@@ -955,8 +1081,6 @@ func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}
 	switch toolName {
 	case "list_apps":
 		return cs.executeListApps()
-	case "run_app":
-		return cs.executeRunApp(input)
 	case "create_app":
 		return cs.executeCreateApp(input)
 	case "schedule_app_run":
@@ -964,6 +1088,15 @@ func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}
 	case "list_schedules":
 		return cs.executeListSchedules(input)
 	default:
+		// Check if this is a dynamic app tool (format: appId_toolName)
+		if strings.Contains(toolName, "_") {
+			parts := strings.SplitN(toolName, "_", 2)
+			if len(parts) == 2 {
+				appID := parts[0]
+				appToolName := parts[1]
+				return cs.executeDynamicAppTool(appID, appToolName, input)
+			}
+		}
 		return "", fmt.Errorf("unknown tool: %s", toolName)
 	}
 }
@@ -987,30 +1120,21 @@ func (cs *ClaudeService) executeListApps() (string, error) {
 	return string(result), nil
 }
 
-func (cs *ClaudeService) executeRunApp(input interface{}) (string, error) {
+func (cs *ClaudeService) executeDynamicAppTool(appID, toolName string, input interface{}) (string, error) {
 	if appRunner == nil {
 		return "", fmt.Errorf("app runner not configured")
 	}
 	
-	// Convert input to expected structure
+	// Convert input to JSON for the app runner
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal input: %w", err)
 	}
 	
-	var runReq struct {
-		AppID     string          `json:"app_id"`
-		ToolName  string          `json:"tool_name"`
-		InputData json.RawMessage `json:"input_data"`
-	}
-	
-	if err := json.Unmarshal(inputJSON, &runReq); err != nil {
-		return "", fmt.Errorf("failed to parse run request: %w", err)
-	}
-	
-	// Execute the app tool
-	return appRunner.ExecuteAppTool(runReq.AppID, runReq.ToolName, runReq.InputData)
+	// Execute the app tool directly
+	return appRunner.ExecuteAppTool(appID, toolName, inputJSON)
 }
+
 
 func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 	log.Printf("[Claude MCP] executeCreateApp called with input type: %T", input)
@@ -1206,5 +1330,14 @@ func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request)
 			"total_tokens":  tokens,
 		},
 	})
+}
+
+// Global function to trigger MCP tool refresh - can be called from other services
+func TriggerClaudeToolRefresh() {
+	if claudeServiceInstance != nil {
+		claudeServiceInstance.TriggerToolRefresh()
+	} else {
+		log.Printf("[Claude MCP] Warning: Claude service not initialized, cannot refresh tools")
+	}
 }
 
