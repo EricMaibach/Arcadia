@@ -2204,6 +2204,7 @@ tr:hover {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  max-height: 70vh;
 }
 
 .chat-placeholder {

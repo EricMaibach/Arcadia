@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { appApi, App } from '../services/api';
 import ArcadiaIcon from '../ArcadiaIcon.jpg';
@@ -27,6 +27,7 @@ const Home: React.FC = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [contextStats, setContextStats] = useState<ContextStats | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Generate a session ID that persists for this session
   const [sessionId] = useState(() => {
@@ -42,6 +43,11 @@ const Home: React.FC = () => {
   useEffect(() => {
     loadApps();
   }, []);
+
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, chatLoading]);
 
   const loadApps = async () => {
     try {
@@ -223,6 +229,7 @@ const Home: React.FC = () => {
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
             <div className="chat-input">
               <textarea
