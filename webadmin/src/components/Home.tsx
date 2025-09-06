@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { appApi, App } from '../services/api';
 import ArcadiaIcon from '../ArcadiaIcon.jpg';
 import ReactMarkdown from 'react-markdown';
+import AppToolRunner from './AppToolRunner';
 
 interface ChatMessage {
   id: string;
@@ -21,6 +22,8 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentView, setCurrentView] = useState<'chat' | 'apps'>('chat');
+  const [selectedApp, setSelectedApp] = useState<App | null>(null);
+  const [selectedTool, setSelectedTool] = useState<string>('');
   
   // Chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -127,6 +130,18 @@ const Home: React.FC = () => {
       e.preventDefault();
       sendMessage();
     }
+  };
+
+  const openApp = (app: App) => {
+    setSelectedApp(app);
+    if (app.tools.length > 0) {
+      setSelectedTool(app.tools[0].name);
+    }
+  };
+
+  const closeApp = () => {
+    setSelectedApp(null);
+    setSelectedTool('');
   };
 
   if (loading) return <div className="loading">Loading apps...</div>;
@@ -318,10 +333,11 @@ const Home: React.FC = () => {
           ) : (
             <div className="apps-grid">
               {apps.map((app) => (
-                <Link 
+                <div 
                   key={app.appId} 
-                  to={`/app/${encodeURIComponent(app.appId)}`} 
                   className="app-card-link"
+                  onClick={() => openApp(app)}
+                  style={{ cursor: 'pointer' }}
                 >
                   <div className="app-card">
                     <div className="app-icon">
@@ -332,31 +348,62 @@ const Home: React.FC = () => {
                         <rect x="3" y="14" width="7" height="7"/>
                       </svg>
                     </div>
-                    <h4>{app.appId}</h4>
-                    <div className="app-meta">
-                      <span className="version">v{app.version}</span>
-                      <span className="runtime">{app.runtime}</span>
-                    </div>
-                    <div className="tools-count">
-                      {app.tools.length} tool{app.tools.length !== 1 ? 's' : ''}
-                    </div>
-                    {app.tools.length > 0 && (
-                      <div className="tools-preview">
-                        {app.tools.slice(0, 3).map((tool, index) => (
-                          <span key={index} className="tool-name">
-                            {tool.name}
-                          </span>
-                        ))}
-                        {app.tools.length > 3 && (
-                          <span className="more-tools">+{app.tools.length - 3} more</span>
-                        )}
-                      </div>
-                    )}
+                    <h4>{app.appId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</h4>
                   </div>
-                </Link>
+                </div>
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* App Modal */}
+      {selectedApp && (
+        <div className="app-modal-overlay" onClick={closeApp}>
+          <div className="app-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="app-modal-header">
+              <h2>{selectedApp.appId.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</h2>
+              <button className="modal-close-btn" onClick={closeApp}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            </div>
+
+            <div className="app-modal-content">
+              {selectedApp.tools.length === 0 ? (
+                <div className="no-tools">
+                  <p>No tools available for this app.</p>
+                </div>
+              ) : (
+                <div className="app-tools-layout">
+                  <div className="tools-sidebar">
+                    <div className="tools-list">
+                      {selectedApp.tools.map((tool) => (
+                        <button
+                          key={tool.name}
+                          className={`tool-item ${selectedTool === tool.name ? 'active' : ''}`}
+                          onClick={() => setSelectedTool(tool.name)}
+                        >
+                          {tool.name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="tool-content">
+                    {selectedTool && (
+                      <AppToolRunner
+                        app={selectedApp}
+                        toolName={selectedTool}
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

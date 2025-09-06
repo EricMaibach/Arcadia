@@ -14,11 +14,12 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   isSubmitting = false, 
   toolName 
 }) => {
+  const formatToolName = (name: string) => {
+    return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
   const [schema, setSchema] = useState<{ fields: FieldSchema[], isEmpty: boolean }>({ fields: [], isEmpty: true });
   const [formData, setFormData] = useState<Record<string, any>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [showRawEditor, setShowRawEditor] = useState(false);
-  const [rawJson, setRawJson] = useState('{}');
 
   useEffect(() => {
     const parsedSchema = parseInputFormat(inputFormat);
@@ -91,16 +92,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (showRawEditor) {
-      try {
-        const jsonData = JSON.parse(rawJson);
-        onSubmit(jsonData);
-      } catch (err) {
-        setErrors({ json: 'Invalid JSON format' });
-      }
-      return;
-    }
-
     if (!validateForm()) {
       return;
     }
@@ -109,62 +100,6 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
     onSubmit(jsonData);
   };
 
-  const clearForm = () => {
-    const clearedData: Record<string, any> = {};
-    schema.fields.forEach(field => {
-      switch (field.type) {
-        case 'string':
-          clearedData[field.name] = '';
-          break;
-        case 'number':
-          clearedData[field.name] = field.required ? 0 : '';
-          break;
-        case 'boolean':
-          clearedData[field.name] = false;
-          break;
-      }
-    });
-    setFormData(clearedData);
-    setErrors({});
-  };
-
-  const loadSampleData = () => {
-    const sampleData: Record<string, any> = {};
-    schema.fields.forEach(field => {
-      switch (field.type) {
-        case 'string':
-          // Generate sample strings based on field name
-          if (field.name.includes('date')) {
-            sampleData[field.name] = new Date().toISOString().split('T')[0];
-          } else if (field.name.includes('email')) {
-            sampleData[field.name] = 'user@example.com';
-          } else if (field.name.includes('name')) {
-            sampleData[field.name] = 'Sample Name';
-          } else if (field.name.includes('id')) {
-            sampleData[field.name] = 'sample-id-123';
-          } else {
-            sampleData[field.name] = `sample ${field.name}`;
-          }
-          break;
-        case 'number':
-          // Generate sample numbers based on field name
-          if (field.name.includes('calorie')) {
-            sampleData[field.name] = 250;
-          } else if (field.name.includes('protein') || field.name.includes('carb') || field.name.includes('fat')) {
-            sampleData[field.name] = 15;
-          } else if (field.name.includes('quantity') || field.name.includes('amount')) {
-            sampleData[field.name] = 1;
-          } else {
-            sampleData[field.name] = 42;
-          }
-          break;
-        case 'boolean':
-          sampleData[field.name] = true;
-          break;
-      }
-    });
-    setFormData(sampleData);
-  };
 
   if (schema.isEmpty) {
     return (
@@ -177,7 +112,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             disabled={isSubmitting}
             className={`run-btn ${isSubmitting ? 'running' : ''}`}
           >
-            {isSubmitting ? 'Running...' : `Run ${toolName}`}
+            {isSubmitting ? 'Running...' : formatToolName(toolName)}
           </button>
         </div>
       </div>
@@ -187,47 +122,9 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
   return (
     <div className="dynamic-form">
       <form onSubmit={handleSubmit} className="tool-form">
-        <div className="form-header">
-          <h4>Tool Parameters</h4>
-          <div className="form-actions-header">
-            <button 
-              type="button" 
-              onClick={() => setShowRawEditor(!showRawEditor)} 
-              className={showRawEditor ? "format-btn" : "sample-btn"}
-            >
-              {showRawEditor ? "Use Form" : "Raw JSON"}
-            </button>
-            {!showRawEditor && (
-              <>
-                <button type="button" onClick={loadSampleData} className="sample-btn">
-                  Load Sample Data
-                </button>
-                <button type="button" onClick={clearForm} className="clear-btn">
-                  Clear Form
-                </button>
-              </>
-            )}
-          </div>
-        </div>
 
-        {showRawEditor ? (
-          <div className="raw-json-editor">
-            <label htmlFor="raw-json">JSON Input:</label>
-            <textarea
-              id="raw-json"
-              value={rawJson}
-              onChange={(e) => setRawJson(e.target.value)}
-              className={`input-textarea ${errors.json ? 'error' : ''}`}
-              rows={10}
-              placeholder="Enter JSON input for the tool"
-            />
-            {errors.json && (
-              <div className="field-error">{errors.json}</div>
-            )}
-          </div>
-        ) : (
-          <div className="form-fields">
-            {schema.fields.map((field) => (
+        <div className="form-fields">
+          {schema.fields.map((field) => (
             <div key={field.name} className="form-field">
               <label htmlFor={field.name}>
                 {field.label || field.name}
@@ -278,8 +175,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
               )}
             </div>
           ))}
-          </div>
-        )}
+        </div>
 
         <div className="form-footer">
           <button 
@@ -287,7 +183,7 @@ const DynamicForm: React.FC<DynamicFormProps> = ({
             disabled={isSubmitting}
             className={`run-btn ${isSubmitting ? 'running' : ''}`}
           >
-            {isSubmitting ? 'Running...' : `Run ${toolName}`}
+            {isSubmitting ? 'Running...' : formatToolName(toolName)}
           </button>
         </div>
       </form>

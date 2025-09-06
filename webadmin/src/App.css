@@ -2930,3 +2930,174 @@ tr:hover {
     font-size: 0.9rem;
   }
 }
+
+/* App Modal Styles */
+.app-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(4px);
+}
+
+.app-modal {
+  background: var(--color-cream);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 1200px;
+  height: 85vh;
+  max-height: 800px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+}
+
+.app-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 2rem;
+  background: linear-gradient(135deg, var(--color-forest-main), var(--color-forest-light));
+  color: white;
+  border-bottom: 2px solid var(--color-golden-glow);
+}
+
+.app-modal-header h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.app-modal-content {
+  flex: 1;
+  overflow: auto;
+  padding: 2rem;
+}
+
+@media (max-width: 768px) {
+  .app-modal {
+    width: 95%;
+    height: 90vh;
+    margin: 1rem;
+  }
+  
+  .app-modal-header {
+    padding: 1rem 1.5rem;
+  }
+  
+  .app-modal-header h2 {
+    font-size: 1.25rem;
+  }
+  
+  .app-modal-content {
+    padding: 1rem;
+  }
+}
+
+/* App Tools Sidebar Layout */
+.app-tools-layout {
+  display: flex;
+  height: 100%;
+  gap: 0;
+}
+
+.tools-sidebar {
+  width: 200px;
+  min-width: 200px;
+  background: rgba(244, 211, 94, 0.1);
+  border-right: 1px solid rgba(244, 211, 94, 0.3);
+  padding: 1rem 0;
+}
+
+.tools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0 1rem;
+}
+
+.tool-item {
+  width: 100%;
+  padding: 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  font-size: 0.9rem;
+  color: var(--color-forest-main);
+}
+
+.tool-item:hover {
+  background: rgba(127, 176, 105, 0.1);
+}
+
+.tool-item.active {
+  background: var(--color-forest-main);
+  color: white;
+}
+
+.tool-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+  .app-tools-layout {
+    flex-direction: column;
+  }
+  
+  .tools-sidebar {
+    width: 100%;
+    min-width: unset;
+    border-right: none;
+    border-bottom: 1px solid rgba(244, 211, 94, 0.3);
+    padding: 1rem;
+  }
+  
+  .tools-list {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    gap: 0.5rem;
+    padding: 0;
+  }
+  
+  .tool-item {
+    min-width: 120px;
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.85rem;
+  }
+  
+  .tool-content {
+    padding: 1rem;
+  }
+}

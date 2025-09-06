@@ -13,6 +13,10 @@ const AppToolRunner: React.FC<AppToolRunnerProps> = ({ app, toolName }) => {
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const formatToolName = (name: string) => {
+    return name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
   const tool = app.tools.find(t => t.name === toolName);
   
   const handleRun = async (jsonData: object) => {
@@ -50,7 +54,7 @@ const AppToolRunner: React.FC<AppToolRunnerProps> = ({ app, toolName }) => {
   return (
     <div className="app-tool-runner">
       <div className="tool-header">
-        <h3>{toolName}</h3>
+        <h3>{formatToolName(toolName)}</h3>
       </div>
 
       <DynamicForm 
@@ -68,7 +72,7 @@ const AppToolRunner: React.FC<AppToolRunnerProps> = ({ app, toolName }) => {
       )}
       
       {result && (
-        <ResultDisplay result={result} title={`${toolName} Result`} />
+        <ResultDisplay result={result} title={`${formatToolName(toolName)} Result`} />
       )}
     </div>
   );

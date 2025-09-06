@@ -38,27 +38,8 @@ const AppList: React.FC = () => {
           {apps.map((app) => (
             <div key={app.appId} className="app-card">
               <h3>{app.appId}</h3>
-              <p><strong>Version:</strong> {app.version}</p>
-              <p><strong>Runtime:</strong> {app.runtime}</p>
               <p><strong>Source Language:</strong> {app.sourceLanguage || 'N/A'}</p>
               <p><strong>Artifact:</strong> {app.artifactUri}</p>
-              
-              <div className="tools-section">
-                <h4>Available Tools:</h4>
-                {app.tools.length === 0 ? (
-                  <p>No tools available</p>
-                ) : (
-                  <ul className="tools-list">
-                    {app.tools.map((tool, index) => (
-                      <li key={index} className="tool-item">
-                        <strong>{tool.name}</strong>
-                        <br />
-                        <small>Input Format: {tool.inputFormat}</small>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
               
               {app.files && app.files.length > 0 && (
                 <div className="files-section">
