@@ -16,9 +16,19 @@ import (
 // FileEvent represents a file system event
 type FileEvent struct {
 	Path      string    `json:"path"`
-	Operation string    `json:"operation"` // "create", "write", "remove", "rename", "chmod"
+	Operation string    `json:"operation"` // "create", "write", "remove", "rename", "chmod", "discovered", "changed"
 	Timestamp time.Time `json:"timestamp"`
 	IsDir     bool      `json:"is_dir"`
+}
+
+// TrackedFile represents a file being tracked in the database
+type TrackedFile struct {
+	ID            int64  `json:"id"`
+	Path          string `json:"path"`
+	DirectoryRoot string `json:"directory_root"`
+	LastModified  int64  `json:"last_modified"`  // Unix timestamp
+	FileSize      int64  `json:"file_size"`
+	LastChecked   int64  `json:"last_checked"`   // Unix timestamp
 }
 
 // FileWatcherEventHandler is a callback function for handling file events
@@ -113,7 +123,7 @@ func NewFileWatcherService(db Database, config FileWatcherConfig) (*FileWatcherS
 	return service, nil
 }
 
-// initializeDatabase creates the necessary tables for storing watched directories
+// initializeDatabase creates the necessary tables for storing watched directories and tracked files
 func (f *FileWatcherService) initializeDatabase() error {
 	query := `
 	CREATE TABLE IF NOT EXISTS watched_directories (
@@ -124,11 +134,25 @@ func (f *FileWatcherService) initializeDatabase() error {
 	);
 	
 	CREATE INDEX IF NOT EXISTS idx_watched_directories_path ON watched_directories(path);
+	
+	CREATE TABLE IF NOT EXISTS tracked_files (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		path TEXT NOT NULL UNIQUE,
+		directory_root TEXT NOT NULL,
+		last_modified INTEGER NOT NULL,
+		file_size INTEGER NOT NULL,
+		last_checked INTEGER DEFAULT (strftime('%s', 'now')),
+		FOREIGN KEY (directory_root) REFERENCES watched_directories(path) ON DELETE CASCADE
+	);
+	
+	CREATE INDEX IF NOT EXISTS idx_tracked_files_directory_root ON tracked_files(directory_root);
+	CREATE INDEX IF NOT EXISTS idx_tracked_files_path ON tracked_files(path);
+	CREATE INDEX IF NOT EXISTS idx_tracked_files_last_modified ON tracked_files(last_modified);
 	`
 	
 	_, err := f.db.Exec(query)
 	if err != nil {
-		return fmt.Errorf("failed to create watched_directories table: %w", err)
+		return fmt.Errorf("failed to create database tables: %w", err)
 	}
 	
 	return nil
@@ -157,6 +181,13 @@ func (f *FileWatcherService) loadWatchedDirectories() error {
 			// Continue loading other directories even if one fails
 		} else {
 			log.Printf("[FileWatcher] Loaded watched directory: %s (including %d subdirectories)", path, len(addedDirs)-1)
+			
+			// Scan for file changes that occurred while service was stopped
+			go func(dirPath string) {
+				if err := f.scanDirectoryForFiles(dirPath, true); err != nil {
+					log.Printf("[FileWatcher] Warning: failed to scan for file changes in %s: %v", dirPath, err)
+				}
+			}(path)
 		}
 	}
 
@@ -243,6 +274,13 @@ func (f *FileWatcherService) AddDirectory(path string) error {
 		return fmt.Errorf("failed to store watched directory in database: %w", err)
 	}
 
+	// Scan directory for existing files and emit discovery events
+	go func() {
+		if err := f.scanDirectoryForFiles(absPath, false); err != nil {
+			log.Printf("[FileWatcher] Warning: failed to scan directory for files %s: %v", absPath, err)
+		}
+	}()
+
 	log.Printf("[FileWatcher] Added directory to watch list: %s (including %d subdirectories)", absPath, len(addedDirs)-1)
 	return nil
 }
@@ -308,6 +346,11 @@ func (f *FileWatcherService) RemoveDirectory(path string) error {
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
 		return fmt.Errorf("directory not found in watch list: %s", absPath)
+	}
+
+	// Remove tracked files for this directory
+	if err := f.removeTrackedFilesForDirectory(absPath); err != nil {
+		log.Printf("[FileWatcher] Warning: failed to remove tracked files for directory %s: %v", absPath, err)
 	}
 
 	log.Printf("[FileWatcher] Removed directory from watch list: %s (including %d subdirectories)", absPath, removedCount-1)
@@ -435,6 +478,29 @@ func (f *FileWatcherService) processEvents() {
 				}
 			}
 			
+			// Update tracked file database for file events (not directories)
+			if !isDir && (operation == "create" || operation == "write") {
+				go func(filePath string) {
+					// Find which root directory this file belongs to
+					var rootDir string
+					for _, dir := range f.getWatchedDirectoryRoots() {
+						if strings.HasPrefix(filePath, dir) {
+							rootDir = dir
+							break
+						}
+					}
+					
+					if rootDir != "" {
+						if fileInfo, err := f.getFileInfo(filePath); err == nil && fileInfo != nil {
+							fileInfo.DirectoryRoot = rootDir
+							if err := f.upsertTrackedFile(fileInfo); err != nil {
+								log.Printf("[FileWatcher] Warning: failed to update tracked file %s: %v", filePath, err)
+							}
+						}
+					}
+				}(event.Name)
+			}
+
 			fileEvent := FileEvent{
 				Path:      event.Name,
 				Operation: operation,
@@ -542,6 +608,178 @@ func (f *FileWatcherService) isDirectory(path string) bool {
 		return false
 	}
 	return info.IsDir()
+}
+
+// File tracking helper functions
+
+// getFileInfo extracts tracking information from a file
+func (f *FileWatcherService) getFileInfo(filePath string) (*TrackedFile, error) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat file %s: %w", filePath, err)
+	}
+
+	// Skip directories for file tracking
+	if info.IsDir() {
+		return nil, nil
+	}
+
+	return &TrackedFile{
+		Path:         filePath,
+		LastModified: info.ModTime().Unix(),
+		FileSize:     info.Size(),
+		LastChecked:  time.Now().Unix(),
+	}, nil
+}
+
+// upsertTrackedFile inserts or updates a tracked file in the database
+func (f *FileWatcherService) upsertTrackedFile(trackedFile *TrackedFile) error {
+	query := `
+	INSERT INTO tracked_files (path, directory_root, last_modified, file_size, last_checked) 
+	VALUES (?, ?, ?, ?, ?)
+	ON CONFLICT(path) DO UPDATE SET
+		last_modified = excluded.last_modified,
+		file_size = excluded.file_size,
+		last_checked = excluded.last_checked
+	`
+	_, err := f.db.Exec(query, trackedFile.Path, trackedFile.DirectoryRoot, 
+		trackedFile.LastModified, trackedFile.FileSize, trackedFile.LastChecked)
+	return err
+}
+
+// getTrackedFile retrieves a tracked file from the database
+func (f *FileWatcherService) getTrackedFile(filePath string) (*TrackedFile, error) {
+	query := `SELECT id, path, directory_root, last_modified, file_size, last_checked 
+			  FROM tracked_files WHERE path = ?`
+	
+	rows, err := f.db.Query(query, filePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query tracked file: %w", err)
+	}
+	defer rows.Close()
+	
+	var tracked TrackedFile
+	if rows.Next() {
+		err := rows.Scan(&tracked.ID, &tracked.Path, &tracked.DirectoryRoot, 
+			&tracked.LastModified, &tracked.FileSize, &tracked.LastChecked)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan tracked file: %w", err)
+		}
+		return &tracked, nil
+	}
+	
+	return nil, nil // File not tracked
+}
+
+// removeTrackedFilesForDirectory removes all tracked files for a directory
+func (f *FileWatcherService) removeTrackedFilesForDirectory(directoryRoot string) error {
+	query := `DELETE FROM tracked_files WHERE directory_root = ?`
+	_, err := f.db.Exec(query, directoryRoot)
+	if err != nil {
+		return fmt.Errorf("failed to remove tracked files for directory %s: %w", directoryRoot, err)
+	}
+	return nil
+}
+
+// scanDirectoryForFiles scans a directory and emits events for all existing files
+func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isInitialScan bool) error {
+	log.Printf("[FileWatcher] Scanning directory for files: %s", directoryRoot)
+	
+	err := filepath.Walk(directoryRoot, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("[FileWatcher] Warning: error accessing path %s: %v", path, err)
+			return nil // Continue walking
+		}
+
+		// Skip directories and hidden files
+		if info.IsDir() || strings.HasPrefix(info.Name(), ".") {
+			return nil
+		}
+
+		// Get current file info
+		currentFile := &TrackedFile{
+			Path:          path,
+			DirectoryRoot: directoryRoot,
+			LastModified:  info.ModTime().Unix(),
+			FileSize:      info.Size(),
+			LastChecked:   time.Now().Unix(),
+		}
+
+		var eventOperation string
+		
+		if isInitialScan {
+			// Check if file changed since last scan
+			trackedFile, err := f.getTrackedFile(path)
+			if err != nil {
+				log.Printf("[FileWatcher] Warning: failed to get tracked file %s: %v", path, err)
+				eventOperation = "discovered" // Default to discovered if we can't check
+			} else if trackedFile == nil {
+				eventOperation = "discovered" // New file
+			} else if trackedFile.LastModified != currentFile.LastModified || 
+					  trackedFile.FileSize != currentFile.FileSize {
+				eventOperation = "changed" // File changed while we were away
+			} else {
+				// File unchanged, just update last_checked timestamp
+				currentFile.ID = trackedFile.ID
+				if err := f.upsertTrackedFile(currentFile); err != nil {
+					log.Printf("[FileWatcher] Warning: failed to update tracked file %s: %v", path, err)
+				}
+				return nil // No event needed
+			}
+		} else {
+			eventOperation = "discovered" // New directory being added
+		}
+
+		// Update database
+		if err := f.upsertTrackedFile(currentFile); err != nil {
+			log.Printf("[FileWatcher] Warning: failed to upsert tracked file %s: %v", path, err)
+		}
+
+		// Emit event
+		fileEvent := FileEvent{
+			Path:      path,
+			Operation: eventOperation,
+			Timestamp: time.Now(),
+			IsDir:     false,
+		}
+
+		// Send event to buffer
+		select {
+		case f.eventBuffer <- fileEvent:
+			// Event sent successfully
+		default:
+			log.Printf("[FileWatcher] Warning: event buffer full, dropping %s event for %s", eventOperation, path)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return fmt.Errorf("error scanning directory %s: %w", directoryRoot, err)
+	}
+
+	return nil
+}
+
+// getWatchedDirectoryRoots returns all watched directory root paths
+func (f *FileWatcherService) getWatchedDirectoryRoots() []string {
+	query := "SELECT path FROM watched_directories ORDER BY length(path) DESC" // Longest paths first
+	rows, err := f.db.Query(query)
+	if err != nil {
+		log.Printf("[FileWatcher] Warning: failed to get watched directory roots: %v", err)
+		return []string{}
+	}
+	defer rows.Close()
+
+	var roots []string
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			continue
+		}
+		roots = append(roots, path)
+	}
+	return roots
 }
 
 // Close cleans up the file watcher resources
