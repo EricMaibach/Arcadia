@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -148,12 +150,13 @@ func (f *FileWatcherService) loadWatchedDirectories() error {
 			continue
 		}
 		
-		// Add to fsnotify watcher (without adding to DB again)
-		if err := f.watcher.Add(path); err != nil {
-			log.Printf("[FileWatcher] Failed to add directory %s to watcher: %v", path, err)
+		// Add to fsnotify watcher recursively (without adding to DB again)
+		addedDirs, err := f.addDirectoryRecursive(path)
+		if err != nil {
+			log.Printf("[FileWatcher] Failed to add directory %s to watcher recursively: %v", path, err)
 			// Continue loading other directories even if one fails
 		} else {
-			log.Printf("[FileWatcher] Loaded watched directory: %s", path)
+			log.Printf("[FileWatcher] Loaded watched directory: %s (including %d subdirectories)", path, len(addedDirs)-1)
 		}
 	}
 
@@ -201,7 +204,7 @@ func (f *FileWatcherService) Stop() error {
 	return nil
 }
 
-// AddDirectory adds a directory to the watch list
+// AddDirectory adds a directory and all its subdirectories to the watch list
 func (f *FileWatcherService) AddDirectory(path string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -212,27 +215,76 @@ func (f *FileWatcherService) AddDirectory(path string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// Add to fsnotify watcher
-	if err := f.watcher.Add(absPath); err != nil {
-		return fmt.Errorf("failed to add directory to watcher: %w", err)
+	// Check if directory exists
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return fmt.Errorf("directory does not exist: %s", absPath)
 	}
 
-	// Store in database
+	// Add the root directory and all subdirectories recursively
+	addedDirs, err := f.addDirectoryRecursive(absPath)
+	if err != nil {
+		// Clean up any directories that were added before the error
+		for _, dir := range addedDirs {
+			f.watcher.Remove(dir)
+		}
+		return fmt.Errorf("failed to add directory recursively: %w", err)
+	}
+
+	// Store in database (only store the root directory)
 	query := `
 	INSERT OR IGNORE INTO watched_directories (path) VALUES (?)
 	`
 	_, err = f.db.Exec(query, absPath)
 	if err != nil {
-		// Remove from watcher if database insert fails
-		f.watcher.Remove(absPath)
+		// Remove all added directories from watcher if database insert fails
+		for _, dir := range addedDirs {
+			f.watcher.Remove(dir)
+		}
 		return fmt.Errorf("failed to store watched directory in database: %w", err)
 	}
 
-	log.Printf("[FileWatcher] Added directory to watch list: %s", absPath)
+	log.Printf("[FileWatcher] Added directory to watch list: %s (including %d subdirectories)", absPath, len(addedDirs)-1)
 	return nil
 }
 
-// RemoveDirectory removes a directory from the watch list
+// addDirectoryRecursive recursively adds a directory and all its subdirectories to the fsnotify watcher
+func (f *FileWatcherService) addDirectoryRecursive(rootPath string) ([]string, error) {
+	var addedDirs []string
+
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Printf("[FileWatcher] Warning: error accessing path %s: %v", path, err)
+			return nil // Continue walking, don't fail the entire operation
+		}
+
+		// Only add directories, not files
+		if !info.IsDir() {
+			return nil
+		}
+
+		// Skip hidden directories (starting with .)
+		if strings.HasPrefix(info.Name(), ".") && path != rootPath {
+			return filepath.SkipDir
+		}
+
+		// Add directory to fsnotify watcher
+		if err := f.watcher.Add(path); err != nil {
+			log.Printf("[FileWatcher] Warning: failed to add subdirectory %s to watcher: %v", path, err)
+			return nil // Continue walking, don't fail the entire operation
+		}
+
+		addedDirs = append(addedDirs, path)
+		return nil
+	})
+
+	if err != nil {
+		return addedDirs, fmt.Errorf("error walking directory tree: %w", err)
+	}
+
+	return addedDirs, nil
+}
+
+// RemoveDirectory removes a directory and all its subdirectories from the watch list
 func (f *FileWatcherService) RemoveDirectory(path string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -243,11 +295,8 @@ func (f *FileWatcherService) RemoveDirectory(path string) error {
 		return fmt.Errorf("failed to get absolute path: %w", err)
 	}
 
-	// Remove from fsnotify watcher
-	if err := f.watcher.Remove(absPath); err != nil {
-		// Log but don't fail if directory is not being watched
-		log.Printf("[FileWatcher] Warning: failed to remove directory from watcher: %v", err)
-	}
+	// Remove the root directory and all subdirectories from fsnotify watcher
+	removedCount := f.removeDirectoryRecursive(absPath)
 
 	// Remove from database
 	query := `DELETE FROM watched_directories WHERE path = ?`
@@ -261,8 +310,45 @@ func (f *FileWatcherService) RemoveDirectory(path string) error {
 		return fmt.Errorf("directory not found in watch list: %s", absPath)
 	}
 
-	log.Printf("[FileWatcher] Removed directory from watch list: %s", absPath)
+	log.Printf("[FileWatcher] Removed directory from watch list: %s (including %d subdirectories)", absPath, removedCount-1)
 	return nil
+}
+
+// removeDirectoryRecursive recursively removes a directory and all its subdirectories from the fsnotify watcher
+func (f *FileWatcherService) removeDirectoryRecursive(rootPath string) int {
+	removedCount := 0
+
+	// If the directory still exists, walk through it to remove all subdirectories
+	if _, err := os.Stat(rootPath); err == nil {
+		filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return nil // Continue walking
+			}
+
+			// Only process directories
+			if !info.IsDir() {
+				return nil
+			}
+
+			// Remove directory from fsnotify watcher
+			if err := f.watcher.Remove(path); err != nil {
+				log.Printf("[FileWatcher] Warning: failed to remove subdirectory %s from watcher: %v", path, err)
+			} else {
+				removedCount++
+			}
+
+			return nil
+		})
+	} else {
+		// Directory doesn't exist, just try to remove the root path
+		if err := f.watcher.Remove(rootPath); err != nil {
+			log.Printf("[FileWatcher] Warning: failed to remove directory %s from watcher: %v", rootPath, err)
+		} else {
+			removedCount++
+		}
+	}
+
+	return removedCount
 }
 
 // GetWatchedDirectories returns a list of all watched directories
@@ -336,11 +422,24 @@ func (f *FileWatcherService) processEvents() {
 				continue
 			}
 			
+			// Check if this is a new directory being created
+			isDir := f.isDirectory(event.Name)
+			operation := f.mapOperation(event.Op)
+			
+			// If a new directory was created, add it to the watcher
+			if operation == "create" && isDir && !strings.HasPrefix(filepath.Base(event.Name), ".") {
+				if err := f.watcher.Add(event.Name); err != nil {
+					log.Printf("[FileWatcher] Warning: failed to add new directory %s to watcher: %v", event.Name, err)
+				} else {
+					log.Printf("[FileWatcher] Automatically added new directory to watcher: %s", event.Name)
+				}
+			}
+			
 			fileEvent := FileEvent{
 				Path:      event.Name,
-				Operation: f.mapOperation(event.Op),
+				Operation: operation,
 				Timestamp: time.Now(),
-				IsDir:     f.isDirectory(event.Name),
+				IsDir:     isDir,
 			}
 			
 			// Try to send event to buffer, drop if buffer is full
@@ -438,9 +537,11 @@ func (f *FileWatcherService) mapOperation(op fsnotify.Op) string {
 
 // isDirectory checks if a path is a directory
 func (f *FileWatcherService) isDirectory(path string) bool {
-	// This is a simple check - you might want to enhance this
-	// For now, we'll return false as we can't always determine this from events
-	return false
+	info, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 // Close cleans up the file watcher resources

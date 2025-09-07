@@ -17,6 +17,7 @@ var (
 	configManager   *config.Manager
 	registryManager *services.RegistryManager
 	wasmRuntime     *services.WasmRuntime
+	fileWatcher     services.FileWatcher
 )
 
 // --- Request Types ---
@@ -29,9 +30,17 @@ type AppRequest struct {
 	AppSrc  string              `json:"appSrc"`
 }
 
+
 func executeAppTool(appID, toolName string, input json.RawMessage) (string, error) {
 	return wasmRuntime.ExecuteAppTool(appID, toolName, input)
 }
+
+// File event handler - prints console messages when files are detected
+func handleFileEvent(event services.FileEvent) {
+	log.Printf("[FileWatcher] File event detected: %s %s at %s (isDir: %t)", 
+		event.Operation, event.Path, event.Timestamp.Format("2006-01-02 15:04:05"), event.IsDir)
+}
+
 
 // --- Main ---
 
@@ -65,6 +74,30 @@ func main() {
 	// Initialize WASM runtime
 	wasmRuntime = services.NewWasmRuntime(configManager, registryManager, dm)
 
+	// Initialize file watcher service
+	fileWatcherConfig := services.DefaultFileWatcherConfig()
+	var err2 error
+	fileWatcher, err2 = services.NewFileWatcherService(dm.GetSystemDB(), fileWatcherConfig)
+	if err2 != nil {
+		log.Fatalf("Failed to initialize file watcher: %v", err2)
+	}
+	defer func() {
+		if fws, ok := fileWatcher.(*services.FileWatcherService); ok {
+			fws.Close()
+		}
+	}()
+
+	// Register file event handler
+	fileWatcher.RegisterEventHandler(handleFileEvent)
+
+	// Start the file watcher service
+	if err := fileWatcher.Start(); err != nil {
+		log.Fatalf("Failed to start file watcher: %v", err)
+	}
+	defer fileWatcher.Stop()
+	
+	log.Println("File watcher service initialized and started")
+
 	// Set up dependency injection for Claude service
 	configManager.SetupDependencyInjection(
 		registryManager.GetRegistryAccess(),
@@ -87,8 +120,14 @@ func main() {
 	// Set up handlers with dependency injection
 	handlers.SetAppDependencies(registryManager, wasmRuntime.GetEngine(), services.GetAppLogFunc(), executeAppTool)
 	handlers.SetScheduleDependencies(services.GetAppLogFunc(), registryManager)
+	handlers.SetFileWatcherDependencies(fileWatcher)
 
 	// Use CORS middleware from handlers package
+
+	// File watcher endpoints
+	http.HandleFunc("/filewatcher/add", handlers.CorsHandler(handlers.AddWatchDirHandler))
+	http.HandleFunc("/filewatcher/remove", handlers.CorsHandler(handlers.RemoveWatchDirHandler))
+	http.HandleFunc("/filewatcher/list", handlers.CorsHandler(handlers.ListWatchedDirsHandler))
 
 	// App management endpoints
 	http.HandleFunc("/list_apps", handlers.CorsHandler(handlers.ListAppsHandler))
@@ -120,5 +159,8 @@ func main() {
 	log.Printf("  /update_schedule?id=<id> - Update a schedule")
 	log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
 	log.Printf("  /claude - Send message to Claude AI (POST {\"message\": \"your message\"})")
+	log.Printf("  /filewatcher/add - Add directory to file watcher (POST {\"path\": \"/path/to/watch\"})")
+	log.Printf("  /filewatcher/remove - Remove directory from file watcher (POST {\"path\": \"/path/to/remove\"})")
+	log.Printf("  /filewatcher/list - List all watched directories (GET)")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }

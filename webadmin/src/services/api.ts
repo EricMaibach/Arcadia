@@ -87,6 +87,19 @@ export interface ScheduledRun {
   error?: string;
 }
 
+// File Watcher Types
+export interface AddWatchDirRequest {
+  path: string;
+}
+
+export interface RemoveWatchDirRequest {
+  path: string;
+}
+
+export interface WatchedDirResponse {
+  directories: string[];
+}
+
 // App Management API
 export const appApi = {
   listApps: async (): Promise<App[]> => {
@@ -136,6 +149,26 @@ export const scheduleApi = {
   listScheduledRuns: async (scheduleId?: string): Promise<ScheduledRun[]> => {
     const params = scheduleId ? { schedule_id: scheduleId } : {};
     const response = await api.get('/list_scheduled_runs', { params });
+    return response.data;
+  },
+};
+
+// File Watcher API
+export const fileWatcherApi = {
+  listWatchedDirectories: async (): Promise<string[]> => {
+    const response = await api.get<WatchedDirResponse>('/filewatcher/list');
+    return response.data.directories;
+  },
+
+  addWatchedDirectory: async (path: string): Promise<any> => {
+    const request: AddWatchDirRequest = { path };
+    const response = await api.post('/filewatcher/add', request);
+    return response.data;
+  },
+
+  removeWatchedDirectory: async (path: string): Promise<any> => {
+    const request: RemoveWatchDirRequest = { path };
+    const response = await api.post('/filewatcher/remove', request);
     return response.data;
   },
 };

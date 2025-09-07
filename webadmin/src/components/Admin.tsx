@@ -6,6 +6,7 @@ import ToolRunner from './ToolRunner';
 import ScheduleList from './ScheduleList';
 import ScheduleForm from './ScheduleForm';
 import ScheduledRunsList from './ScheduledRunsList';
+import FileWatcher from './FileWatcher';
 
 const Admin: React.FC = () => {
   return (
@@ -16,6 +17,7 @@ const Admin: React.FC = () => {
         <Link to="/admin/run-tool" className="admin-nav-link">Run Tool</Link>
         <Link to="/admin/schedules" className="admin-nav-link">Schedules</Link>
         <Link to="/admin/scheduled-runs" className="admin-nav-link">Scheduled Runs</Link>
+        <Link to="/admin/file-watcher" className="admin-nav-link">File Watcher</Link>
       </nav>
       
       <div className="admin-content">
@@ -27,6 +29,7 @@ const Admin: React.FC = () => {
           <Route path="schedule/new" element={<ScheduleForm />} />
           <Route path="schedule/edit/:id" element={<ScheduleForm />} />
           <Route path="scheduled-runs" element={<ScheduledRunsList />} />
+          <Route path="file-watcher" element={<FileWatcher />} />
         </Routes>
       </div>
     </div>
