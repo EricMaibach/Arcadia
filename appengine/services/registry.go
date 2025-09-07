@@ -167,7 +167,7 @@ func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []inte
 		if toolMap, ok := tool.(map[string]interface{}); ok {
 			toolInfos[i] = ToolInfo{
 				Name:        toolMap["name"].(string),
-				InputFormat: toolMap["input_format"].(string),
+				InputFormat: toolMap["inputFormat"].(string),
 			}
 		}
 	}
