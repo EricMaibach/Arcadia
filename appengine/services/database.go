@@ -189,5 +189,13 @@ func InitDatabasesWithManager() (*DatabaseManager, error) {
 		InitDefaultScheduler(repo)
 	}
 
+	// Initialize the queue repository with the system database
+	InitQueueRepository(dm.GetSystemDB())
+
+	// Initialize the default queue with the queue repository
+	if queueRepo := GetQueueRepository(); queueRepo != nil {
+		InitDefaultQueue(queueRepo)
+	}
+
 	return dm, nil
 }

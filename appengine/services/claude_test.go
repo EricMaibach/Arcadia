@@ -355,7 +355,7 @@ func TestClaudeService_executeRunApp(t *testing.T) {
 		"input_data": map[string]interface{}{"key": "value"},
 	}
 
-	result, err := service.executeRunApp(input)
+	result, err := service.executeDynamicAppTool("test-app", "test-tool", input)
 	
 	if err != nil {
 		t.Errorf("executeRunApp failed: %v", err)
@@ -378,7 +378,7 @@ func TestClaudeService_executeRunApp_NoRunner(t *testing.T) {
 		"input_data": map[string]interface{}{"key": "value"},
 	}
 
-	_, err := service.executeRunApp(input)
+	_, err := service.executeDynamicAppTool("test-app", "test-tool", input)
 	
 	if err == nil {
 		t.Error("Expected error when app runner not configured")
@@ -592,7 +592,7 @@ func TestSettersAndGetters(t *testing.T) {
 		"tool_name":  "test",
 		"input_data": map[string]interface{}{},
 	}
-	_, err = service.executeRunApp(input)
+	_, err = service.executeDynamicAppTool("test", "test", input)
 	if err != nil {
 		t.Errorf("App runner not set correctly: %v", err)
 	}
