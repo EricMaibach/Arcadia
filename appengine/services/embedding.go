@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +36,7 @@ type Document struct {
 	ID         string                 `json:"id"`
 	FilePath   string                 `json:"file_path"`
 	FileHash   string                 `json:"file_hash"`
+	Content    string                 `json:"content"`               // Reconstructed from chunks
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 	ChunkCount int                    `json:"chunk_count"`
 	CreatedAt  time.Time              `json:"created_at"`
@@ -202,6 +205,91 @@ func generateVectorID() string {
 	return "vec_" + hex.EncodeToString(bytes)
 }
 
+// reconstructContentFromChunks reconstructs document content from vector entries
+func reconstructContentFromChunks(vectors []*VectorEntry) string {
+	if len(vectors) == 0 {
+		return ""
+	}
+
+	// Parse chunk metadata and create sortable structure
+	type chunkInfo struct {
+		content    string
+		chunkIndex int
+		startPos   int
+		endPos     int
+	}
+
+	var chunks []chunkInfo
+	for _, vector := range vectors {
+		var metadata struct {
+			ChunkIndex int `json:"chunk_index"`
+			StartPos   int `json:"start_pos"`
+			EndPos     int `json:"end_pos"`
+		}
+
+		// Parse metadata JSON
+		if vector.Metadata != "" {
+			if err := json.Unmarshal([]byte(vector.Metadata), &metadata); err != nil {
+				log.Printf("[Embedding] Warning: Could not parse chunk metadata: %v", err)
+				// Fallback: use any available chunk info
+				chunks = append(chunks, chunkInfo{
+					content:    vector.Content,
+					chunkIndex: 0, // Default
+				})
+				continue
+			}
+		}
+
+		chunks = append(chunks, chunkInfo{
+			content:    vector.Content,
+			chunkIndex: metadata.ChunkIndex,
+			startPos:   metadata.StartPos,
+			endPos:     metadata.EndPos,
+		})
+	}
+
+	// Sort chunks by chunk index
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].chunkIndex < chunks[j].chunkIndex
+	})
+
+	// Reconstruct content handling overlap
+	var result strings.Builder
+	for i, chunk := range chunks {
+		if i == 0 {
+			// First chunk - add full content
+			result.WriteString(chunk.content)
+		} else {
+			// For subsequent chunks, we need to handle overlap
+			// The default overlap is 50 characters (from DefaultChunkingConfig)
+			prevChunk := chunks[i-1]
+
+			// If we have position information, use it to determine overlap
+			if chunk.startPos > 0 && prevChunk.endPos > 0 {
+				overlap := prevChunk.endPos - chunk.startPos
+				if overlap > 0 && overlap < len(chunk.content) {
+					// Remove the overlapping part from current chunk
+					result.WriteString(chunk.content[overlap:])
+				} else {
+					// No valid overlap info, just append
+					result.WriteString(chunk.content)
+				}
+			} else {
+				// No position info available, assume default 50-char overlap
+				overlapSize := 50
+				if overlapSize < len(chunk.content) {
+					result.WriteString(chunk.content[overlapSize:])
+				} else {
+					// Chunk is smaller than overlap, this shouldn't happen normally
+					result.WriteString(chunk.content)
+				}
+			}
+		}
+	}
+
+	return result.String()
+}
+
 // Initialize initializes the embedding service
 func (es *EmbeddingService) Initialize() error {
 	es.mutex.Lock()
@@ -366,12 +454,33 @@ func (es *EmbeddingService) SearchSimilar(query string, topK int) ([]*SearchResu
 	return results, nil
 }
 
-// GetDocument retrieves a document by ID
+// GetDocument retrieves a document by ID with content reconstructed from chunks
 func (es *EmbeddingService) GetDocument(documentID string) (*Document, error) {
 	es.mutex.RLock()
 	defer es.mutex.RUnlock()
 
-	return es.documentStore.GetDocument(documentID)
+	// Get document metadata
+	doc, err := es.documentStore.GetDocument(documentID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get document metadata: %w", err)
+	}
+	if doc == nil {
+		return nil, nil
+	}
+
+	// Get all vector entries for this document to reconstruct content
+	vectors, err := es.vectorStore.GetDocumentVectors(documentID)
+	if err != nil {
+		log.Printf("[Embedding] Warning: Could not get document vectors for %s: %v", documentID, err)
+		// Return document with empty content rather than failing
+		doc.Content = ""
+		return doc, nil
+	}
+
+	// Reconstruct content from chunks
+	doc.Content = reconstructContentFromChunks(vectors)
+
+	return doc, nil
 }
 
 // DeleteDocument deletes a document and its associated vectors

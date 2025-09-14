@@ -106,9 +106,15 @@ type AppCreator interface {
 	CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error)
 }
 
+type EmbeddingSearch interface {
+	SearchSimilar(query string, topK int) ([]*SearchResult, error)
+	GetDocument(documentID string) (*Document, error)
+}
+
 var registryAccess RegistryAccess
 var appRunner AppRunner
 var appCreator AppCreator
+var embeddingSearch EmbeddingSearch
 
 func SetRegistryAccess(ra RegistryAccess) {
 	registryAccess = ra
@@ -120,6 +126,10 @@ func SetAppRunner(ar AppRunner) {
 
 func SetAppCreator(ac AppCreator) {
 	appCreator = ac
+}
+
+func SetEmbeddingSearch(es EmbeddingSearch) {
+	embeddingSearch = es
 }
 
 func NewClaudeService(config ClaudeConfig) *ClaudeService {
@@ -359,18 +369,41 @@ ABOUT ARCADIA:
 Arcadia is a digital ecosystem where applications grow and flourish together. It's a WASM-based application platform that allows developers to create and deploy applications that can interact with each other, access shared databases, and leverage AI capabilities.
 
 AVAILABLE TOOLS:
-You have access to two types of tools through the MCP (Model Context Protocol):
+You have access to three types of tools through the MCP (Model Context Protocol):
 
 1. SYSTEM TOOLS (Arcadia platform functionality):
    - list_apps: List all registered applications in the ecosystem
-   - create_app: Submit new Rust code to compile and register WASM applications  
+   - create_app: Submit new Rust code to compile and register WASM applications
    - schedule_app_run: Schedule application tools to run at specific times
    - list_schedules: List all scheduled application runs
 
-2. APP TOOLS (from registered WASM applications):
+2. DOCUMENT SEARCH TOOLS (RAG capabilities):
+   - search_documents: Search for relevant documents using semantic similarity
+   - get_document_content: Retrieve full content of a specific document by ID
+
+   Use these tools to access and reference existing code, documentation, and files in the Arcadia ecosystem:
+
+   WHEN TO USE search_documents:
+   - User asks questions about existing code, files, or documentation
+   - Need to find relevant examples or implementations
+   - Looking for specific functions, patterns, or concepts
+   - User mentions wanting to understand "how something works" or "show me examples"
+
+   WHEN TO USE get_document_content:
+   - Have a specific document ID from search results and need full content
+   - User asks to see the complete file or implementation
+   - Need full context of a document after finding it via search
+
+   INCORPORATING RETRIEVED CONTEXT:
+   - Always cite the source file path when referencing retrieved content
+   - Explain the relevance of retrieved content to the user's question
+   - Use retrieved content to provide accurate, specific answers about the codebase
+   - If multiple relevant documents are found, prioritize by relevance score
+
+3. APP TOOLS (from registered WASM applications):
    App tools are dynamically loaded and follow the naming pattern: "appId_toolName"
    Examples: "food-tracker_log_food", "hello-text_add_hello"
-   
+
    These tools represent functionality exposed by individual applications in the ecosystem. Each app can expose multiple tools for different purposes.
    
    FORMATTING GUIDELINES:
@@ -388,8 +421,10 @@ CAPABILITIES:
 - Create new applications by writing Rust code that implements the ArcadiaApp trait
 - List and interact with existing applications and their tools
 - Schedule automated runs of application tools
-- Help users understand and navigate the Arcadia ecosystem
-- Provide insights about application functionality and data
+- Search and retrieve documents from the Arcadia codebase using semantic similarity
+- Access full content of specific documents to provide detailed code explanations
+- Help users understand and navigate the Arcadia ecosystem by referencing existing implementations
+- Provide insights about application functionality and data based on actual codebase content
 
 As Arcadia, your role is to help users create, manage, and interact with applications within your digital ecosystem.`,
 		now.Format("Monday, January 2, 2006 at 3:04 PM MST"),
@@ -667,6 +702,41 @@ func (cs *ClaudeService) loadMCPTools() {
 				},
 			},
 		},
+		{
+			Name:        "search_documents",
+			Description: "Search for relevant documents using semantic similarity to answer questions about files in the Arcadia ecosystem",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"query": map[string]interface{}{
+						"type":        "string",
+						"description": "Search query text",
+					},
+					"top_k": map[string]interface{}{
+						"type":        "integer",
+						"description": "Number of results to return (default 5)",
+						"default":     5,
+						"minimum":     1,
+						"maximum":     20,
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
+		{
+			Name:        "get_document_content",
+			Description: "Retrieve full content of a specific document by its ID",
+			InputSchema: map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"document_id": map[string]interface{}{
+						"type":        "string",
+						"description": "Document ID to retrieve",
+					},
+				},
+				"required": []string{"document_id"},
+			},
+		},
 	}
 
 	// Add dynamic tools from registered apps
@@ -883,6 +953,10 @@ func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}
 		return cs.executeScheduleAppRun(input)
 	case "list_schedules":
 		return cs.executeListSchedules(input)
+	case "search_documents":
+		return cs.executeSearchDocuments(input)
+	case "get_document_content":
+		return cs.executeGetDocumentContent(input)
 	default:
 		// Check if this is a dynamic app tool (format: appId_toolName)
 		if strings.Contains(toolName, "_") {
@@ -1083,6 +1157,137 @@ func (cs *ClaudeService) executeListSchedules(input interface{}) (string, error)
 	}
 
 	return string(result), nil
+}
+
+func (cs *ClaudeService) executeSearchDocuments(input interface{}) (string, error) {
+	if embeddingSearch == nil {
+		return "", fmt.Errorf("embedding search service not configured")
+	}
+
+	// Convert input to expected structure
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	var searchReq struct {
+		Query string `json:"query"`
+		TopK  int    `json:"top_k"`
+	}
+
+	if err := json.Unmarshal(inputJSON, &searchReq); err != nil {
+		return "", fmt.Errorf("failed to parse search request: %w", err)
+	}
+
+	// Validate required fields
+	if searchReq.Query == "" {
+		return "", fmt.Errorf("query is required")
+	}
+
+	// Set default top_k if not provided
+	if searchReq.TopK == 0 {
+		searchReq.TopK = 5
+	}
+
+	// Validate top_k range
+	if searchReq.TopK < 1 || searchReq.TopK > 20 {
+		return "", fmt.Errorf("top_k must be between 1 and 20")
+	}
+
+	// Perform the search
+	results, err := embeddingSearch.SearchSimilar(searchReq.Query, searchReq.TopK)
+	if err != nil {
+		return "", fmt.Errorf("search failed: %w", err)
+	}
+
+	// Format results for Claude
+	var formattedResults []map[string]interface{}
+	for _, result := range results {
+		if result.Entry == nil {
+			continue
+		}
+
+		formattedResult := map[string]interface{}{
+			"score":       result.Score,
+			"content":     result.Entry.Content,
+			"chunk_index": result.ChunkIndex,
+		}
+
+		// Add document information if available
+		if result.Document != nil {
+			formattedResult["document_id"] = result.Document.ID
+			formattedResult["file_path"] = result.Document.FilePath
+			formattedResult["metadata"] = result.Document.Metadata
+		}
+
+		formattedResults = append(formattedResults, formattedResult)
+	}
+
+	response := map[string]interface{}{
+		"query":         searchReq.Query,
+		"results":       formattedResults,
+		"total_results": len(formattedResults),
+	}
+
+	resultJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(resultJSON), nil
+}
+
+func (cs *ClaudeService) executeGetDocumentContent(input interface{}) (string, error) {
+	if embeddingSearch == nil {
+		return "", fmt.Errorf("embedding search service not configured")
+	}
+
+	// Convert input to expected structure
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	var docReq struct {
+		DocumentID string `json:"document_id"`
+	}
+
+	if err := json.Unmarshal(inputJSON, &docReq); err != nil {
+		return "", fmt.Errorf("failed to parse document request: %w", err)
+	}
+
+	// Validate required fields
+	if docReq.DocumentID == "" {
+		return "", fmt.Errorf("document_id is required")
+	}
+
+	// Get the document with reconstructed content
+	document, err := embeddingSearch.GetDocument(docReq.DocumentID)
+	if err != nil {
+		return "", fmt.Errorf("failed to get document: %w", err)
+	}
+
+	if document == nil {
+		return "", fmt.Errorf("document not found: %s", docReq.DocumentID)
+	}
+
+	response := map[string]interface{}{
+		"document_id": document.ID,
+		"file_path":   document.FilePath,
+		"file_hash":   document.FileHash,
+		"content":     document.Content,
+		"chunk_count": document.ChunkCount,
+		"metadata":    document.Metadata,
+		"created_at":  document.CreatedAt,
+		"updated_at":  document.UpdatedAt,
+	}
+
+	resultJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(resultJSON), nil
 }
 
 func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request) {

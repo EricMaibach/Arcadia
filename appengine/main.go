@@ -338,6 +338,15 @@ func main() {
 		registryManager.GetAppCreator(),
 	)
 
+	// Add embedding search capability to Claude service
+	embeddingService = services.GetDefaultEmbeddingService()
+	if embeddingService != nil {
+		services.SetEmbeddingSearch(embeddingService)
+		log.Println("RAG capabilities enabled - Claude can now search and retrieve documents")
+	} else {
+		log.Printf("WARNING: Embedding service not available - RAG tools will not function")
+	}
+
 	// Trigger initial Claude tool refresh now that registry access is set up
 	services.TriggerClaudeToolRefresh()
 
