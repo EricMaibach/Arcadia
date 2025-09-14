@@ -712,12 +712,12 @@ func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isIniti
 			trackedFile, err := f.getTrackedFile(path)
 			if err != nil {
 				log.Printf("[FileWatcher] Warning: failed to get tracked file %s: %v", path, err)
-				eventOperation = "discovered" // Default to discovered if we can't check
+				eventOperation = "create" // Default to create if we can't check
 			} else if trackedFile == nil {
-				eventOperation = "discovered" // New file
+				eventOperation = "create" // New file
 			} else if trackedFile.LastModified != currentFile.LastModified || 
 					  trackedFile.FileSize != currentFile.FileSize {
-				eventOperation = "changed" // File changed while we were away
+				eventOperation = "modify" // File changed while we were away
 			} else {
 				// File unchanged, just update last_checked timestamp
 				currentFile.ID = trackedFile.ID
@@ -727,7 +727,7 @@ func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isIniti
 				return nil // No event needed
 			}
 		} else {
-			eventOperation = "discovered" // New directory being added
+			eventOperation = "create" // New directory being added
 		}
 
 		// Update database

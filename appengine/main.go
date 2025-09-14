@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
@@ -30,15 +32,203 @@ type AppRequest struct {
 	AppSrc  string              `json:"appSrc"`
 }
 
+// FileEventData represents file event data for queue processing
+type FileEventData struct {
+	FilePath  string    `json:"file_path"`
+	EventType string    `json:"event_type"`
+	Timestamp time.Time `json:"timestamp"`
+	IsDir     bool      `json:"is_dir"`
+}
+
+// QueueProcessor handles background processing of queued file events
+type QueueProcessor struct {
+	queue       *services.QueueService
+	embedding   services.EmbeddingServiceInterface
+	workers     int
+	stopChannel chan bool
+	running     bool
+}
+
 
 func executeAppTool(appID, toolName string, input json.RawMessage) (string, error) {
 	return wasmRuntime.ExecuteAppTool(appID, toolName, input)
 }
 
-// File event handler - prints console messages when files are detected
+// newQueueProcessor creates a new queue processor instance with single worker
+func newQueueProcessor(queue *services.QueueService, embedding services.EmbeddingServiceInterface) *QueueProcessor {
+	return &QueueProcessor{
+		queue:       queue,
+		embedding:   embedding,
+		workers:     1, // Single worker for Ollama compatibility
+		stopChannel: make(chan bool, 1),
+		running:     false,
+	}
+}
+
+// start begins the queue processing with a single background goroutine
+func (qp *QueueProcessor) start() {
+	if qp.running {
+		log.Printf("[QueueProcessor] Already running")
+		return
+	}
+	
+	qp.running = true
+	log.Printf("[QueueProcessor] Starting single worker")
+	
+	// Start single worker goroutine
+	go qp.processQueueItems()
+}
+
+// stop gracefully stops the queue processor
+func (qp *QueueProcessor) stop() {
+	if !qp.running {
+		return
+	}
+	
+	log.Printf("[QueueProcessor] Stopping...")
+	qp.running = false
+	
+	// Signal worker to stop
+	select {
+	case qp.stopChannel <- true:
+	default:
+		// Channel might be full, that's ok
+	}
+	
+	log.Printf("[QueueProcessor] Stopped")
+}
+
+// processQueueItems is the main worker loop for processing queue items
+func (qp *QueueProcessor) processQueueItems() {
+	log.Printf("[QueueProcessor] Worker started")
+	
+	for qp.running {
+		select {
+		case <-qp.stopChannel:
+			log.Printf("[QueueProcessor] Worker stopping")
+			return
+		default:
+			// Try to get next item from queue
+			item, err := qp.queue.Dequeue()
+			if err != nil {
+				// Log error and continue
+				log.Printf("[QueueProcessor] Queue error: %v", err)
+				time.Sleep(5 * time.Second)
+				continue
+			}
+			
+			if item == nil {
+				// No items in queue, wait before trying again
+				time.Sleep(1 * time.Second)
+				continue
+			}
+			
+			// Process the queue item
+			log.Printf("[QueueProcessor] Processing item %s", item.ID)
+			qp.processFileEvent(item)
+		}
+	}
+	
+	log.Printf("[QueueProcessor] Worker finished")
+}
+
+// processFileEvent processes a single file event from the queue
+func (qp *QueueProcessor) processFileEvent(item *services.QueueItem) {
+	// Parse the event data
+	var eventData FileEventData
+	if err := json.Unmarshal([]byte(item.Data), &eventData); err != nil {
+		log.Printf("[QueueProcessor] Failed to parse event data: %v", err)
+		qp.queue.MarkFailed(item.ID, fmt.Sprintf("Failed to parse event data: %v", err))
+		return
+	}
+	
+	log.Printf("[QueueProcessor] Processing %s event for file: %s", 
+		eventData.EventType, eventData.FilePath)
+	
+	switch eventData.EventType {
+	case "create", "modify":
+		// Process file for embedding
+		err := qp.processFileForEmbedding(eventData.FilePath)
+		if err != nil {
+			log.Printf("[QueueProcessor] Failed to process file %s: %v", 
+				eventData.FilePath, err)
+			qp.queue.MarkFailed(item.ID, fmt.Sprintf("Processing failed: %v", err))
+			return
+		}
+		
+		log.Printf("[QueueProcessor] Successfully processed file: %s", eventData.FilePath)
+		qp.queue.MarkCompleted(item.ID)
+		
+	case "delete":
+		// For now, just mark as completed
+		// TODO: Implement vector cleanup for deleted files
+		log.Printf("[QueueProcessor] Handling delete event for: %s (cleanup not implemented)", 
+			eventData.FilePath)
+		qp.queue.MarkCompleted(item.ID)
+		
+	default:
+		log.Printf("[QueueProcessor] Unknown event type: %s", eventData.EventType)
+		qp.queue.MarkCompleted(item.ID)
+	}
+}
+
+// processFileForEmbedding sends a file to the embedding service for processing
+func (qp *QueueProcessor) processFileForEmbedding(filePath string) error {
+	if qp.embedding == nil {
+		return fmt.Errorf("embedding service not available")
+	}
+	
+	// Use the embedding service to process the file
+	doc, err := qp.embedding.ProcessFile(filePath)
+	if err != nil {
+		return fmt.Errorf("embedding processing failed: %v", err)
+	}
+	
+	log.Printf("[QueueProcessor] Embedded file %s: %d chunks", 
+		filePath, doc.ChunkCount)
+		
+	return nil
+}
+
+// File event handler - enqueues file events for processing
 func handleFileEvent(event services.FileEvent) {
-	log.Printf("[FileWatcher] File event detected: %s %s at %s (isDir: %t)", 
-		event.Operation, event.Path, event.Timestamp.Format("2006-01-02 15:04:05"), event.IsDir)
+	// Skip directory events for now - only process files
+	if event.IsDir {
+		log.Printf("[FileWatcher] Skipping directory event: %s %s", event.Operation, event.Path)
+		return
+	}
+
+	// Get the default queue service
+	queue := services.GetDefaultQueue()
+	if queue == nil {
+		log.Printf("[FileWatcher] Error: Queue service not initialized")
+		return
+	}
+
+	// Create structured event data
+	eventData := FileEventData{
+		FilePath:  event.Path,
+		EventType: event.Operation,
+		Timestamp: event.Timestamp,
+		IsDir:     event.IsDir,
+	}
+
+	// Marshal to JSON for queue storage
+	jsonData, err := json.Marshal(eventData)
+	if err != nil {
+		log.Printf("[FileWatcher] Error marshaling event data: %v", err)
+		return
+	}
+
+	// Enqueue the file event (priority 1 for normal processing)
+	item, err := queue.Enqueue(string(jsonData), 1)
+	if err != nil {
+		log.Printf("[FileWatcher] Error enqueuing file event: %v", err)
+		return
+	}
+
+	log.Printf("[FileWatcher] Queued file event: %s %s (queue ID: %s)", 
+		event.Operation, event.Path, item.ID)
 }
 
 
@@ -97,6 +287,49 @@ func main() {
 	defer fileWatcher.Stop()
 	
 	log.Println("File watcher service initialized and started")
+
+	// Initialize embedding service for file processing
+	log.Printf("[DEBUG] Initializing embedding service...")
+	chunker := services.NewSimpleTextChunker()
+	model := services.NewOllamaEmbeddingModel("", "") // Use defaults: localhost:11434, embeddinggemma
+	vectorStore := services.GetVectorStore()
+	documentStore := services.GetDocumentStore()
+	embeddingConfig := services.DefaultChunkingConfig()
+	
+	if vectorStore != nil && documentStore != nil {
+		services.InitDefaultEmbeddingService(chunker, model, vectorStore, documentStore, embeddingConfig)
+		
+		// Initialize the model
+		embeddingService := services.GetDefaultEmbeddingService()
+		if embeddingService != nil {
+			if err := embeddingService.Initialize(); err != nil {
+				log.Printf("WARNING: Failed to initialize embedding service: %v", err)
+			} else {
+				log.Println("Embedding service initialized successfully")
+			}
+		}
+	} else {
+		log.Printf("WARNING: Cannot initialize embedding service - vectorStore: %v, documentStore: %v", 
+			vectorStore != nil, documentStore != nil)
+	}
+
+	// Initialize and start queue processor for file processing
+	queueService := services.GetDefaultQueue()
+	embeddingService := services.GetDefaultEmbeddingService()
+	
+	log.Printf("[DEBUG] Queue service available: %v", queueService != nil)
+	log.Printf("[DEBUG] Embedding service available: %v", embeddingService != nil)
+	
+	if queueService != nil && embeddingService != nil {
+		log.Printf("[DEBUG] Initializing queue processor...")
+		queueProcessor := newQueueProcessor(queueService, embeddingService)
+		queueProcessor.start()
+		defer queueProcessor.stop()
+		log.Println("Queue processor initialized and started")
+	} else {
+		log.Printf("WARNING: Queue processor not started - queue: %v, embedding: %v", 
+			queueService != nil, embeddingService != nil)
+	}
 
 	// Set up dependency injection for Claude service
 	configManager.SetupDependencyInjection(

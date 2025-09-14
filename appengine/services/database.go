@@ -197,5 +197,10 @@ func InitDatabasesWithManager() (*DatabaseManager, error) {
 		InitDefaultQueue(queueRepo)
 	}
 
+	// Initialize the vector and document stores with the system database
+	InitVectorStore(dm.GetSystemDB())
+	InitDocumentStore(dm.GetSystemDB())
+	log.Println("Vector and document stores initialized successfully")
+
 	return dm, nil
 }
