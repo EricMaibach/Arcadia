@@ -37,3 +37,4 @@ appengine/artifacts
 appengine/build
 appengine/data
 appengine/app_registry.json
+appengine/logs
