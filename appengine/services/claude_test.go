@@ -118,7 +118,6 @@ func TestClaudeService_loadMCPTools(t *testing.T) {
 		"schedule_app_run",
 		"list_schedules",
 		"search_documents",
-		"search_documents_grouped",
 	}
 
 	if len(service.mcpTools) != len(expectedTools) {

@@ -142,7 +142,6 @@ type DocumentStoreInterface interface {
 // EmbeddingServiceInterface defines the main interface for the embedding service
 type EmbeddingServiceInterface interface {
 	ProcessFile(filePath string) (*Document, error)
-	SearchSimilar(query string, topK int) ([]*SearchResult, error)
 	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 	DeleteDocument(documentID string) error
@@ -452,95 +451,21 @@ func calculateSearchLimit(topK int) int {
 	return topK + 100
 }
 
-// SearchSimilar searches for similar content with deduplication by document ID
-func (es *EmbeddingService) SearchSimilar(query string, topK int) ([]*SearchResult, error) {
-	es.mutex.RLock()
-	defer es.mutex.RUnlock()
-
-	// Handle edge case
-	if topK <= 0 {
-		return []*SearchResult{}, nil
-	}
-
-	// Generate query embedding
-	queryEmbedding, err := es.model.GenerateEmbedding(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
-	}
-
-	// Calculate search limit to ensure enough unique documents after deduplication
-	searchLimit := calculateSearchLimit(topK)
-
-	// Search for similar vectors with expanded limit
-	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
-	}
-
-	// Handle case where no results found
-	if len(results) == 0 {
-		return []*SearchResult{}, nil
-	}
-
-	// Deduplicate results by document ID, keeping only the highest-scoring chunk per document
-	bestResultByDoc := make(map[string]*SearchResult)
-	for _, result := range results {
-		if result.Entry != nil && result.Entry.DocumentID != "" {
-			docID := result.Entry.DocumentID
-
-			// Keep this result if it's the first for this document or has a higher score
-			if existing, exists := bestResultByDoc[docID]; !exists || result.Score > existing.Score {
-				// Parse chunk metadata to get chunk index
-				chunkIndex := 0
-				if result.Entry.Metadata != "" {
-					var metadata struct {
-						ChunkIndex int `json:"chunk_index"`
-					}
-					if err := json.Unmarshal([]byte(result.Entry.Metadata), &metadata); err == nil {
-						chunkIndex = metadata.ChunkIndex
-					}
-				}
-				result.ChunkIndex = chunkIndex
-				bestResultByDoc[docID] = result
-			}
-		}
-	}
-
-	// Convert map to slice
-	deduplicatedResults := make([]*SearchResult, 0, len(bestResultByDoc))
-	for _, result := range bestResultByDoc {
-		deduplicatedResults = append(deduplicatedResults, result)
-	}
-
-	// Sort deduplicated results by score (descending)
-	sort.Slice(deduplicatedResults, func(i, j int) bool {
-		return deduplicatedResults[i].Score > deduplicatedResults[j].Score
-	})
-
-	// Limit to topK results
-	if len(deduplicatedResults) > topK {
-		deduplicatedResults = deduplicatedResults[:topK]
-	}
-
-	// Log deduplication metrics
-	log.Printf("[Embedding] SearchSimilar deduplication: query=%q, initialResults=%d, uniqueDocs=%d, topK=%d",
-		query, len(results), len(deduplicatedResults), topK)
-
-	// Enrich results with document information
-	for _, result := range deduplicatedResults {
-		if result.Entry != nil && result.Entry.DocumentID != "" {
-			doc, _ := es.documentStore.GetDocument(result.Entry.DocumentID)
-			result.Document = doc
-		}
-	}
-
-	return deduplicatedResults, nil
-}
 
 // SearchDocuments searches for similar content and returns chunks grouped by document
 func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error) {
 	es.mutex.RLock()
 	defer es.mutex.RUnlock()
+
+	// Validate topK parameter
+	if topK < 0 {
+		topK = 0
+	}
+
+	// Early return for zero topK
+	if topK == 0 {
+		return []*DocumentSearchResult{}, nil
+	}
 
 	// Generate query embedding
 	queryEmbedding, err := es.model.GenerateEmbedding(query)

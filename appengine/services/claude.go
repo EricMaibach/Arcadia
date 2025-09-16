@@ -105,7 +105,6 @@ type AppCreator interface {
 }
 
 type EmbeddingSearch interface {
-	SearchSimilar(query string, topK int) ([]*SearchResult, error)
 	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 }
@@ -374,25 +373,21 @@ You have access to three types of tools through the MCP (Model Context Protocol)
    - list_schedules: List all scheduled application runs
 
 2. DOCUMENT SEARCH TOOLS (RAG capabilities):
-   - search_documents: Search for relevant documents using semantic similarity (returns basic chunk info)
-   - search_documents_grouped: Search for documents with full content and all relevant chunks included
+   - search_documents: Search for documents with full content and all relevant chunks included
 
-   PREFERRED METHOD: Use search_documents_grouped for most queries as it provides complete information in a single call.
+   Use this tool to access existing code, documentation, and files in the Arcadia ecosystem.
+   Returns complete document content with relevant chunks, eliminating additional calls.
 
-   Use these tools to access and reference existing code, documentation, and files in the Arcadia ecosystem:
-
-   WHEN TO USE search_documents_grouped:
-   - User asks questions about existing code, files, or documentation
-   - Need to find relevant examples or implementations
-   - Looking for specific functions, patterns, or concepts
-   - User mentions wanting to understand "how something works" or "show me examples"
-   - This method returns complete document content with relevant chunks, eliminating the need for additional calls
+   WHEN TO USE:
+   - Questions about existing code, files, or documentation
+   - Finding relevant examples or implementations
+   - Understanding how components work
+   - User mentions "show me examples" or "how does X work"
 
    INCORPORATING RETRIEVED CONTEXT:
-   - Always cite the source file path when referencing retrieved content
-   - Explain the relevance of retrieved content to the user's question
-   - Use retrieved content to provide accurate, specific answers about the codebase
-   - Documents are ranked by relevance with chunks showing specific matches
+   - Always cite source file paths when referencing content
+   - Explain relevance to the user's question
+   - Documents ranked by relevance with specific matching chunks
    - Full document content is included, so no additional document retrieval is needed
 
 3. APP TOOLS (from registered WASM applications):
@@ -471,7 +466,7 @@ As Arcadia, your role is to help users create, manage, and interact with applica
 	}
 
 	if len(claudeResp.Content) == 0 {
-		return "", fmt.Errorf("no content in claude response")
+		return "", fmt.Errorf("no content in Claude response")
 	}
 
 	// Build assistant message content (may include both text and tool use)
@@ -674,27 +669,6 @@ func (cs *ClaudeService) loadMCPTools() {
 		},
 		{
 			Name:        "search_documents",
-			Description: "Search for relevant documents using semantic similarity to answer questions about files in the Arcadia ecosystem",
-			InputSchema: map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"query": map[string]any{
-						"type":        "string",
-						"description": "Search query text",
-					},
-					"top_k": map[string]any{
-						"type":        "integer",
-						"description": "Number of results to return (default 5)",
-						"default":     5,
-						"minimum":     1,
-						"maximum":     20,
-					},
-				},
-				"required": []string{"query"},
-			},
-		},
-		{
-			Name:        "search_documents_grouped",
 			Description: "Search for documents with all relevant chunks and full content included in a single call. This eliminates the need for separate get_document_content calls and prevents rate limiting.",
 			InputSchema: map[string]any{
 				"type": "object",
@@ -943,8 +917,6 @@ func (cs *ClaudeService) executeMCPToolDirect(toolName string, input any) (strin
 		return cs.executeListSchedules(input)
 	case "search_documents":
 		return cs.executeSearchDocuments(input)
-	case "search_documents_grouped":
-		return cs.executeSearchDocumentsGrouped(input)
 	case "get_document_content":
 		return cs.executeGetDocumentContent(input)
 	default:
@@ -1149,83 +1121,6 @@ func (cs *ClaudeService) executeListSchedules(input any) (string, error) {
 	return string(result), nil
 }
 
-func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
-	if embeddingSearch == nil {
-		return "", fmt.Errorf("embedding search service not configured")
-	}
-
-	// Convert input to expected structure
-	inputJSON, err := json.Marshal(input)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal input: %w", err)
-	}
-
-	var searchReq struct {
-		Query string `json:"query"`
-		TopK  int    `json:"top_k"`
-	}
-
-	if err := json.Unmarshal(inputJSON, &searchReq); err != nil {
-		return "", fmt.Errorf("failed to parse search request: %w", err)
-	}
-
-	// Validate required fields
-	if searchReq.Query == "" {
-		return "", fmt.Errorf("query is required")
-	}
-
-	// Set default top_k if not provided
-	if searchReq.TopK == 0 {
-		searchReq.TopK = 5
-	}
-
-	// Validate top_k range
-	if searchReq.TopK < 1 || searchReq.TopK > 20 {
-		return "", fmt.Errorf("top_k must be between 1 and 20")
-	}
-
-	// Perform the search
-	results, err := embeddingSearch.SearchSimilar(searchReq.Query, searchReq.TopK)
-	if err != nil {
-		return "", fmt.Errorf("search failed: %w", err)
-	}
-
-	// Format results for Claude
-	var formattedResults []map[string]any
-	for _, result := range results {
-		if result.Entry == nil {
-			continue
-		}
-
-		formattedResult := map[string]any{
-			"score":       result.Score,
-			"content":     result.Entry.Content,
-			"chunk_index": result.ChunkIndex,
-		}
-
-		// Add document information if available
-		if result.Document != nil {
-			formattedResult["document_id"] = result.Document.ID
-			formattedResult["file_path"] = result.Document.FilePath
-			formattedResult["metadata"] = result.Document.Metadata
-		}
-
-		formattedResults = append(formattedResults, formattedResult)
-	}
-
-	response := map[string]any{
-		"query":         searchReq.Query,
-		"results":       formattedResults,
-		"total_results": len(formattedResults),
-	}
-
-	resultJSON, err := json.Marshal(response)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal response: %w", err)
-	}
-
-	return string(resultJSON), nil
-}
 
 func (cs *ClaudeService) executeGetDocumentContent(input any) (string, error) {
 	if embeddingSearch == nil {
@@ -1280,7 +1175,7 @@ func (cs *ClaudeService) executeGetDocumentContent(input any) (string, error) {
 	return string(resultJSON), nil
 }
 
-func (cs *ClaudeService) executeSearchDocumentsGrouped(input any) (string, error) {
+func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 	if embeddingSearch == nil {
 		return "", fmt.Errorf("embedding search service not configured")
 	}
