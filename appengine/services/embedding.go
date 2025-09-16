@@ -80,6 +80,23 @@ type ChunkResult struct {
 	ChunkIndex int     `json:"chunk_index"`
 }
 
+// EnhancedDocumentSearchResult represents an enhanced document search result with full content
+type EnhancedDocumentSearchResult struct {
+	Document          *Document `json:"document"`
+	BestScore         float32   `json:"best_score"`
+	RelevanceRank     int       `json:"relevance_rank"`
+	ContextHighlights []string  `json:"context_highlights"`
+	ContentPreview    string    `json:"content_preview"` // First 500 chars
+	IsTruncated       bool      `json:"is_truncated"`
+}
+
+// SearchConfig defines configuration for document search
+type SearchConfig struct {
+	MaxDocumentSize   int  `json:"max_document_size"`   // 50KB default
+	MaxHighlights     int  `json:"max_highlights"`      // 3 default
+	IncludeFullContent bool `json:"include_full_content"` // true default
+}
+
 // ChunkingStrategy defines how text should be chunked
 type ChunkingStrategy string
 
@@ -102,6 +119,15 @@ func DefaultChunkingConfig() ChunkingConfig {
 		Strategy:     ChunkingStrategyFixed,
 		MaxChunkSize: 512,  // Good default for all-MiniLM-L6-v2
 		ChunkOverlap: 50,   // Small overlap to maintain context
+	}
+}
+
+// DefaultSearchConfig returns default search configuration
+func DefaultSearchConfig() SearchConfig {
+	return SearchConfig{
+		MaxDocumentSize:   50 * 1024, // 50KB
+		MaxHighlights:     3,
+		IncludeFullContent: true,
 	}
 }
 
@@ -143,6 +169,7 @@ type DocumentStoreInterface interface {
 type EmbeddingServiceInterface interface {
 	ProcessFile(filePath string) (*Document, error)
 	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
+	SearchDocumentsEnhanced(query string, topK int, config SearchConfig) ([]*EnhancedDocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 	DeleteDocument(documentID string) error
 	Initialize() error
@@ -451,38 +478,51 @@ func calculateSearchLimit(topK int) int {
 	return topK + 100
 }
 
+// truncateContent truncates content to the specified size limit
+func truncateContent(content string, maxSize int) (string, bool) {
+	if len(content) <= maxSize {
+		return content, false
+	}
+	return content[:maxSize], true
+}
 
-// SearchDocuments searches for similar content and returns chunks grouped by document
-func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error) {
-	es.mutex.RLock()
-	defer es.mutex.RUnlock()
+// extractContentPreview extracts the first 500 characters as a preview
+func extractContentPreview(content string) string {
+	const previewSize = 500
+	if len(content) <= previewSize {
+		return content
+	}
+	return content[:previewSize] + "..."
+}
 
-	// Validate topK parameter
-	if topK < 0 {
-		topK = 0
+// extractContextHighlights extracts the top N most relevant chunk excerpts
+func extractContextHighlights(chunks []*ChunkResult, maxHighlights int) []string {
+	if len(chunks) == 0 {
+		return []string{}
 	}
 
-	// Early return for zero topK
-	if topK == 0 {
-		return []*DocumentSearchResult{}, nil
+	// Sort chunks by score (highest first) - they should already be sorted but ensure it
+	sort.Slice(chunks, func(i, j int) bool {
+		return chunks[i].Score > chunks[j].Score
+	})
+
+	// Take top N chunks as highlights
+	highlightCount := min(len(chunks), maxHighlights)
+	highlights := make([]string, 0, highlightCount)
+
+	for i := 0; i < highlightCount; i++ {
+		// Trim the content and add as highlight
+		highlight := strings.TrimSpace(chunks[i].Content)
+		if highlight != "" {
+			highlights = append(highlights, highlight)
+		}
 	}
 
-	// Generate query embedding
-	queryEmbedding, err := es.model.GenerateEmbedding(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
-	}
+	return highlights
+}
 
-	// Search for similar vectors - get more results to ensure good document coverage
-	searchLimit := calculateSearchLimit(topK * 3)
-	searchLimit = min(searchLimit, 200) // Cap at reasonable maximum
-
-	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
-	if err != nil {
-		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
-	}
-
-	// Group results by document ID
+// deduplicateAndGroupResults groups search results by document ID and deduplicates
+func deduplicateAndGroupResults(results []*SearchResult) map[string]*DocumentSearchResult {
 	documentGroups := make(map[string]*DocumentSearchResult)
 
 	for _, result := range results {
@@ -518,22 +558,73 @@ func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*Document
 				group.BestScore = result.Score
 			}
 		} else {
-			// Create new group - get document metadata
-			doc, _ := es.documentStore.GetDocument(docID)
-			if doc != nil {
-				// Reconstruct full content from chunks for this document
-				vectors, _ := es.vectorStore.GetDocumentVectors(docID)
-				doc.Content = reconstructContentFromChunks(vectors)
-			}
-
+			// Create new group - document will be populated later
 			documentGroups[docID] = &DocumentSearchResult{
-				Document:      doc,
+				Document:      nil, // Will be populated later
 				Chunks:        []*ChunkResult{chunkResult},
 				BestScore:     result.Score,
 				TotalChunks:   1,
 				RelevanceRank: 0, // Will be set after sorting
 			}
 		}
+	}
+
+	return documentGroups
+}
+
+
+// SearchDocuments searches for similar content and returns chunks grouped by document
+func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error) {
+	es.mutex.RLock()
+	defer es.mutex.RUnlock()
+
+	// Validate topK parameter
+	if topK < 0 {
+		topK = 0
+	}
+
+	// Early return for zero topK
+	if topK == 0 {
+		return []*DocumentSearchResult{}, nil
+	}
+
+	// Generate query embedding
+	queryEmbedding, err := es.model.GenerateEmbedding(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
+	}
+
+	// Search for similar vectors - get more results to ensure good document coverage
+	searchLimit := calculateSearchLimit(topK * 3)
+	searchLimit = min(searchLimit, 200) // Cap at reasonable maximum
+
+	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
+	}
+
+	// Group results by document ID and deduplicate
+	documentGroups := deduplicateAndGroupResults(results)
+
+	// Populate document information for each group
+	for docID, group := range documentGroups {
+		// Get document metadata
+		doc, err := es.documentStore.GetDocument(docID)
+		if err != nil {
+			log.Printf("[Embedding] Warning: Could not get document %s: %v", docID, err)
+			continue
+		}
+		if doc != nil {
+			// Reconstruct full content from chunks for this document
+			vectors, err := es.vectorStore.GetDocumentVectors(docID)
+			if err != nil {
+				log.Printf("[Embedding] Warning: Could not get document vectors for %s: %v", docID, err)
+				doc.Content = ""
+			} else {
+				doc.Content = reconstructContentFromChunks(vectors)
+			}
+		}
+		group.Document = doc
 	}
 
 	// Convert map to slice and sort by best score
@@ -564,6 +655,113 @@ func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*Document
 			   query, len(documentResults), topK)
 
 	return documentResults, nil
+}
+
+// SearchDocumentsEnhanced searches for similar content and returns enhanced document results with full content
+func (es *EmbeddingService) SearchDocumentsEnhanced(query string, topK int, config SearchConfig) ([]*EnhancedDocumentSearchResult, error) {
+	es.mutex.RLock()
+	defer es.mutex.RUnlock()
+
+	// Validate topK parameter
+	if topK < 0 {
+		topK = 0
+	}
+
+	// Early return for zero topK
+	if topK == 0 {
+		return []*EnhancedDocumentSearchResult{}, nil
+	}
+
+	// Generate query embedding
+	queryEmbedding, err := es.model.GenerateEmbedding(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
+	}
+
+	// Search for similar vectors - get more results to ensure good document coverage
+	searchLimit := calculateSearchLimit(topK * 3)
+	searchLimit = min(searchLimit, 200) // Cap at reasonable maximum
+
+	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
+	}
+
+	// Group results by document ID and deduplicate
+	documentGroups := deduplicateAndGroupResults(results)
+
+	// Populate document information and create enhanced results
+	var enhancedResults []*EnhancedDocumentSearchResult
+	for docID, group := range documentGroups {
+		// Get document metadata
+		doc, err := es.documentStore.GetDocument(docID)
+		if err != nil {
+			log.Printf("[Embedding] Warning: Could not get document %s: %v", docID, err)
+			continue
+		}
+		if doc == nil {
+			continue
+		}
+
+		// Reconstruct full content from chunks if needed
+		if config.IncludeFullContent {
+			vectors, err := es.vectorStore.GetDocumentVectors(docID)
+			if err != nil {
+				log.Printf("[Embedding] Warning: Could not get document vectors for %s: %v", docID, err)
+				doc.Content = ""
+			} else {
+				doc.Content = reconstructContentFromChunks(vectors)
+			}
+		}
+
+		// Apply document size limits
+		isTruncated := false
+		if config.MaxDocumentSize >= 0 && len(doc.Content) > config.MaxDocumentSize {
+			doc.Content, isTruncated = truncateContent(doc.Content, config.MaxDocumentSize)
+		}
+
+		// Sort chunks by score (highest first)
+		sort.Slice(group.Chunks, func(i, j int) bool {
+			return group.Chunks[i].Score > group.Chunks[j].Score
+		})
+
+		// Extract context highlights
+		contextHighlights := extractContextHighlights(group.Chunks, config.MaxHighlights)
+
+		// Create content preview
+		contentPreview := extractContentPreview(doc.Content)
+
+		// Create enhanced result
+		enhancedResult := &EnhancedDocumentSearchResult{
+			Document:          doc,
+			BestScore:         group.BestScore,
+			RelevanceRank:     0, // Will be set after sorting
+			ContextHighlights: contextHighlights,
+			ContentPreview:    contentPreview,
+			IsTruncated:       isTruncated,
+		}
+
+		enhancedResults = append(enhancedResults, enhancedResult)
+	}
+
+	// Sort documents by best score (highest first)
+	sort.Slice(enhancedResults, func(i, j int) bool {
+		return enhancedResults[i].BestScore > enhancedResults[j].BestScore
+	})
+
+	// Limit to topK documents and set relevance ranks
+	if len(enhancedResults) > topK {
+		enhancedResults = enhancedResults[:topK]
+	}
+
+	for i, result := range enhancedResults {
+		result.RelevanceRank = i + 1
+	}
+
+	log.Printf("[Embedding] SearchDocumentsEnhanced: query=%q, documents=%d, topK=%d, maxDocSize=%d",
+			   query, len(enhancedResults), topK, config.MaxDocumentSize)
+
+	return enhancedResults, nil
 }
 
 // GetDocument retrieves a document by ID with content reconstructed from chunks

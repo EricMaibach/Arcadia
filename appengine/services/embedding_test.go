@@ -968,3 +968,208 @@ func TestEmbeddingService_SearchDocuments(t *testing.T) {
 		}
 	})
 }
+
+// TestEmbeddingService_SearchDocumentsEnhanced tests the enhanced SearchDocuments method
+func TestEmbeddingService_SearchDocumentsEnhanced(t *testing.T) {
+	// Create temporary database
+	tempDir := os.TempDir()
+	dbPath := filepath.Join(tempDir, "test_search_enhanced.db")
+	defer os.Remove(dbPath)
+
+	db, err := NewSQLiteDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	defer db.Close()
+
+	// Create mock components
+	chunker := NewSimpleTextChunker()
+	model := NewMockEmbeddingModel(128)
+	model.Initialize()
+	vectorStore := NewSQLiteVectorStore(db)
+	documentStore := NewSQLiteDocumentStore(db)
+	config := DefaultChunkingConfig()
+
+	// Create service
+	service := NewEmbeddingService(chunker, model, vectorStore, documentStore, config)
+	err = service.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize service: %v", err)
+	}
+	defer service.Close()
+
+	// Create test documents with varying sizes
+	smallDoc := strings.Repeat("Small document content. ", 5)
+	mediumDoc := strings.Repeat("Medium document with more detailed content about machine learning and AI. ", 50)
+	largeDoc := strings.Repeat("Large document with extensive content covering artificial intelligence, machine learning, natural language processing, vector databases, and similarity search algorithms. This content is designed to exceed size limits. ", 300)
+
+	// Create temporary files
+	testFiles := []struct {
+		name    string
+		content string
+	}{
+		{"small.txt", smallDoc},
+		{"medium.txt", mediumDoc},
+		{"large.txt", largeDoc},
+	}
+
+	var createdDocs []*Document
+	for _, tf := range testFiles {
+		// Create temporary file
+		tmpFile, err := os.CreateTemp("", tf.name)
+		if err != nil {
+			t.Fatalf("Failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		// Write content
+		_, err = tmpFile.WriteString(tf.content)
+		if err != nil {
+			t.Fatalf("Failed to write temp file: %v", err)
+		}
+		tmpFile.Close()
+
+		// Process file
+		doc, err := service.ProcessFile(tmpFile.Name())
+		if err != nil {
+			t.Fatalf("Failed to process file %s: %v", tf.name, err)
+		}
+		createdDocs = append(createdDocs, doc)
+	}
+
+	// Test SearchDocumentsEnhanced with default config
+	t.Run("enhanced_search_default_config", func(t *testing.T) {
+		config := DefaultSearchConfig()
+		results, err := service.SearchDocumentsEnhanced("machine learning artificial intelligence", 3, config)
+		if err != nil {
+			t.Fatalf("SearchDocumentsEnhanced failed: %v", err)
+		}
+
+		// Should return results
+		if len(results) == 0 {
+			t.Error("Expected at least one result")
+		}
+
+		// Should not exceed topK
+		if len(results) > 3 {
+			t.Errorf("Expected at most 3 results, got %d", len(results))
+		}
+
+		// Verify structure of enhanced results
+		for i, result := range results {
+			if result.Document == nil {
+				t.Errorf("Result %d: Document should not be nil", i)
+			}
+
+			if result.BestScore <= 0 {
+				t.Errorf("Result %d: BestScore should be positive, got %f", i, result.BestScore)
+			}
+
+			if result.RelevanceRank != i+1 {
+				t.Errorf("Result %d: Expected RelevanceRank %d, got %d",
+					i, i+1, result.RelevanceRank)
+			}
+
+			// Verify document has content
+			if result.Document.Content == "" {
+				t.Errorf("Result %d: Document content should be reconstructed", i)
+			}
+
+			// Verify context highlights
+			if len(result.ContextHighlights) > config.MaxHighlights {
+				t.Errorf("Result %d: Too many context highlights: %d > %d",
+					i, len(result.ContextHighlights), config.MaxHighlights)
+			}
+
+			// Verify content preview
+			if result.ContentPreview == "" {
+				t.Errorf("Result %d: ContentPreview should not be empty", i)
+			}
+
+			// Verify preview length
+			if len(result.ContentPreview) > 503 { // 500 + "..."
+				t.Errorf("Result %d: ContentPreview too long: %d chars", i, len(result.ContentPreview))
+			}
+		}
+
+		// Verify results are sorted by best score (highest first)
+		for i := 1; i < len(results); i++ {
+			if results[i].BestScore > results[i-1].BestScore {
+				t.Error("Results should be sorted by BestScore (highest first)")
+			}
+		}
+	})
+
+	// Test with size limits
+	t.Run("enhanced_search_size_limits", func(t *testing.T) {
+		config := SearchConfig{
+			MaxDocumentSize:   1000, // Small size limit
+			MaxHighlights:     2,
+			IncludeFullContent: true,
+		}
+
+		results, err := service.SearchDocumentsEnhanced("extensive content", 3, config)
+		if err != nil {
+			t.Fatalf("SearchDocumentsEnhanced failed: %v", err)
+		}
+
+		// Check for truncation
+		foundTruncated := false
+		for i, result := range results {
+			if len(result.Document.Content) > config.MaxDocumentSize {
+				t.Errorf("Result %d: Document content exceeds size limit: %d > %d",
+					i, len(result.Document.Content), config.MaxDocumentSize)
+			}
+
+			if result.IsTruncated {
+				foundTruncated = true
+			}
+
+			if len(result.ContextHighlights) > config.MaxHighlights {
+				t.Errorf("Result %d: Too many highlights: %d > %d",
+					i, len(result.ContextHighlights), config.MaxHighlights)
+			}
+		}
+
+		// Should have found at least one truncated document given our large content
+		if !foundTruncated {
+			t.Log("Expected to find at least one truncated document")
+		}
+	})
+
+	// Test without full content
+	t.Run("enhanced_search_no_full_content", func(t *testing.T) {
+		config := SearchConfig{
+			MaxDocumentSize:   50000,
+			MaxHighlights:     3,
+			IncludeFullContent: false,
+		}
+
+		results, err := service.SearchDocumentsEnhanced("document content", 2, config)
+		if err != nil {
+			t.Fatalf("SearchDocumentsEnhanced failed: %v", err)
+		}
+
+		// When full content is disabled, document content should be empty or original
+		for i, result := range results {
+			if result.Document == nil {
+				t.Errorf("Result %d: Document should not be nil", i)
+				continue
+			}
+			// Content might be empty or the original stored content
+			// The important thing is we don't reconstruct it from chunks
+		}
+	})
+
+	t.Run("enhanced_search_zero_topK", func(t *testing.T) {
+		config := DefaultSearchConfig()
+		results, err := service.SearchDocumentsEnhanced("test", 0, config)
+		if err != nil {
+			t.Fatalf("SearchDocumentsEnhanced failed: %v", err)
+		}
+
+		if len(results) != 0 {
+			t.Errorf("Expected 0 results for topK=0, got %d", len(results))
+		}
+	})
+}

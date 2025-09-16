@@ -106,6 +106,7 @@ type AppCreator interface {
 
 type EmbeddingSearch interface {
 	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
+	SearchDocumentsEnhanced(query string, topK int, config SearchConfig) ([]*EnhancedDocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 }
 
@@ -373,10 +374,17 @@ You have access to three types of tools through the MCP (Model Context Protocol)
    - list_schedules: List all scheduled application runs
 
 2. DOCUMENT SEARCH TOOLS (RAG capabilities):
-   - search_documents: Search for documents with full content and all relevant chunks included
+   - search_documents: Enhanced semantic search with complete document content, context highlights, and intelligent content management
 
    Use this tool to access existing code, documentation, and files in the Arcadia ecosystem.
-   Returns complete document content with relevant chunks, eliminating additional calls.
+   Returns complete document content with highlighted relevant passages for optimal AI understanding.
+
+   ENHANCED FEATURES:
+   - Complete document content with size management (up to 50KB)
+   - Context highlights: Top 3 most relevant passages for each document
+   - Content previews: First 500 characters with truncation indicators
+   - Better deduplication and relevance ranking
+   - Eliminates fragmented chunk results
 
    WHEN TO USE:
    - Questions about existing code, files, or documentation
@@ -387,8 +395,8 @@ You have access to three types of tools through the MCP (Model Context Protocol)
    INCORPORATING RETRIEVED CONTEXT:
    - Always cite source file paths when referencing content
    - Explain relevance to the user's question
-   - Documents ranked by relevance with specific matching chunks
-   - Full document content is included, so no additional document retrieval is needed
+   - Use context highlights to focus on most relevant passages
+   - Documents ranked by relevance with complete content included
 
 3. APP TOOLS (from registered WASM applications):
    App tools are dynamically loaded and follow the naming pattern: "appId_toolName"
@@ -669,7 +677,7 @@ func (cs *ClaudeService) loadMCPTools() {
 		},
 		{
 			Name:        "search_documents",
-			Description: "Search for documents with all relevant chunks and full content included in a single call. This eliminates the need for separate get_document_content calls and prevents rate limiting.",
+			Description: "Search for documents with enhanced capabilities including complete document content, context highlights of the top 3 most relevant passages, content previews, and intelligent size management. Returns full documents with highlighted relevant passages for better AI understanding, eliminating fragmented chunk results.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -1210,10 +1218,59 @@ func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 		return "", fmt.Errorf("top_k must be between 1 and 10")
 	}
 
-	// Perform the grouped search
+	// Use type assertion to call SearchDocumentsEnhanced with proper types
+	if embeddingServiceInstance, ok := embeddingSearch.(*EmbeddingService); ok {
+		// Get default search config from embedding service
+		// We'll use the DefaultSearchConfig function from the embedding service
+		defaultConfig := DefaultSearchConfig()
+
+		// This will call the enhanced method directly
+		results, err := embeddingServiceInstance.SearchDocumentsEnhanced(searchReq.Query, searchReq.TopK, defaultConfig)
+		if err != nil {
+			return "", fmt.Errorf("enhanced search failed: %w", err)
+		}
+
+		// Format enhanced results for Claude
+		var formattedResults []map[string]any
+		for _, result := range results {
+			if result.Document == nil {
+				continue
+			}
+
+			formattedResult := map[string]any{
+				"document_id":        result.Document.ID,
+				"file_path":          result.Document.FilePath,
+				"full_content":       result.Document.Content,
+				"context_highlights": result.ContextHighlights,
+				"content_preview":    result.ContentPreview,
+				"is_truncated":       result.IsTruncated,
+				"relevance_score":    result.BestScore,
+				"relevance_rank":     result.RelevanceRank,
+				"metadata":           result.Document.Metadata,
+			}
+
+			formattedResults = append(formattedResults, formattedResult)
+		}
+
+		response := map[string]any{
+			"query":           searchReq.Query,
+			"documents":       formattedResults,
+			"total_documents": len(formattedResults),
+			"usage_note":      "Documents include full content with highlighted relevant passages for better AI understanding.",
+		}
+
+		resultJSON, err := json.Marshal(response)
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal response: %w", err)
+		}
+
+		return string(resultJSON), nil
+	}
+
+	// Fallback to original method if enhanced method is not available
 	results, err := embeddingSearch.SearchDocuments(searchReq.Query, searchReq.TopK)
 	if err != nil {
-		return "", fmt.Errorf("grouped search failed: %w", err)
+		return "", fmt.Errorf("fallback search failed: %w", err)
 	}
 
 	// Format results for Claude with complete document information
@@ -1223,29 +1280,34 @@ func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 			continue
 		}
 
-		// Format chunks for this document
-		var chunks []map[string]any
-		for _, chunk := range result.Chunks {
-			chunks = append(chunks, map[string]any{
-				"content":     chunk.Content,
-				"score":       chunk.Score,
-				"chunk_index": chunk.ChunkIndex,
-			})
+		// Format chunks for this document as context highlights
+		var contextHighlights []string
+		maxHighlights := 3
+		for i, chunk := range result.Chunks {
+			if i >= maxHighlights {
+				break
+			}
+			contextHighlights = append(contextHighlights, chunk.Content)
+		}
+
+		// Create content preview (first 500 chars)
+		contentPreview := result.Document.Content
+		isTruncated := false
+		if len(contentPreview) > 500 {
+			contentPreview = contentPreview[:500]
+			isTruncated = true
 		}
 
 		formattedResult := map[string]any{
-			"document_id":    result.Document.ID,
-			"file_path":      result.Document.FilePath,
-			"file_hash":      result.Document.FileHash,
-			"metadata":       result.Document.Metadata,
-			"full_content":   result.Document.Content,
-			"chunk_count":    result.Document.ChunkCount,
-			"created_at":     result.Document.CreatedAt,
-			"updated_at":     result.Document.UpdatedAt,
-			"relevance_rank": result.RelevanceRank,
-			"best_score":     result.BestScore,
-			"total_chunks":   result.TotalChunks,
-			"matching_chunks": chunks,
+			"document_id":        result.Document.ID,
+			"file_path":          result.Document.FilePath,
+			"full_content":       result.Document.Content,
+			"context_highlights": contextHighlights,
+			"content_preview":    contentPreview,
+			"is_truncated":       isTruncated,
+			"relevance_score":    result.BestScore,
+			"relevance_rank":     result.RelevanceRank,
+			"metadata":           result.Document.Metadata,
 		}
 
 		formattedResults = append(formattedResults, formattedResult)
@@ -1255,7 +1317,7 @@ func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 		"query":           searchReq.Query,
 		"documents":       formattedResults,
 		"total_documents": len(formattedResults),
-		"usage_note":      "Each document includes full content and relevant chunks. No additional get_document_content calls needed.",
+		"usage_note":      "Documents include full content with highlighted relevant passages for better AI understanding.",
 	}
 
 	resultJSON, err := json.Marshal(response)
