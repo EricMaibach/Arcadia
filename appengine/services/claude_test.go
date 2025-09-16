@@ -115,10 +115,10 @@ func TestClaudeService_loadMCPTools(t *testing.T) {
 
 	expectedTools := []string{
 		"list_apps",
-		"run_app", 
-		"create_app",
 		"schedule_app_run",
 		"list_schedules",
+		"search_documents",
+		"search_documents_grouped",
 	}
 
 	if len(service.mcpTools) != len(expectedTools) {
@@ -655,9 +655,10 @@ func TestClaudeStructValidation(t *testing.T) {
 
 func TestExecuteMCPToolDirect_UnknownTool(t *testing.T) {
 	service := &ClaudeService{}
-	
-	_, err := service.executeMCPToolDirect("unknown_tool", nil)
-	
+
+	// Test with a tool name that doesn't contain underscore (won't be treated as app tool)
+	_, err := service.executeMCPToolDirect("unknowntool", nil)
+
 	if err == nil {
 		t.Error("Expected error for unknown tool")
 	}

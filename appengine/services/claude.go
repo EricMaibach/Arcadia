@@ -6,8 +6,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -32,13 +30,13 @@ type ClaudeConfig struct {
 
 type ClaudeMessage struct {
 	Role    string      `json:"role"`
-	Content interface{} `json:"content"` // Can be string or array of content blocks
+	Content any `json:"content"` // Can be string or array of content blocks
 }
 
 type ClaudeTool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description"`
-	InputSchema interface{} `json:"input_schema"`
+	InputSchema any `json:"input_schema"`
 }
 
 type ClaudeRequest struct {
@@ -54,7 +52,7 @@ type ClaudeContent struct {
 	Text  string      `json:"text,omitempty"`
 	ID    string      `json:"id,omitempty"`
 	Name  string      `json:"name,omitempty"`
-	Input interface{} `json:"input,omitempty"`
+	Input any `json:"input,omitempty"`
 }
 
 type ClaudeResponse struct {
@@ -94,7 +92,7 @@ var claudeServiceInstance *ClaudeService
 
 // Dependency injection interfaces
 type RegistryAccess interface {
-	GetRegistry() map[string]interface{}
+	GetRegistry() map[string]any
 	GetRegistryMutex() *sync.RWMutex
 }
 
@@ -103,11 +101,12 @@ type AppRunner interface {
 }
 
 type AppCreator interface {
-	CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error)
+	CreateApp(appID, version, runtime string, tools []any, appSrc string, dependencies map[string]string) (string, error)
 }
 
 type EmbeddingSearch interface {
 	SearchSimilar(query string, topK int) ([]*SearchResult, error)
+	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 }
 
@@ -239,10 +238,7 @@ func (cm *ContextManager) compactContext(context *ConversationContext) {
 	}
 
 	// Keep first message and last (maxMessages-1) messages
-	keepRecent := maxMessages - 1
-	if keepRecent < 1 {
-		keepRecent = 1
-	}
+	keepRecent := max(maxMessages-1, 1)
 
 	firstMsg := context.Messages[0]
 	recentMsgs := context.Messages[len(context.Messages)-keepRecent:]
@@ -378,27 +374,26 @@ You have access to three types of tools through the MCP (Model Context Protocol)
    - list_schedules: List all scheduled application runs
 
 2. DOCUMENT SEARCH TOOLS (RAG capabilities):
-   - search_documents: Search for relevant documents using semantic similarity
-   - get_document_content: Retrieve full content of a specific document by ID
+   - search_documents: Search for relevant documents using semantic similarity (returns basic chunk info)
+   - search_documents_grouped: Search for documents with full content and all relevant chunks included
+
+   PREFERRED METHOD: Use search_documents_grouped for most queries as it provides complete information in a single call.
 
    Use these tools to access and reference existing code, documentation, and files in the Arcadia ecosystem:
 
-   WHEN TO USE search_documents:
+   WHEN TO USE search_documents_grouped:
    - User asks questions about existing code, files, or documentation
    - Need to find relevant examples or implementations
    - Looking for specific functions, patterns, or concepts
    - User mentions wanting to understand "how something works" or "show me examples"
-
-   WHEN TO USE get_document_content:
-   - Have a specific document ID from search results and need full content
-   - User asks to see the complete file or implementation
-   - Need full context of a document after finding it via search
+   - This method returns complete document content with relevant chunks, eliminating the need for additional calls
 
    INCORPORATING RETRIEVED CONTEXT:
    - Always cite the source file path when referencing retrieved content
    - Explain the relevance of retrieved content to the user's question
    - Use retrieved content to provide accurate, specific answers about the codebase
-   - If multiple relevant documents are found, prioritize by relevance score
+   - Documents are ranked by relevance with chunks showing specific matches
+   - Full document content is included, so no additional document retrieval is needed
 
 3. APP TOOLS (from registered WASM applications):
    App tools are dynamically loaded and follow the naming pattern: "appId_toolName"
@@ -467,7 +462,7 @@ As Arcadia, your role is to help users create, manage, and interact with applica
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Claude API error (status %d): %s", resp.StatusCode, string(body))
+		return "", fmt.Errorf("claude API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
 	var claudeResp ClaudeResponse
@@ -476,24 +471,25 @@ As Arcadia, your role is to help users create, manage, and interact with applica
 	}
 
 	if len(claudeResp.Content) == 0 {
-		return "", fmt.Errorf("no content in Claude response")
+		return "", fmt.Errorf("no content in claude response")
 	}
 
 	// Build assistant message content (may include both text and tool use)
-	var assistantContent []interface{}
+	var assistantContent []any
 	var responseText string
 	var hasToolUse bool
 
 	for _, content := range claudeResp.Content {
-		if content.Type == "text" {
+		switch content.Type {
+		case "text":
 			responseText = content.Text
-			assistantContent = append(assistantContent, map[string]interface{}{
+			assistantContent = append(assistantContent, map[string]any{
 				"type": "text",
 				"text": content.Text,
 			})
-		} else if content.Type == "tool_use" {
+		case "tool_use":
 			hasToolUse = true
-			assistantContent = append(assistantContent, map[string]interface{}{
+			assistantContent = append(assistantContent, map[string]any{
 				"type":  "tool_use",
 				"id":    content.ID,
 				"name":  content.Name,
@@ -505,7 +501,7 @@ As Arcadia, your role is to help users create, manage, and interact with applica
 	// Add assistant's response to context (including tool use)
 	if len(assistantContent) > 0 {
 		// Store as content array for tool use, string for plain text
-		var messageContent interface{}
+		var messageContent any
 		if hasToolUse {
 			messageContent = assistantContent
 		} else if responseText != "" {
@@ -540,32 +536,6 @@ func (cs *ClaudeService) RefreshMCPTools() {
 	}
 }
 
-// loadCreateAppDescription loads the create_app tool description from the shared markdown file
-func loadCreateAppDescription() string {
-	// Try multiple possible locations for the description file
-	cwd, _ := os.Getwd()
-
-	possiblePaths := []string{
-		// If running from project root
-		filepath.Join(cwd, "shared", "create_app_description.md"),
-		// If running from appengine directory
-		filepath.Join(cwd, "..", "shared", "create_app_description.md"),
-		// If running from appengine/services directory
-		filepath.Join(cwd, "..", "..", "shared", "create_app_description.md"),
-	}
-
-	for _, descriptionPath := range possiblePaths {
-		content, err := os.ReadFile(descriptionPath)
-		if err == nil {
-			log.Printf("[Claude MCP] Found description file at %s", descriptionPath)
-			return string(content)
-		}
-	}
-
-	// If not found, log warning with all attempted paths
-	log.Printf("[Claude MCP] Warning: Could not find description file. Searched in: %v", possiblePaths)
-	return "Create a new WASM application by submitting Rust code that implements the ArcadiaApp trait"
-}
 
 func (cs *ClaudeService) loadMCPTools() {
 	// Start with static tools
@@ -573,40 +543,40 @@ func (cs *ClaudeService) loadMCPTools() {
 		{
 			Name:        "list_apps",
 			Description: "List all registered applications in the Arcadia App Engine",
-			InputSchema: map[string]interface{}{
+			InputSchema: map[string]any{
 				"type":       "object",
-				"properties": map[string]interface{}{},
+				"properties": map[string]any{},
 			},
 		},
 		// {
 		// 	Name:        "create_app",
 		// 	Description: loadCreateAppDescription(),
-		// 	InputSchema: map[string]interface{}{
+		// 	InputSchema: map[string]any{
 		// 		"type": "object",
-		// 		"properties": map[string]interface{}{
-		// 			"appId": map[string]interface{}{
+		// 		"properties": map[string]any{
+		// 			"appId": map[string]any{
 		// 				"type":        "string",
 		// 				"description": "Unique identifier for the application",
 		// 			},
-		// 			"version": map[string]interface{}{
+		// 			"version": map[string]any{
 		// 				"type":        "string",
 		// 				"description": "Version of the application",
 		// 			},
-		// 			"runtime": map[string]interface{}{
+		// 			"runtime": map[string]any{
 		// 				"type":        "string",
 		// 				"description": "Runtime for the application (must be 'wasm')",
 		// 			},
-		// 			"tools": map[string]interface{}{
+		// 			"tools": map[string]any{
 		// 				"type":        "array",
 		// 				"description": "Array of tool definitions",
-		// 				"items": map[string]interface{}{
+		// 				"items": map[string]any{
 		// 					"type": "object",
-		// 					"properties": map[string]interface{}{
-		// 						"name": map[string]interface{}{
+		// 					"properties": map[string]any{
+		// 						"name": map[string]any{
 		// 							"type":        "string",
 		// 							"description": "Name of the tool",
 		// 						},
-		// 						"input_format": map[string]interface{}{
+		// 						"input_format": map[string]any{
 		// 							"type":        "string",
 		// 							"description": "Input format (json, xml, etc.)",
 		// 						},
@@ -614,14 +584,14 @@ func (cs *ClaudeService) loadMCPTools() {
 		// 					"required": []string{"name", "input_format"},
 		// 				},
 		// 			},
-		// 			"appSrc": map[string]interface{}{
+		// 			"appSrc": map[string]any{
 		// 				"type":        "string",
 		// 				"description": "Rust trait implementation source code",
 		// 			},
-		// 			"dependencies": map[string]interface{}{
+		// 			"dependencies": map[string]any{
 		// 				"type":        "object",
 		// 				"description": "Optional Rust crate dependencies to include in Cargo.toml (e.g., {\"chrono\": \"0.4\", \"regex\": \"1.9\"}). Common dependencies are auto-detected from 'use' statements.",
-		// 				"additionalProperties": map[string]interface{}{
+		// 				"additionalProperties": map[string]any{
 		// 					"type":        "string",
 		// 					"description": "Version specification for the crate",
 		// 				},
@@ -633,53 +603,53 @@ func (cs *ClaudeService) loadMCPTools() {
 		{
 			Name:        "schedule_app_run",
 			Description: "Schedule an application tool to run at a specific time or recurring interval",
-			InputSchema: map[string]interface{}{
+			InputSchema: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"appId": map[string]interface{}{
+				"properties": map[string]any{
+					"appId": map[string]any{
 						"type":        "string",
 						"description": "The ID of the application to schedule",
 					},
-					"toolName": map[string]interface{}{
+					"toolName": map[string]any{
 						"type":        "string",
 						"description": "The name of the tool to execute",
 					},
-					"input": map[string]interface{}{
+					"input": map[string]any{
 						"type":        "object",
 						"description": "Input data to pass to the tool",
 					},
-					"scheduleType": map[string]interface{}{
+					"scheduleType": map[string]any{
 						"type":        "string",
 						"enum":        []string{"one-time", "recurring"},
 						"description": "Type of schedule",
 					},
-					"scheduledTime": map[string]interface{}{
+					"scheduledTime": map[string]any{
 						"type":        "string",
 						"description": "When to run the scheduled task (ISO 8601 format or flexible datetime)",
 					},
-					"recurrence": map[string]interface{}{
+					"recurrence": map[string]any{
 						"type":        "object",
 						"description": "Recurrence rule for recurring schedules",
-						"properties": map[string]interface{}{
-							"interval": map[string]interface{}{
+						"properties": map[string]any{
+							"interval": map[string]any{
 								"type":        "integer",
 								"description": "Interval between executions",
 							},
-							"unit": map[string]interface{}{
+							"unit": map[string]any{
 								"type":        "string",
 								"enum":        []string{"minutes", "hours", "days", "weeks", "months"},
 								"description": "Time unit for interval",
 							},
-							"daysOfWeek": map[string]interface{}{
+							"daysOfWeek": map[string]any{
 								"type":        "array",
 								"description": "Days of week for weekly recurrence (0=Sunday, 6=Saturday)",
-								"items": map[string]interface{}{
+								"items": map[string]any{
 									"type":    "integer",
 									"minimum": 0,
 									"maximum": 6,
 								},
 							},
-							"endDate": map[string]interface{}{
+							"endDate": map[string]any{
 								"type":        "string",
 								"description": "End date for recurrence (ISO 8601 format)",
 							},
@@ -692,10 +662,10 @@ func (cs *ClaudeService) loadMCPTools() {
 		{
 			Name:        "list_schedules",
 			Description: "List all scheduled application runs, optionally filtered by app ID",
-			InputSchema: map[string]interface{}{
+			InputSchema: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"appId": map[string]interface{}{
+				"properties": map[string]any{
+					"appId": map[string]any{
 						"type":        "string",
 						"description": "Optional app ID to filter schedules",
 					},
@@ -705,14 +675,14 @@ func (cs *ClaudeService) loadMCPTools() {
 		{
 			Name:        "search_documents",
 			Description: "Search for relevant documents using semantic similarity to answer questions about files in the Arcadia ecosystem",
-			InputSchema: map[string]interface{}{
+			InputSchema: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"query": map[string]interface{}{
+				"properties": map[string]any{
+					"query": map[string]any{
 						"type":        "string",
 						"description": "Search query text",
 					},
-					"top_k": map[string]interface{}{
+					"top_k": map[string]any{
 						"type":        "integer",
 						"description": "Number of results to return (default 5)",
 						"default":     5,
@@ -724,19 +694,40 @@ func (cs *ClaudeService) loadMCPTools() {
 			},
 		},
 		{
-			Name:        "get_document_content",
-			Description: "Retrieve full content of a specific document by its ID",
-			InputSchema: map[string]interface{}{
+			Name:        "search_documents_grouped",
+			Description: "Search for documents with all relevant chunks and full content included in a single call. This eliminates the need for separate get_document_content calls and prevents rate limiting.",
+			InputSchema: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"document_id": map[string]interface{}{
+				"properties": map[string]any{
+					"query": map[string]any{
 						"type":        "string",
-						"description": "Document ID to retrieve",
+						"description": "Search query text",
+					},
+					"top_k": map[string]any{
+						"type":        "integer",
+						"description": "Number of documents to return (default 5)",
+						"default":     5,
+						"minimum":     1,
+						"maximum":     10,
 					},
 				},
-				"required": []string{"document_id"},
+				"required": []string{"query"},
 			},
 		},
+		// {
+		//	Name:        "get_document_content",
+		//	Description: "Retrieve full content of a specific document by its ID",
+		//	InputSchema: map[string]any{
+		//		"type": "object",
+		//		"properties": map[string]any{
+		//			"document_id": map[string]any{
+		//				"type":        "string",
+		//				"description": "Document ID to retrieve",
+		//			},
+		//		},
+		//		"required": []string{"document_id"},
+		//	},
+		// },
 	}
 
 	// Add dynamic tools from registered apps
@@ -773,18 +764,18 @@ func (cs *ClaudeService) loadDynamicAppTools() []ClaudeTool {
 				description := fmt.Sprintf("Execute %s tool from %s application", tool.Name, appID)
 
 				// Create input schema from inputFormat if available
-				inputSchema := map[string]interface{}{
+				inputSchema := map[string]any{
 					"type":       "object",
-					"properties": map[string]interface{}{},
+					"properties": map[string]any{},
 				}
 
 				if tool.InputFormat != "" {
 					// Try to parse the input format as JSON schema
 					// For now, use a generic object schema with description
-					inputSchema = map[string]interface{}{
+					inputSchema = map[string]any{
 						"type":        "object",
 						"description": fmt.Sprintf("Input data for %s. Expected format: %s", tool.Name, tool.InputFormat),
-						"properties":  map[string]interface{}{},
+						"properties":  map[string]any{},
 					}
 				}
 
@@ -798,13 +789,13 @@ func (cs *ClaudeService) loadDynamicAppTools() []ClaudeTool {
 				log.Printf("[Claude Tools] Created dynamic tool: %s", namespacedName)
 				dynamicTools = append(dynamicTools, dynamicTool)
 			}
-		} else if appData, ok := appInterface.(map[string]interface{}); ok {
-			// Fallback: handle as map[string]interface{} (for backward compatibility)
+		} else if appData, ok := appInterface.(map[string]any); ok {
+			// Fallback: handle as map[string]any (for backward compatibility)
 			if toolsInterface, exists := appData["tools"]; exists {
-				if tools, ok := toolsInterface.([]interface{}); ok {
+				if tools, ok := toolsInterface.([]any); ok {
 					log.Printf("[Claude Tools] App '%s' has %d tools (map format)", appID, len(tools))
 					for _, toolInterface := range tools {
-						if tool, ok := toolInterface.(map[string]interface{}); ok {
+						if tool, ok := toolInterface.(map[string]any); ok {
 							// Extract tool information
 							toolName, hasName := tool["name"].(string)
 							if !hasName {
@@ -822,18 +813,18 @@ func (cs *ClaudeService) loadDynamicAppTools() []ClaudeTool {
 							}
 
 							// Create input schema from inputFormat if available
-							inputSchema := map[string]interface{}{
+							inputSchema := map[string]any{
 								"type":       "object",
-								"properties": map[string]interface{}{},
+								"properties": map[string]any{},
 							}
 
 							if inputFormat, ok := tool["inputFormat"].(string); ok && inputFormat != "" {
 								// Try to parse the input format as JSON schema
 								// For now, use a generic object schema with description
-								inputSchema = map[string]interface{}{
+								inputSchema = map[string]any{
 									"type":        "object",
 									"description": fmt.Sprintf("Input data for %s. Expected format: %s", toolName, inputFormat),
-									"properties":  map[string]interface{}{},
+									"properties":  map[string]any{},
 								}
 							}
 
@@ -866,9 +857,6 @@ func (cs *ClaudeService) loadDynamicAppTools() []ClaudeTool {
 	return dynamicTools
 }
 
-func (cs *ClaudeService) handleToolUseWithLoop(response ClaudeResponse, contextID string) (string, error) {
-	return cs.handleToolUseWithLoopInternal(response, contextID, 0)
-}
 
 func (cs *ClaudeService) handleToolUseWithLoopInternal(response ClaudeResponse, contextID string, depth int) (string, error) {
 	// Prevent infinite loops - limit recursion depth
@@ -890,7 +878,7 @@ func (cs *ClaudeService) handleToolUseWithLoopInternal(response ClaudeResponse, 
 		return strings.Join(results, "\n\n"), nil
 	}
 
-	var toolResults []map[string]interface{}
+	var toolResults []map[string]any
 
 	log.Printf("[Claude MCP] Handling tool use response with %d content items (depth: %d)", len(response.Content), depth)
 
@@ -901,7 +889,7 @@ func (cs *ClaudeService) handleToolUseWithLoopInternal(response ClaudeResponse, 
 			result, err := cs.executeMCPTool(content.Name, content.Input)
 
 			// Create tool result message
-			toolResult := map[string]interface{}{
+			toolResult := map[string]any{
 				"type":        "tool_result",
 				"tool_use_id": content.ID,
 			}
@@ -937,13 +925,13 @@ func (cs *ClaudeService) handleToolUseWithLoopInternal(response ClaudeResponse, 
 	return cs.callClaudeWithContextInternal(contextID, depth+1)
 }
 
-func (cs *ClaudeService) executeMCPTool(toolName string, input interface{}) (string, error) {
+func (cs *ClaudeService) executeMCPTool(toolName string, input any) (string, error) {
 	log.Printf("[Claude MCP] Executing tool: %s with input: %+v", toolName, input)
 
 	return cs.executeMCPToolDirect(toolName, input)
 }
 
-func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}) (string, error) {
+func (cs *ClaudeService) executeMCPToolDirect(toolName string, input any) (string, error) {
 	switch toolName {
 	case "list_apps":
 		return cs.executeListApps()
@@ -955,6 +943,8 @@ func (cs *ClaudeService) executeMCPToolDirect(toolName string, input interface{}
 		return cs.executeListSchedules(input)
 	case "search_documents":
 		return cs.executeSearchDocuments(input)
+	case "search_documents_grouped":
+		return cs.executeSearchDocumentsGrouped(input)
 	case "get_document_content":
 		return cs.executeGetDocumentContent(input)
 	default:
@@ -990,7 +980,7 @@ func (cs *ClaudeService) executeListApps() (string, error) {
 	return string(result), nil
 }
 
-func (cs *ClaudeService) executeDynamicAppTool(appID, toolName string, input interface{}) (string, error) {
+func (cs *ClaudeService) executeDynamicAppTool(appID, toolName string, input any) (string, error) {
 	if appRunner == nil {
 		return "", fmt.Errorf("app runner not configured")
 	}
@@ -1005,7 +995,7 @@ func (cs *ClaudeService) executeDynamicAppTool(appID, toolName string, input int
 	return appRunner.ExecuteAppTool(appID, toolName, inputJSON)
 }
 
-func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
+func (cs *ClaudeService) executeCreateApp(input any) (string, error) {
 	log.Printf("[Claude MCP] executeCreateApp called with input type: %T", input)
 
 	// Convert input to expected structure
@@ -1064,10 +1054,10 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 	if appCreator != nil {
 		log.Printf("[Claude MCP] appCreator is available, proceeding with app creation")
 
-		// Convert tools to interface{} slice
-		tools := make([]interface{}, len(createReq.Tools))
+		// Convert tools to any slice
+		tools := make([]any, len(createReq.Tools))
 		for i, tool := range createReq.Tools {
-			tools[i] = map[string]interface{}{
+			tools[i] = map[string]any{
 				"name":        tool.Name,
 				"inputFormat": tool.InputFormat,
 			}
@@ -1088,7 +1078,7 @@ func (cs *ClaudeService) executeCreateApp(input interface{}) (string, error) {
 	return fmt.Sprintf("App creation request received for %s (version %s)", createReq.AppID, createReq.Version), nil
 }
 
-func (cs *ClaudeService) executeScheduleAppRun(input interface{}) (string, error) {
+func (cs *ClaudeService) executeScheduleAppRun(input any) (string, error) {
 	// Convert input to ScheduleRequest
 	inputJSON, err := json.Marshal(input)
 	if err != nil {
@@ -1124,7 +1114,7 @@ func (cs *ClaudeService) executeScheduleAppRun(input interface{}) (string, error
 	}
 
 	// Return success response
-	response := map[string]interface{}{
+	response := map[string]any{
 		"status":     "schedule created successfully",
 		"scheduleId": schedule.ID,
 		"nextRun":    schedule.NextRun,
@@ -1138,11 +1128,11 @@ func (cs *ClaudeService) executeScheduleAppRun(input interface{}) (string, error
 	return string(resultJSON), nil
 }
 
-func (cs *ClaudeService) executeListSchedules(input interface{}) (string, error) {
+func (cs *ClaudeService) executeListSchedules(input any) (string, error) {
 	// Parse optional appId filter
 	var appIdFilter string
 	if input != nil {
-		if inputMap, ok := input.(map[string]interface{}); ok {
+		if inputMap, ok := input.(map[string]any); ok {
 			if appId, ok := inputMap["appId"].(string); ok {
 				appIdFilter = appId
 			}
@@ -1159,7 +1149,7 @@ func (cs *ClaudeService) executeListSchedules(input interface{}) (string, error)
 	return string(result), nil
 }
 
-func (cs *ClaudeService) executeSearchDocuments(input interface{}) (string, error) {
+func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 	if embeddingSearch == nil {
 		return "", fmt.Errorf("embedding search service not configured")
 	}
@@ -1201,13 +1191,13 @@ func (cs *ClaudeService) executeSearchDocuments(input interface{}) (string, erro
 	}
 
 	// Format results for Claude
-	var formattedResults []map[string]interface{}
+	var formattedResults []map[string]any
 	for _, result := range results {
 		if result.Entry == nil {
 			continue
 		}
 
-		formattedResult := map[string]interface{}{
+		formattedResult := map[string]any{
 			"score":       result.Score,
 			"content":     result.Entry.Content,
 			"chunk_index": result.ChunkIndex,
@@ -1223,7 +1213,7 @@ func (cs *ClaudeService) executeSearchDocuments(input interface{}) (string, erro
 		formattedResults = append(formattedResults, formattedResult)
 	}
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"query":         searchReq.Query,
 		"results":       formattedResults,
 		"total_results": len(formattedResults),
@@ -1237,7 +1227,7 @@ func (cs *ClaudeService) executeSearchDocuments(input interface{}) (string, erro
 	return string(resultJSON), nil
 }
 
-func (cs *ClaudeService) executeGetDocumentContent(input interface{}) (string, error) {
+func (cs *ClaudeService) executeGetDocumentContent(input any) (string, error) {
 	if embeddingSearch == nil {
 		return "", fmt.Errorf("embedding search service not configured")
 	}
@@ -1271,7 +1261,7 @@ func (cs *ClaudeService) executeGetDocumentContent(input interface{}) (string, e
 		return "", fmt.Errorf("document not found: %s", docReq.DocumentID)
 	}
 
-	response := map[string]interface{}{
+	response := map[string]any{
 		"document_id": document.ID,
 		"file_path":   document.FilePath,
 		"file_hash":   document.FileHash,
@@ -1280,6 +1270,97 @@ func (cs *ClaudeService) executeGetDocumentContent(input interface{}) (string, e
 		"metadata":    document.Metadata,
 		"created_at":  document.CreatedAt,
 		"updated_at":  document.UpdatedAt,
+	}
+
+	resultJSON, err := json.Marshal(response)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal response: %w", err)
+	}
+
+	return string(resultJSON), nil
+}
+
+func (cs *ClaudeService) executeSearchDocumentsGrouped(input any) (string, error) {
+	if embeddingSearch == nil {
+		return "", fmt.Errorf("embedding search service not configured")
+	}
+
+	// Convert input to expected structure
+	inputJSON, err := json.Marshal(input)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal input: %w", err)
+	}
+
+	var searchReq struct {
+		Query string `json:"query"`
+		TopK  int    `json:"top_k"`
+	}
+
+	if err := json.Unmarshal(inputJSON, &searchReq); err != nil {
+		return "", fmt.Errorf("failed to parse search request: %w", err)
+	}
+
+	// Validate required fields
+	if searchReq.Query == "" {
+		return "", fmt.Errorf("query is required")
+	}
+
+	// Set default top_k if not provided
+	if searchReq.TopK == 0 {
+		searchReq.TopK = 5
+	}
+
+	// Validate top_k range (lower max to prevent rate limiting)
+	if searchReq.TopK < 1 || searchReq.TopK > 10 {
+		return "", fmt.Errorf("top_k must be between 1 and 10")
+	}
+
+	// Perform the grouped search
+	results, err := embeddingSearch.SearchDocuments(searchReq.Query, searchReq.TopK)
+	if err != nil {
+		return "", fmt.Errorf("grouped search failed: %w", err)
+	}
+
+	// Format results for Claude with complete document information
+	var formattedResults []map[string]any
+	for _, result := range results {
+		if result.Document == nil {
+			continue
+		}
+
+		// Format chunks for this document
+		var chunks []map[string]any
+		for _, chunk := range result.Chunks {
+			chunks = append(chunks, map[string]any{
+				"content":     chunk.Content,
+				"score":       chunk.Score,
+				"chunk_index": chunk.ChunkIndex,
+			})
+		}
+
+		formattedResult := map[string]any{
+			"document_id":    result.Document.ID,
+			"file_path":      result.Document.FilePath,
+			"file_hash":      result.Document.FileHash,
+			"metadata":       result.Document.Metadata,
+			"full_content":   result.Document.Content,
+			"chunk_count":    result.Document.ChunkCount,
+			"created_at":     result.Document.CreatedAt,
+			"updated_at":     result.Document.UpdatedAt,
+			"relevance_rank": result.RelevanceRank,
+			"best_score":     result.BestScore,
+			"total_chunks":   result.TotalChunks,
+			"matching_chunks": chunks,
+		}
+
+		formattedResults = append(formattedResults, formattedResult)
+	}
+
+	response := map[string]any{
+		"query":           searchReq.Query,
+		"documents":       formattedResults,
+		"total_documents": len(formattedResults),
+		"usage_note":      "Each document includes full content and relevant chunks. No additional get_document_content calls needed.",
 	}
 
 	resultJSON, err := json.Marshal(response)
@@ -1323,7 +1404,7 @@ func (cs *ClaudeService) HandleClaudeAPI(w http.ResponseWriter, r *http.Request)
 	messages, tokens, _ := cs.GetContextStats(contextID)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	json.NewEncoder(w).Encode(map[string]any{
 		"response": response,
 		"context_stats": map[string]int{
 			"message_count": messages,

@@ -64,6 +64,22 @@ type SearchResult struct {
 	ChunkIndex int          `json:"chunk_index"`
 }
 
+// DocumentSearchResult represents a document with its matching chunks
+type DocumentSearchResult struct {
+	Document      *Document      `json:"document"`
+	Chunks        []*ChunkResult `json:"chunks"`
+	BestScore     float32        `json:"best_score"`
+	TotalChunks   int            `json:"total_chunks"`
+	RelevanceRank int            `json:"relevance_rank"`
+}
+
+// ChunkResult represents a matching chunk with its score
+type ChunkResult struct {
+	Content    string  `json:"content"`
+	Score      float32 `json:"score"`
+	ChunkIndex int     `json:"chunk_index"`
+}
+
 // ChunkingStrategy defines how text should be chunked
 type ChunkingStrategy string
 
@@ -127,6 +143,7 @@ type DocumentStoreInterface interface {
 type EmbeddingServiceInterface interface {
 	ProcessFile(filePath string) (*Document, error)
 	SearchSimilar(query string, topK int) ([]*SearchResult, error)
+	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
 	GetDocument(documentID string) (*Document, error)
 	DeleteDocument(documentID string) error
 	Initialize() error
@@ -518,6 +535,110 @@ func (es *EmbeddingService) SearchSimilar(query string, topK int) ([]*SearchResu
 	}
 
 	return deduplicatedResults, nil
+}
+
+// SearchDocuments searches for similar content and returns chunks grouped by document
+func (es *EmbeddingService) SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error) {
+	es.mutex.RLock()
+	defer es.mutex.RUnlock()
+
+	// Generate query embedding
+	queryEmbedding, err := es.model.GenerateEmbedding(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
+	}
+
+	// Search for similar vectors - get more results to ensure good document coverage
+	searchLimit := calculateSearchLimit(topK * 3)
+	searchLimit = min(searchLimit, 200) // Cap at reasonable maximum
+
+	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
+	}
+
+	// Group results by document ID
+	documentGroups := make(map[string]*DocumentSearchResult)
+
+	for _, result := range results {
+		if result.Entry == nil || result.Entry.DocumentID == "" {
+			continue
+		}
+
+		docID := result.Entry.DocumentID
+
+		// Parse chunk metadata to get chunk index
+		chunkIndex := 0
+		if result.Entry.Metadata != "" {
+			var metadata struct {
+				ChunkIndex int `json:"chunk_index"`
+			}
+			if err := json.Unmarshal([]byte(result.Entry.Metadata), &metadata); err == nil {
+				chunkIndex = metadata.ChunkIndex
+			}
+		}
+
+		// Create chunk result
+		chunkResult := &ChunkResult{
+			Content:    result.Entry.Content,
+			Score:      result.Score,
+			ChunkIndex: chunkIndex,
+		}
+
+		if group, exists := documentGroups[docID]; exists {
+			// Add chunk to existing group
+			group.Chunks = append(group.Chunks, chunkResult)
+			group.TotalChunks++
+			if result.Score > group.BestScore {
+				group.BestScore = result.Score
+			}
+		} else {
+			// Create new group - get document metadata
+			doc, _ := es.documentStore.GetDocument(docID)
+			if doc != nil {
+				// Reconstruct full content from chunks for this document
+				vectors, _ := es.vectorStore.GetDocumentVectors(docID)
+				doc.Content = reconstructContentFromChunks(vectors)
+			}
+
+			documentGroups[docID] = &DocumentSearchResult{
+				Document:      doc,
+				Chunks:        []*ChunkResult{chunkResult},
+				BestScore:     result.Score,
+				TotalChunks:   1,
+				RelevanceRank: 0, // Will be set after sorting
+			}
+		}
+	}
+
+	// Convert map to slice and sort by best score
+	var documentResults []*DocumentSearchResult
+	for _, group := range documentGroups {
+		// Sort chunks within each document by score (highest first)
+		sort.Slice(group.Chunks, func(i, j int) bool {
+			return group.Chunks[i].Score > group.Chunks[j].Score
+		})
+		documentResults = append(documentResults, group)
+	}
+
+	// Sort documents by best score (highest first)
+	sort.Slice(documentResults, func(i, j int) bool {
+		return documentResults[i].BestScore > documentResults[j].BestScore
+	})
+
+	// Limit to topK documents and set relevance ranks
+	if len(documentResults) > topK {
+		documentResults = documentResults[:topK]
+	}
+
+	for i, result := range documentResults {
+		result.RelevanceRank = i + 1
+	}
+
+	log.Printf("[Embedding] SearchDocuments: query=%q, documents=%d, topK=%d",
+			   query, len(documentResults), topK)
+
+	return documentResults, nil
 }
 
 // GetDocument retrieves a document by ID with content reconstructed from chunks

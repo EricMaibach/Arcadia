@@ -1287,3 +1287,197 @@ func TestEmbeddingService_SearchSimilar_PerformanceImpact(t *testing.T) {
 		t.Logf("Warning: SearchSimilar took %v, which may be slower than expected", duration)
 	}
 }
+
+// TestEmbeddingService_SearchDocuments tests the new SearchDocuments method
+func TestEmbeddingService_SearchDocuments(t *testing.T) {
+	// Create temporary database
+	tempDir := os.TempDir()
+	dbPath := filepath.Join(tempDir, "test_search_documents.db")
+	defer os.Remove(dbPath)
+
+	db, err := NewSQLiteDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	defer db.Close()
+
+	// Create mock components
+	chunker := NewSimpleTextChunker()
+	model := NewMockEmbeddingModel(128)
+	model.Initialize()
+	vectorStore := NewSQLiteVectorStore(db)
+	documentStore := NewSQLiteDocumentStore(db)
+	config := DefaultChunkingConfig()
+
+	// Create service
+	service := NewEmbeddingService(chunker, model, vectorStore, documentStore, config)
+	err = service.Initialize()
+	if err != nil {
+		t.Fatalf("Failed to initialize service: %v", err)
+	}
+	defer service.Close()
+
+	// Create test documents
+	doc1Content := strings.Repeat("First document with unique content about artificial intelligence and machine learning. ", 10)
+	doc2Content := strings.Repeat("Second document discusses natural language processing and text embedding techniques. ", 10)
+	doc3Content := strings.Repeat("Third document covers vector databases and similarity search algorithms. ", 10)
+
+	// Create temporary files
+	testFiles := []struct {
+		name    string
+		content string
+	}{
+		{"doc1.txt", doc1Content},
+		{"doc2.txt", doc2Content},
+		{"doc3.txt", doc3Content},
+	}
+
+	var createdDocs []*Document
+	for _, tf := range testFiles {
+		// Create temporary file
+		tmpFile, err := os.CreateTemp("", tf.name)
+		if err != nil {
+			t.Fatalf("Failed to create temp file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		// Write content
+		_, err = tmpFile.WriteString(tf.content)
+		if err != nil {
+			t.Fatalf("Failed to write temp file: %v", err)
+		}
+		tmpFile.Close()
+
+		// Process file
+		doc, err := service.ProcessFile(tmpFile.Name())
+		if err != nil {
+			t.Fatalf("Failed to process file %s: %v", tf.name, err)
+		}
+		createdDocs = append(createdDocs, doc)
+	}
+
+	// Test SearchDocuments
+	t.Run("basic_search", func(t *testing.T) {
+		results, err := service.SearchDocuments("artificial intelligence machine learning", 3)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		// Should return results
+		if len(results) == 0 {
+			t.Error("Expected at least one result")
+		}
+
+		// Should not exceed topK
+		if len(results) > 3 {
+			t.Errorf("Expected at most 3 results, got %d", len(results))
+		}
+
+		// Verify structure of results
+		for i, result := range results {
+			if result.Document == nil {
+				t.Errorf("Result %d: Document should not be nil", i)
+			}
+
+			if len(result.Chunks) == 0 {
+				t.Errorf("Result %d: Should have at least one chunk", i)
+			}
+
+			if result.BestScore <= 0 {
+				t.Errorf("Result %d: BestScore should be positive, got %f", i, result.BestScore)
+			}
+
+			if result.TotalChunks != len(result.Chunks) {
+				t.Errorf("Result %d: TotalChunks (%d) should match length of Chunks (%d)",
+					i, result.TotalChunks, len(result.Chunks))
+			}
+
+			if result.RelevanceRank != i+1 {
+				t.Errorf("Result %d: Expected RelevanceRank %d, got %d",
+					i, i+1, result.RelevanceRank)
+			}
+
+			// Verify document has content
+			if result.Document.Content == "" {
+				t.Errorf("Result %d: Document content should be reconstructed", i)
+			}
+
+			// Verify chunks are sorted by score (highest first)
+			for j := 1; j < len(result.Chunks); j++ {
+				if result.Chunks[j].Score > result.Chunks[j-1].Score {
+					t.Errorf("Result %d: Chunks should be sorted by score (highest first)", i)
+				}
+			}
+
+			// Verify chunk structure
+			for j, chunk := range result.Chunks {
+				if chunk.Content == "" {
+					t.Errorf("Result %d, Chunk %d: Content should not be empty", i, j)
+				}
+				if chunk.Score <= 0 {
+					t.Errorf("Result %d, Chunk %d: Score should be positive", i, j)
+				}
+			}
+		}
+
+		// Verify results are sorted by best score (highest first)
+		for i := 1; i < len(results); i++ {
+			if results[i].BestScore > results[i-1].BestScore {
+				t.Error("Results should be sorted by BestScore (highest first)")
+			}
+		}
+	})
+
+	t.Run("topK_limiting", func(t *testing.T) {
+		// Test with topK=1
+		results, err := service.SearchDocuments("document content", 1)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		if len(results) > 1 {
+			t.Errorf("Expected at most 1 result, got %d", len(results))
+		}
+
+		// Test with topK=2
+		results, err = service.SearchDocuments("document content", 2)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		if len(results) > 2 {
+			t.Errorf("Expected at most 2 results, got %d", len(results))
+		}
+	})
+
+	t.Run("empty_query", func(t *testing.T) {
+		results, err := service.SearchDocuments("", 5)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		// Should handle empty query gracefully
+		t.Logf("Empty query returned %d results", len(results))
+	})
+
+	t.Run("no_match_query", func(t *testing.T) {
+		results, err := service.SearchDocuments("xyz123nonexistentterm456", 5)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		// May return results with low scores or no results
+		t.Logf("No-match query returned %d results", len(results))
+	})
+
+	t.Run("zero_topK", func(t *testing.T) {
+		results, err := service.SearchDocuments("test", 0)
+		if err != nil {
+			t.Fatalf("SearchDocuments failed: %v", err)
+		}
+
+		if len(results) != 0 {
+			t.Errorf("Expected 0 results for topK=0, got %d", len(results))
+		}
+	})
+}
