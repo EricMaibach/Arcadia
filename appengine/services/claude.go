@@ -578,58 +578,58 @@ func (cs *ClaudeService) loadMCPTools() {
 				"properties": map[string]interface{}{},
 			},
 		},
-		{
-			Name:        "create_app",
-			Description: loadCreateAppDescription(),
-			InputSchema: map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"appId": map[string]interface{}{
-						"type":        "string",
-						"description": "Unique identifier for the application",
-					},
-					"version": map[string]interface{}{
-						"type":        "string",
-						"description": "Version of the application",
-					},
-					"runtime": map[string]interface{}{
-						"type":        "string",
-						"description": "Runtime for the application (must be 'wasm')",
-					},
-					"tools": map[string]interface{}{
-						"type":        "array",
-						"description": "Array of tool definitions",
-						"items": map[string]interface{}{
-							"type": "object",
-							"properties": map[string]interface{}{
-								"name": map[string]interface{}{
-									"type":        "string",
-									"description": "Name of the tool",
-								},
-								"input_format": map[string]interface{}{
-									"type":        "string",
-									"description": "Input format (json, xml, etc.)",
-								},
-							},
-							"required": []string{"name", "input_format"},
-						},
-					},
-					"appSrc": map[string]interface{}{
-						"type":        "string",
-						"description": "Rust trait implementation source code",
-					},
-					"dependencies": map[string]interface{}{
-						"type":        "object",
-						"description": "Optional Rust crate dependencies to include in Cargo.toml (e.g., {\"chrono\": \"0.4\", \"regex\": \"1.9\"}). Common dependencies are auto-detected from 'use' statements.",
-						"additionalProperties": map[string]interface{}{
-							"type":        "string",
-							"description": "Version specification for the crate",
-						},
-					},
-				},
-				"required": []string{"appId", "version", "runtime", "tools", "appSrc"},
-			},
-		},
+		// {
+		// 	Name:        "create_app",
+		// 	Description: loadCreateAppDescription(),
+		// 	InputSchema: map[string]interface{}{
+		// 		"type": "object",
+		// 		"properties": map[string]interface{}{
+		// 			"appId": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "Unique identifier for the application",
+		// 			},
+		// 			"version": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "Version of the application",
+		// 			},
+		// 			"runtime": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "Runtime for the application (must be 'wasm')",
+		// 			},
+		// 			"tools": map[string]interface{}{
+		// 				"type":        "array",
+		// 				"description": "Array of tool definitions",
+		// 				"items": map[string]interface{}{
+		// 					"type": "object",
+		// 					"properties": map[string]interface{}{
+		// 						"name": map[string]interface{}{
+		// 							"type":        "string",
+		// 							"description": "Name of the tool",
+		// 						},
+		// 						"input_format": map[string]interface{}{
+		// 							"type":        "string",
+		// 							"description": "Input format (json, xml, etc.)",
+		// 						},
+		// 					},
+		// 					"required": []string{"name", "input_format"},
+		// 				},
+		// 			},
+		// 			"appSrc": map[string]interface{}{
+		// 				"type":        "string",
+		// 				"description": "Rust trait implementation source code",
+		// 			},
+		// 			"dependencies": map[string]interface{}{
+		// 				"type":        "object",
+		// 				"description": "Optional Rust crate dependencies to include in Cargo.toml (e.g., {\"chrono\": \"0.4\", \"regex\": \"1.9\"}). Common dependencies are auto-detected from 'use' statements.",
+		// 				"additionalProperties": map[string]interface{}{
+		// 					"type":        "string",
+		// 					"description": "Version specification for the crate",
+		// 				},
+		// 			},
+		// 		},
+		// 		"required": []string{"appId", "version", "runtime", "tools", "appSrc"},
+		// 	},
+		// },
 		{
 			Name:        "schedule_app_run",
 			Description: "Schedule an application tool to run at a specific time or recurring interval",

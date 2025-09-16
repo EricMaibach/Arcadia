@@ -3,7 +3,7 @@
     "api_key": "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",
     "base_url": "https://api.anthropic.com",
     "model": "claude-sonnet-4-20250514",
-    "max_tokens": 64000,
+    "max_tokens": 4096,
     "timeout_seconds": 240
   },
   "server": {

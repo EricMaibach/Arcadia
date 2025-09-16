@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -37,7 +38,7 @@ type Document struct {
 	FilePath   string                 `json:"file_path"`
 	FileHash   string                 `json:"file_hash"`
 	Content    string                 `json:"content"`               // Reconstructed from chunks
-	Metadata   map[string]interface{} `json:"metadata,omitempty"`
+	Metadata   map[string]any `json:"metadata,omitempty"`
 	ChunkCount int                    `json:"chunk_count"`
 	CreatedAt  time.Time              `json:"created_at"`
 	UpdatedAt  time.Time              `json:"updated_at"`
@@ -362,7 +363,7 @@ func (es *EmbeddingService) ProcessFile(filePath string) (*Document, error) {
 		ID:       generateDocumentID(),
 		FilePath: filePath,
 		FileHash: fileHash,
-		Metadata: map[string]interface{}{
+		Metadata: map[string]any{
 			"source":      "file",
 			"path":        filePath,
 			"content_type": contentType,
@@ -396,9 +397,6 @@ func (es *EmbeddingService) processDocument(doc *Document, content string) error
 
 	// Process each chunk
 	for i, chunk := range chunks {
-		chunk.DocumentID = doc.ID
-		chunk.ChunkIndex = i
-
 		// Generate embedding
 		embedding, err := es.model.GenerateEmbedding(chunk.Content)
 		if err != nil {
@@ -426,10 +424,26 @@ func (es *EmbeddingService) processDocument(doc *Document, content string) error
 	return nil
 }
 
-// SearchSimilar searches for similar content
+// calculateSearchLimit calculates the initial search limit to ensure enough unique documents
+func calculateSearchLimit(topK int) int {
+	if topK <= 0 {
+		return 0
+	}
+	if topK*5 < topK+100 {
+		return topK * 5
+	}
+	return topK + 100
+}
+
+// SearchSimilar searches for similar content with deduplication by document ID
 func (es *EmbeddingService) SearchSimilar(query string, topK int) ([]*SearchResult, error) {
 	es.mutex.RLock()
 	defer es.mutex.RUnlock()
+
+	// Handle edge case
+	if topK <= 0 {
+		return []*SearchResult{}, nil
+	}
 
 	// Generate query embedding
 	queryEmbedding, err := es.model.GenerateEmbedding(query)
@@ -437,21 +451,73 @@ func (es *EmbeddingService) SearchSimilar(query string, topK int) ([]*SearchResu
 		return nil, fmt.Errorf("failed to generate query embedding: %v", err)
 	}
 
-	// Search for similar vectors
-	results, err := es.vectorStore.SearchSimilar(queryEmbedding, topK)
+	// Calculate search limit to ensure enough unique documents after deduplication
+	searchLimit := calculateSearchLimit(topK)
+
+	// Search for similar vectors with expanded limit
+	results, err := es.vectorStore.SearchSimilar(queryEmbedding, searchLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search similar vectors: %v", err)
 	}
 
-	// Enrich results with document information
+	// Handle case where no results found
+	if len(results) == 0 {
+		return []*SearchResult{}, nil
+	}
+
+	// Deduplicate results by document ID, keeping only the highest-scoring chunk per document
+	bestResultByDoc := make(map[string]*SearchResult)
 	for _, result := range results {
+		if result.Entry != nil && result.Entry.DocumentID != "" {
+			docID := result.Entry.DocumentID
+
+			// Keep this result if it's the first for this document or has a higher score
+			if existing, exists := bestResultByDoc[docID]; !exists || result.Score > existing.Score {
+				// Parse chunk metadata to get chunk index
+				chunkIndex := 0
+				if result.Entry.Metadata != "" {
+					var metadata struct {
+						ChunkIndex int `json:"chunk_index"`
+					}
+					if err := json.Unmarshal([]byte(result.Entry.Metadata), &metadata); err == nil {
+						chunkIndex = metadata.ChunkIndex
+					}
+				}
+				result.ChunkIndex = chunkIndex
+				bestResultByDoc[docID] = result
+			}
+		}
+	}
+
+	// Convert map to slice
+	deduplicatedResults := make([]*SearchResult, 0, len(bestResultByDoc))
+	for _, result := range bestResultByDoc {
+		deduplicatedResults = append(deduplicatedResults, result)
+	}
+
+	// Sort deduplicated results by score (descending)
+	sort.Slice(deduplicatedResults, func(i, j int) bool {
+		return deduplicatedResults[i].Score > deduplicatedResults[j].Score
+	})
+
+	// Limit to topK results
+	if len(deduplicatedResults) > topK {
+		deduplicatedResults = deduplicatedResults[:topK]
+	}
+
+	// Log deduplication metrics
+	log.Printf("[Embedding] SearchSimilar deduplication: query=%q, initialResults=%d, uniqueDocs=%d, topK=%d",
+		query, len(results), len(deduplicatedResults), topK)
+
+	// Enrich results with document information
+	for _, result := range deduplicatedResults {
 		if result.Entry != nil && result.Entry.DocumentID != "" {
 			doc, _ := es.documentStore.GetDocument(result.Entry.DocumentID)
 			result.Document = doc
 		}
 	}
 
-	return results, nil
+	return deduplicatedResults, nil
 }
 
 // GetDocument retrieves a document by ID with content reconstructed from chunks
@@ -633,10 +699,8 @@ func isLikelyTextContent(data []byte) bool {
 	}
 
 	// Reject files with null bytes (common in binary files)
-	for _, b := range data {
-		if b == 0 {
-			return false
-		}
+	if slices.Contains(data, 0) {
+		return false
 	}
 
 	// Count printable vs non-printable characters
@@ -708,10 +772,7 @@ func (c *SimpleTextChunker) chunkFixed(content string, config ChunkingConfig) []
 	chunkIndex := 0
 	
 	for start < length {
-		end := start + config.MaxChunkSize
-		if end > length {
-			end = length
-		}
+		end := min(start + config.MaxChunkSize, length)
 
 		// Create chunk
 		chunk := TextChunk{
@@ -887,18 +948,4 @@ func GetDefaultEmbeddingService() *EmbeddingService {
 	return defaultEmbeddingService
 }
 
-// ProcessFileWithEmbeddings processes a file using the default service
-func ProcessFileWithEmbeddings(filePath string) (*Document, error) {
-	if defaultEmbeddingService == nil {
-		return nil, fmt.Errorf("default embedding service not initialized")
-	}
-	return defaultEmbeddingService.ProcessFile(filePath)
-}
 
-// SearchSimilarContent searches for similar content using the default service
-func SearchSimilarContent(query string, topK int) ([]*SearchResult, error) {
-	if defaultEmbeddingService == nil {
-		return nil, fmt.Errorf("default embedding service not initialized")
-	}
-	return defaultEmbeddingService.SearchSimilar(query, topK)
-}
