@@ -1,0 +1,15 @@
+{
+  "provider": "openai",
+  "max_tokens": 4096,
+  "timeout_seconds": 120,
+  "max_context_messages": 20,
+  "context_compaction": true,
+  "context_ttl_minutes": 60,
+  "enable_mcp": true,
+  "provider_settings": {
+    "api_key": "${OPENAI_API_KEY}",
+    "base_url": "https://api.openai.com",
+    "model": "gpt-4",
+    "temperature": 0.7
+  }
+}

@@ -2156,7 +2156,7 @@ tr:hover {
   }
 }
 
-/* Claude Chat Styles */
+/* AI Chat Styles */
 .chat-toggle-btn {
   background: linear-gradient(45deg, var(--color-forest-main), var(--color-sky-blue));
   color: white;
@@ -2176,7 +2176,7 @@ tr:hover {
   box-shadow: 0 6px 16px rgba(74, 124, 89, 0.4);
 }
 
-.claude-chat {
+.ai-chat {
   background: white;
   border-radius: 12px;
   box-shadow: 0 8px 24px rgba(45, 80, 22, 0.15);
@@ -2283,7 +2283,7 @@ tr:hover {
   align-items: flex-end;
 }
 
-.chat-message.claude {
+.chat-message.ai {
   align-self: flex-start;
   align-items: flex-start;
 }
@@ -2304,7 +2304,7 @@ tr:hover {
   box-shadow: 0 2px 8px rgba(79, 141, 184, 0.3);
 }
 
-.chat-message.claude .message-content {
+.chat-message.ai .message-content {
   background: linear-gradient(135deg, white, var(--color-mist));
   color: var(--color-forest-deep);
   border: 2px solid var(--color-moss);
@@ -2313,15 +2313,15 @@ tr:hover {
 }
 
 /* Markdown styling within Claude chat messages */
-.chat-message.claude .message-content ul,
-.chat-message.claude .message-content ol {
+.chat-message.ai .message-content ul,
+.chat-message.ai .message-content ol {
   margin: 0.15rem 0 0.3rem 0;
   padding-left: 1.8rem;
   list-style: none;
 }
 
-.chat-message.claude .message-content ul li,
-.chat-message.claude .message-content ol li {
+.chat-message.ai .message-content ul li,
+.chat-message.ai .message-content ol li {
   margin: 0.05rem 0;
   line-height: 1.3;
   position: relative;
@@ -2329,7 +2329,7 @@ tr:hover {
   transition: all 0.2s ease;
 }
 
-.chat-message.claude .message-content ul li::before {
+.chat-message.ai .message-content ul li::before {
   content: '';
   position: absolute;
   left: -1.3rem;
@@ -2344,7 +2344,7 @@ tr:hover {
   transform: translateY(-50%);
 }
 
-.chat-message.claude .message-content ol li::before {
+.chat-message.ai .message-content ol li::before {
   content: '';
   position: absolute;
   left: -1.3rem;
@@ -2356,28 +2356,28 @@ tr:hover {
   box-shadow: 0 1px 2px rgba(74, 124, 89, 0.3);
 }
 
-.chat-message.claude .message-content ul li:hover,
-.chat-message.claude .message-content ol li:hover {
+.chat-message.ai .message-content ul li:hover,
+.chat-message.ai .message-content ol li:hover {
   transform: translateX(2px);
   color: var(--color-forest-deep);
 }
 
-.chat-message.claude .message-content ul li:hover::before {
+.chat-message.ai .message-content ul li:hover::before {
   background: radial-gradient(circle, var(--color-sunset) 30%, var(--color-golden-glow) 100%);
   transform: translateY(-50%) scale(1.2);
 }
 
-.chat-message.claude .message-content ol li:hover::before {
+.chat-message.ai .message-content ol li:hover::before {
   background: linear-gradient(135deg, var(--color-golden-glow), var(--color-sunset));
   transform: translateY(-50%) rotate(45deg) scale(1.2);
 }
 
-.chat-message.claude .message-content h1,
-.chat-message.claude .message-content h2,
-.chat-message.claude .message-content h3,
-.chat-message.claude .message-content h4,
-.chat-message.claude .message-content h5,
-.chat-message.claude .message-content h6 {
+.chat-message.ai .message-content h1,
+.chat-message.ai .message-content h2,
+.chat-message.ai .message-content h3,
+.chat-message.ai .message-content h4,
+.chat-message.ai .message-content h5,
+.chat-message.ai .message-content h6 {
   margin: 0.6rem 0 0.3rem 0;
   color: var(--color-forest-deep);
   font-weight: 700;
@@ -2386,8 +2386,8 @@ tr:hover {
   text-shadow: 0 1px 2px rgba(45, 80, 22, 0.1);
 }
 
-.chat-message.claude .message-content h1::before,
-.chat-message.claude .message-content h2::before {
+.chat-message.ai .message-content h1::before,
+.chat-message.ai .message-content h2::before {
   content: '🌿';
   position: absolute;
   left: 0;
@@ -2397,8 +2397,8 @@ tr:hover {
   opacity: 0.8;
 }
 
-.chat-message.claude .message-content h3::before,
-.chat-message.claude .message-content h4::before {
+.chat-message.ai .message-content h3::before,
+.chat-message.ai .message-content h4::before {
   content: '🍃';
   position: absolute;
   left: 0;
@@ -2408,7 +2408,7 @@ tr:hover {
   opacity: 0.7;
 }
 
-.chat-message.claude .message-content h1 { 
+.chat-message.ai .message-content h1 { 
   font-size: 1.3rem;
   background: linear-gradient(135deg, var(--color-forest-deep), var(--color-forest-main));
   -webkit-background-clip: text;
@@ -2416,7 +2416,7 @@ tr:hover {
   background-clip: text;
 }
 
-.chat-message.claude .message-content h2 { 
+.chat-message.ai .message-content h2 { 
   font-size: 1.2rem;
   background: linear-gradient(135deg, var(--color-forest-main), var(--color-forest-light));
   -webkit-background-clip: text;
@@ -2424,17 +2424,17 @@ tr:hover {
   background-clip: text;
 }
 
-.chat-message.claude .message-content h3 { 
+.chat-message.ai .message-content h3 { 
   font-size: 1.1rem;
   color: var(--color-forest-main);
 }
 
-.chat-message.claude .message-content p {
+.chat-message.ai .message-content p {
   margin: 0.1rem 0;
   line-height: 1.3;
 }
 
-.chat-message.claude .message-content code {
+.chat-message.ai .message-content code {
   background: linear-gradient(135deg, 
     rgba(74, 124, 89, 0.08) 0%, 
     rgba(127, 176, 105, 0.12) 100%);
@@ -2450,7 +2450,7 @@ tr:hover {
   font-weight: 500;
 }
 
-.chat-message.claude .message-content pre {
+.chat-message.ai .message-content pre {
   background: linear-gradient(135deg, 
     rgba(247, 248, 250, 0.95) 0%, 
     rgba(232, 244, 230, 0.9) 100%);
@@ -2467,7 +2467,7 @@ tr:hover {
   position: relative;
 }
 
-.chat-message.claude .message-content pre::before {
+.chat-message.ai .message-content pre::before {
   content: '';
   position: absolute;
   top: 0;
@@ -2481,7 +2481,7 @@ tr:hover {
   border-radius: 12px 12px 0 0;
 }
 
-.chat-message.claude .message-content pre code {
+.chat-message.ai .message-content pre code {
   background: none;
   padding: 0;
   border-radius: 0;
@@ -2489,7 +2489,7 @@ tr:hover {
   box-shadow: none;
 }
 
-.chat-message.claude .message-content blockquote {
+.chat-message.ai .message-content blockquote {
   border-left: 4px solid var(--color-forest-light);
   margin: 0.5rem 0;
   padding: 0.75rem 1rem;
@@ -2502,7 +2502,7 @@ tr:hover {
   box-shadow: 0 2px 8px rgba(127, 176, 105, 0.06);
 }
 
-.chat-message.claude .message-content blockquote::before {
+.chat-message.ai .message-content blockquote::before {
   content: '"';
   position: absolute;
   left: -2px;
@@ -2513,7 +2513,7 @@ tr:hover {
   font-family: Georgia, serif;
 }
 
-.chat-message.claude .message-content strong {
+.chat-message.ai .message-content strong {
   font-weight: 700;
   color: var(--color-forest-deep);
   text-shadow: 0 1px 2px rgba(45, 80, 22, 0.1);
@@ -2523,12 +2523,12 @@ tr:hover {
   background-clip: text;
 }
 
-.chat-message.claude .message-content em {
+.chat-message.ai .message-content em {
   font-style: italic;
   color: var(--color-forest-main);
 }
 
-.chat-message.claude .message-content hr {
+.chat-message.ai .message-content hr {
   border: none;
   height: 2px;
   background: linear-gradient(90deg,
@@ -2865,7 +2865,7 @@ tr:hover {
     transform: translate(-50%, -50%);
   }
   
-  .claude-chat {
+  .ai-chat {
     margin: 2rem 1rem 5rem;
     width: calc(100% - 2rem);
     min-height: calc(100vh - 7rem);

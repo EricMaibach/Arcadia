@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { appApi, App } from '../services/api';
+import { appApi, aiApi, App, AIProviderInfo } from '../services/api';
 import ArcadiaIcon from '../ArcadiaIcon.jpg';
 import ReactMarkdown from 'react-markdown';
 import AppToolRunner from './AppToolRunner';
@@ -17,6 +17,7 @@ interface ContextStats {
   total_tokens: number;
 }
 
+
 const Home: React.FC = () => {
   const [apps, setApps] = useState<App[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,6 +31,7 @@ const Home: React.FC = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
   const [contextStats, setContextStats] = useState<ContextStats | null>(null);
+  const [providerInfo, setProviderInfo] = useState<AIProviderInfo | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   // Generate a session ID that persists for this session
@@ -45,6 +47,7 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     loadApps();
+    loadProviderStatus();
   }, []);
 
   // Auto-scroll to bottom when messages change
@@ -65,9 +68,18 @@ const Home: React.FC = () => {
     }
   };
 
+  const loadProviderStatus = async () => {
+    try {
+      const providerData = await aiApi.getProviderStatus();
+      setProviderInfo(providerData);
+    } catch (err) {
+      console.error('Failed to load provider status:', err);
+    }
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || chatLoading) return;
-    
+
     console.log('Sending message to Arcadia:', inputMessage.trim());
 
     const userMessage: ChatMessage = {
@@ -82,36 +94,24 @@ const Home: React.FC = () => {
     setChatLoading(true);
 
     try {
-      const response = await fetch('http://localhost:8080/claude', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          message: userMessage.content,
-          session_id: sessionId 
-        }),
+      const data = await aiApi.sendMessage({
+        message: userMessage.content,
+        context_id: sessionId
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
       // Update context stats if provided
       if (data.context_stats) {
         setContextStats(data.context_stats);
       }
-      
-      const claudeMessage: ChatMessage = {
-        id: Date.now().toString() + '-claude',
+
+      const aiMessage: ChatMessage = {
+        id: Date.now().toString() + '-ai',
         content: data.response || 'No response received',
         isUser: false,
         timestamp: new Date()
       };
 
-      setMessages(prev => [...prev, claudeMessage]);
+      setMessages(prev => [...prev, aiMessage]);
     } catch (err) {
       const errorMessage: ChatMessage = {
         id: Date.now().toString() + '-error',
@@ -180,8 +180,8 @@ const Home: React.FC = () => {
 
       {currentView === 'chat' ? (
         /* Chat Interface */
-        <div className="claude-chat">
-          {contextStats && (
+        <div className="ai-chat">
+          {(contextStats || providerInfo) && (
             <div className="context-stats" style={{
               padding: '0.5rem 1rem',
               background: 'linear-gradient(135deg, rgba(74, 124, 89, 0.1), rgba(127, 176, 105, 0.1))',
@@ -193,10 +193,19 @@ const Home: React.FC = () => {
               alignItems: 'center'
             }}>
               <div>
-                <span>Context: {contextStats.message_count} messages</span>
-                {contextStats.total_tokens > 0 && (
-                  <span style={{ marginLeft: '1rem' }}>
-                    • {contextStats.total_tokens.toLocaleString()} tokens
+                {contextStats && (
+                  <>
+                    <span>Context: {contextStats.message_count} messages</span>
+                    {contextStats.total_tokens > 0 && (
+                      <span style={{ marginLeft: '1rem' }}>
+                        • {contextStats.total_tokens.toLocaleString()} tokens
+                      </span>
+                    )}
+                  </>
+                )}
+                {providerInfo && (
+                  <span style={{ marginLeft: contextStats ? '1rem' : '0' }}>
+                    • {providerInfo.name} ({providerInfo.model})
                   </span>
                 )}
               </div>
@@ -219,7 +228,7 @@ const Home: React.FC = () => {
               {messages.map((message) => (
                 <div 
                   key={message.id} 
-                  className={`chat-message ${message.isUser ? 'user' : 'claude'}`}
+                  className={`chat-message ${message.isUser ? 'user' : 'ai'}`}
                 >
                   <div className="message-content">
                     {message.isUser ? (
@@ -234,7 +243,7 @@ const Home: React.FC = () => {
                 </div>
               ))}
               {chatLoading && (
-                <div className="chat-message claude loading">
+                <div className="chat-message ai loading">
                   <div className="message-content">
                     <div className="typing-indicator">
                       <span></span>

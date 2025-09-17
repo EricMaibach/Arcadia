@@ -87,6 +87,30 @@ export interface ScheduledRun {
   error?: string;
 }
 
+// AI Service Types
+export interface AIProviderInfo {
+  name: string;
+  model: string;
+  features: string[];
+}
+
+export interface AIProviderStatusResponse {
+  current_provider: AIProviderInfo;
+}
+
+export interface AIChatRequest {
+  message: string;
+  context_id: string;
+}
+
+export interface AIChatResponse {
+  response: string;
+  context_stats?: {
+    message_count: number;
+    total_tokens: number;
+  };
+}
+
 // File Watcher Types
 export interface AddWatchDirRequest {
   path: string;
@@ -149,6 +173,19 @@ export const scheduleApi = {
   listScheduledRuns: async (scheduleId?: string): Promise<ScheduledRun[]> => {
     const params = scheduleId ? { schedule_id: scheduleId } : {};
     const response = await api.get('/list_scheduled_runs', { params });
+    return response.data;
+  },
+};
+
+// AI Service API
+export const aiApi = {
+  getProviderStatus: async (): Promise<AIProviderInfo> => {
+    const response = await api.get<AIProviderStatusResponse>('/api/ai/provider/status');
+    return response.data.current_provider;
+  },
+
+  sendMessage: async (request: AIChatRequest): Promise<AIChatResponse> => {
+    const response = await api.post<AIChatResponse>('/api/ai/v2/chat', request);
     return response.data;
   },
 };

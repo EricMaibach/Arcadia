@@ -12,6 +12,9 @@ import (
 	"arcadia/config"
 	"arcadia/handlers"
 	"arcadia/services"
+	"arcadia/services/ai"
+	_ "arcadia/services/ai/providers/claude" // Import to register Claude provider
+	_ "arcadia/services/ai/providers/openai" // Import to register OpenAI provider
 )
 
 var (
@@ -190,6 +193,134 @@ func (qp *QueueProcessor) processFileForEmbedding(filePath string) error {
 	return nil
 }
 
+// EmbeddingSearchAdapter adapts services.EmbeddingServiceInterface to ai.EmbeddingSearch
+type EmbeddingSearchAdapter struct {
+	service services.EmbeddingServiceInterface
+}
+
+func NewEmbeddingSearchAdapter(service services.EmbeddingServiceInterface) *EmbeddingSearchAdapter {
+	return &EmbeddingSearchAdapter{service: service}
+}
+
+func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*ai.DocumentSearchResult, error) {
+	// Check if embedding service is available
+	if esa.service == nil {
+		return nil, fmt.Errorf("embedding service not available")
+	}
+
+	results, err := esa.service.SearchDocuments(query, topK)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert services.DocumentSearchResult to ai.DocumentSearchResult
+	aiResults := make([]*ai.DocumentSearchResult, 0, len(results))
+	for i, result := range results {
+		// Skip results with nil documents to prevent crashes
+		if result.Document == nil {
+			log.Printf("[EmbeddingSearchAdapter] Warning: Skipping result %d with nil document", i)
+			continue
+		}
+
+		aiResults = append(aiResults, &ai.DocumentSearchResult{
+			Document: &ai.Document{
+				ID:         result.Document.ID,
+				FilePath:   result.Document.FilePath,
+				FileHash:   result.Document.FileHash,
+				Content:    result.Document.Content,
+				ChunkCount: result.Document.ChunkCount,
+				Metadata:   result.Document.Metadata,
+				CreatedAt:  result.Document.CreatedAt,
+				UpdatedAt:  result.Document.UpdatedAt,
+			},
+			Chunks: func() []*ai.ChunkResult {
+				chunks := make([]*ai.ChunkResult, len(result.Chunks))
+				for j, chunk := range result.Chunks {
+					chunks[j] = &ai.ChunkResult{
+						Content:    chunk.Content,
+						Score:      chunk.Score,
+						ChunkIndex: chunk.ChunkIndex,
+					}
+				}
+				return chunks
+			}(),
+			BestScore:     result.BestScore,
+			TotalChunks:   result.TotalChunks,
+			RelevanceRank: result.RelevanceRank,
+		})
+	}
+
+	return aiResults, nil
+}
+
+func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK int, config ai.SearchConfig) ([]*ai.EnhancedDocumentSearchResult, error) {
+	// Check if embedding service is available
+	if esa.service == nil {
+		return nil, fmt.Errorf("embedding service not available")
+	}
+
+	// Convert ai.SearchConfig (empty interface) to services.SearchConfig (struct)
+	// Since ai.SearchConfig is an empty interface, we'll use the default services config
+	servicesConfig := services.DefaultSearchConfig()
+	results, err := esa.service.SearchDocumentsEnhanced(query, topK, servicesConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert services.EnhancedDocumentSearchResult to ai.EnhancedDocumentSearchResult
+	aiResults := make([]*ai.EnhancedDocumentSearchResult, 0, len(results))
+	for i, result := range results {
+		// Skip results with nil documents to prevent crashes
+		if result.Document == nil {
+			log.Printf("[EmbeddingSearchAdapter] Warning: Skipping enhanced result %d with nil document", i)
+			continue
+		}
+
+		aiResults = append(aiResults, &ai.EnhancedDocumentSearchResult{
+			Document: &ai.Document{
+				ID:         result.Document.ID,
+				FilePath:   result.Document.FilePath,
+				FileHash:   result.Document.FileHash,
+				Content:    result.Document.Content,
+				ChunkCount: result.Document.ChunkCount,
+				Metadata:   result.Document.Metadata,
+				CreatedAt:  result.Document.CreatedAt,
+				UpdatedAt:  result.Document.UpdatedAt,
+			},
+			ContextHighlights: result.ContextHighlights,
+			ContentPreview:    result.ContentPreview,
+			IsTruncated:       result.IsTruncated,
+			BestScore:         result.BestScore,
+			RelevanceRank:     result.RelevanceRank,
+		})
+	}
+
+	return aiResults, nil
+}
+
+func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*ai.Document, error) {
+	doc, err := esa.service.GetDocument(documentID)
+	if err != nil {
+		return nil, err
+	}
+
+	if doc == nil {
+		return nil, nil
+	}
+
+	// Convert services.Document to ai.Document
+	return &ai.Document{
+		ID:         doc.ID,
+		FilePath:   doc.FilePath,
+		FileHash:   doc.FileHash,
+		Content:    doc.Content,
+		ChunkCount: doc.ChunkCount,
+		Metadata:   doc.Metadata,
+		CreatedAt:  doc.CreatedAt,
+		UpdatedAt:  doc.UpdatedAt,
+	}, nil
+}
+
 // File event handler - enqueues file events for processing
 func handleFileEvent(event services.FileEvent) {
 	// Skip directory events for now - only process files
@@ -232,14 +363,41 @@ func handleFileEvent(event services.FileEvent) {
 }
 
 
+
+// setupAIRoutes sets up the new AI API routes
+func setupAIRoutes() {
+	// Get the global AI service
+	service := ai.GetGlobalService()
+
+	if service != nil {
+		// Create HTTP handler for the new AI service
+		handler := ai.NewHTTPHandler(service)
+
+		// New provider-agnostic endpoints
+		http.HandleFunc("/api/ai/v2/chat", handlers.CorsHandler(handler.HandleAIAPI))
+		http.HandleFunc("/api/ai/provider/switch", handlers.CorsHandler(handler.HandleProviderSwitch))
+		http.HandleFunc("/api/ai/provider/status", handlers.CorsHandler(handler.HandleProviderStatus))
+
+		log.Printf("New AI API endpoints registered:")
+		log.Printf("  /api/ai/v2/chat - Provider-agnostic chat endpoint")
+		log.Printf("  /api/ai/provider/switch - Switch AI providers")
+		log.Printf("  /api/ai/provider/status - Get provider status")
+	}
+
+	// Backward compatibility endpoint using the compatibility layer
+	http.HandleFunc("/claude", handlers.CorsHandler(ai.HandleClaudeAPI))
+	log.Printf("Backward compatibility endpoint:")
+	log.Printf("  /claude - Legacy Claude API endpoint (now provider-agnostic)")
+}
+
 // --- Main ---
 
 func main() {
-	// Initialize logging
-	if err := services.InitializeAppLogger(); err != nil {
-		log.Fatalf("Failed to initialize app logger: %v", err)
+	// Initialize comprehensive logging (both general and app submission logging)
+	if err := services.InitializeAllLoggers(); err != nil {
+		log.Fatalf("Failed to initialize loggers: %v", err)
 	}
-	defer services.CloseAppLogger()
+	defer services.CloseAllLoggers()
 
 	// Initialize and load configuration
 	configManager = config.NewManager()
@@ -331,24 +489,77 @@ func main() {
 			queueService != nil, embeddingService != nil)
 	}
 
-	// Set up dependency injection for Claude service
+	// Initialize AI service with auto-configuration
+	log.Printf("Initializing AI service...")
+	if err := ai.InitializeGlobalServiceFromConfigWithFallback(func() *ai.AIConfig {
+		// Fallback to legacy Claude configuration from config manager
+		legacyConfig := configManager.GetConfig()
+		return &ai.AIConfig{
+			Provider:           "claude",
+			MaxTokens:          legacyConfig.Claude.MaxTokens,
+			TimeoutSeconds:     legacyConfig.Claude.TimeoutSeconds,
+			MaxContextMessages: legacyConfig.Claude.MaxContextMessages,
+			ContextCompaction:  legacyConfig.Claude.ContextCompaction,
+			ContextTTLMinutes:  legacyConfig.Claude.ContextTTLMinutes,
+			EnableMCP:          legacyConfig.Claude.EnableMCP,
+			MCPServerCmd:       legacyConfig.Claude.MCPServerCmd,
+			ProviderSettings: map[string]any{
+				"api_key":  legacyConfig.Claude.APIKey,
+				"base_url": legacyConfig.Claude.BaseURL,
+				"model":    legacyConfig.Claude.Model,
+			},
+		}
+	}); err != nil {
+		log.Printf("Warning: Failed to initialize AI service: %v", err)
+		log.Printf("AI endpoints will not be available")
+	} else {
+		log.Printf("AI service initialized successfully")
+	}
+
+	// Set up dependency injection for legacy Claude service
 	configManager.SetupDependencyInjection(
 		registryManager.GetRegistryAccess(),
 		registryManager.GetAppRunner(),
 		registryManager.GetAppCreator(),
 	)
 
-
-	// Add embedding search capability to Claude service
+	// Add embedding search capability to AI service
 	embeddingService = services.GetDefaultEmbeddingService()
 	if embeddingService != nil {
 		services.SetEmbeddingSearch(embeddingService)
-		log.Println("RAG capabilities enabled - Claude can now search and retrieve documents")
+		log.Println("RAG capabilities enabled - AI service can now search and retrieve documents")
 	} else {
 		log.Printf("WARNING: Embedding service not available - RAG tools will not function")
 	}
 
-	// Trigger initial Claude tool refresh now that registry access is set up
+	// Set up dependency injection for the new AI service now that all components are available
+	if ai.IsGlobalServiceInitialized() {
+		var embeddingAdapter ai.EmbeddingSearch
+		if embeddingService != nil {
+			log.Printf("Creating embedding search adapter...")
+			embeddingAdapter = NewEmbeddingSearchAdapter(embeddingService)
+			log.Printf("Embedding search adapter created successfully")
+		} else {
+			log.Printf("WARNING: Embedding service is nil, skipping embedding adapter creation")
+		}
+
+		if err := ai.SetupGlobalDependencies(
+			registryManager.GetRegistryAccess(),
+			registryManager.GetAppRunner(),
+			registryManager.GetAppCreator(),
+			embeddingAdapter,
+		); err != nil {
+			log.Printf("Warning: Failed to setup AI dependencies: %v", err)
+		} else {
+			embeddingStatus := "disabled"
+			if embeddingAdapter != nil {
+				embeddingStatus = "enabled"
+			}
+			log.Printf("AI service dependencies configured successfully (embedding search: %s)", embeddingStatus)
+		}
+	}
+
+	// Trigger initial tool refresh now that registry access is set up
 	services.TriggerClaudeToolRefresh()
 
 	// Start the scheduler (now properly initialized)
@@ -385,9 +596,8 @@ func main() {
 	http.HandleFunc("/update_schedule", handlers.CorsHandler(handlers.UpdateScheduleHandler))
 	http.HandleFunc("/list_scheduled_runs", handlers.CorsHandler(handlers.ListScheduledRunsHandler))
 
-	// AI Integration endpoints
-	claudeService := configManager.GetClaudeService()
-	http.HandleFunc("/claude", handlers.CorsHandler(claudeService.HandleClaudeAPI))
+	// AI Integration endpoints - use new system
+	setupAIRoutes()
 
 
 	port := configManager.GetServerPort()
@@ -402,7 +612,10 @@ func main() {
 	log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
 	log.Printf("  /update_schedule?id=<id> - Update a schedule")
 	log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
-	log.Printf("  /claude - Send message to Claude AI (POST {\"message\": \"your message\"})")
+	log.Printf("  /claude - Legacy Claude AI endpoint (POST {\"message\": \"your message\"})")
+	log.Printf("  /api/ai/v2/chat - Provider-agnostic AI chat (POST {\"message\": \"...\", \"session_id\": \"...\"})")
+	log.Printf("  /api/ai/provider/switch - Switch AI provider (POST {\"provider\": \"...\", \"api_key\": \"...\"})")
+	log.Printf("  /api/ai/provider/status - Get current provider status (GET)")
 	log.Printf("  /filewatcher/add - Add directory to file watcher (POST {\"path\": \"/path/to/watch\"})")
 	log.Printf("  /filewatcher/remove - Remove directory from file watcher (POST {\"path\": \"/path/to/remove\"})")
 	log.Printf("  /filewatcher/list - List all watched directories (GET)")
