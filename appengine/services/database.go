@@ -197,10 +197,37 @@ func InitDatabasesWithManager() (*DatabaseManager, error) {
 		InitDefaultQueue(queueRepo)
 	}
 
-	// Initialize the vector and document stores with the system database
-	InitVectorStore(dm.GetSystemDB())
+	// Initialize vector and document stores
+	if err := initializeVectorStores(); err != nil {
+		log.Printf("Warning: Failed to initialize vector stores: %v", err)
+		return nil, fmt.Errorf("failed to initialize vector stores: %v", err)
+	}
 	InitDocumentStore(dm.GetSystemDB())
 	log.Println("Vector and document stores initialized successfully")
 
 	return dm, nil
 }
+
+// initializeVectorStores initializes QDRant vector store
+func initializeVectorStores() error {
+	// Load QDRant configuration from environment
+	config := LoadVectorStoreConfigFromEnv()
+
+	// Validate configuration
+	if err := config.Validate(); err != nil {
+		return fmt.Errorf("vector store configuration validation failed: %v", err)
+	}
+
+	// Create QDRant vector store
+	vectorStore, err := CreateVectorStore(*config)
+	if err != nil {
+		return fmt.Errorf("failed to create QDRant vector store: %v", err)
+	}
+
+	// Initialize global stores
+	SetVectorStore(vectorStore)
+
+	log.Printf("[Database] QDRant vector store initialized at %s:%d", config.QDRant.Host, config.QDRant.Port)
+	return nil
+}
+

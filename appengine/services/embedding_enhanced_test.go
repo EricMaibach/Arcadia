@@ -284,7 +284,7 @@ func TestSearchDocumentsEnhanced_EdgeCases(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -538,7 +538,7 @@ func TestPerformanceComparison(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 

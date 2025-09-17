@@ -338,6 +338,7 @@ func main() {
 		registryManager.GetAppCreator(),
 	)
 
+
 	// Add embedding search capability to Claude service
 	embeddingService = services.GetDefaultEmbeddingService()
 	if embeddingService != nil {
@@ -388,6 +389,7 @@ func main() {
 	claudeService := configManager.GetClaudeService()
 	http.HandleFunc("/claude", handlers.CorsHandler(claudeService.HandleClaudeAPI))
 
+
 	port := configManager.GetServerPort()
 	log.Printf("Starting Arcadia App Engine server on port %s...", port)
 	log.Printf("Available endpoints:")
@@ -406,3 +408,4 @@ func main() {
 	log.Printf("  /filewatcher/list - List all watched directories (GET)")
 	log.Fatal(http.ListenAndServe(":"+port, nil))
 }
+

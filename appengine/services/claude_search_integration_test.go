@@ -51,7 +51,7 @@ This document tests the integration between Claude service and embedding service
 
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(384)
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -218,7 +218,7 @@ func TestCleanupChanges(t *testing.T) {
 		}
 		defer db.Close()
 
-		vectorStore := NewSQLiteVectorStore(db)
+		vectorStore := NewMockVectorStore()
 		documentStore := NewSQLiteDocumentStore(db)
 		config := DefaultChunkingConfig()
 

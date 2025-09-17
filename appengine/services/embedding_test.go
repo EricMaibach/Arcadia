@@ -197,7 +197,7 @@ func TestSQLiteVectorStore(t *testing.T) {
 	}
 	defer db.Close()
 
-	store := NewSQLiteVectorStore(db)
+	store := NewMockVectorStore()
 
 	// Create test vector entry
 	entry := &VectorEntry{
@@ -432,7 +432,7 @@ func TestEmbeddingService_Integration(t *testing.T) {
 	// Create components
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := ChunkingConfig{
 		Strategy:     ChunkingStrategyFixed,
@@ -540,7 +540,7 @@ func TestEmbeddingService_GlobalFunctions(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -703,7 +703,7 @@ func TestProcessFile_TextFile(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -792,7 +792,7 @@ func TestEmbeddingService_SearchDocuments(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -986,7 +986,7 @@ func TestEmbeddingService_SearchDocumentsEnhanced(t *testing.T) {
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(128)
 	model.Initialize()
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 

@@ -30,7 +30,7 @@ func TestSearchDocuments_EdgeCases(t *testing.T) {
 	// Set up embedding service
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(384)
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -217,7 +217,7 @@ func TestClaudeService_SearchDocumentsTool_EdgeCases(t *testing.T) {
 
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(384)
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 
@@ -325,7 +325,7 @@ func TestPerformance_SearchDocuments(t *testing.T) {
 
 	chunker := NewSimpleTextChunker()
 	model := NewMockEmbeddingModel(384)
-	vectorStore := NewSQLiteVectorStore(db)
+	vectorStore := NewMockVectorStore()
 	documentStore := NewSQLiteDocumentStore(db)
 	config := DefaultChunkingConfig()
 

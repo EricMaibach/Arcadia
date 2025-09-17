@@ -19,6 +19,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/google/uuid"
 )
 
 // TextChunk represents a chunk of text with metadata
@@ -153,6 +155,12 @@ type VectorStoreInterface interface {
 	DeleteDocumentVectors(documentID string) error
 	GetDocumentVectors(documentID string) ([]*VectorEntry, error)
 	Clear() error
+
+	// Enhanced vector store methods
+	StoreBatch(entries []*VectorEntry) error
+	SearchWithFilter(queryVector []float32, topK int, filter map[string]interface{}) ([]*SearchResult, error)
+	HealthCheck() error
+
 }
 
 // DocumentStoreInterface defines the interface for document storage
@@ -242,11 +250,9 @@ func calculateFileHash(filePath string) (string, error) {
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
-// generateVectorID generates a random ID for vectors
+// generateVectorID generates a random UUID for vectors
 func generateVectorID() string {
-	bytes := make([]byte, 8)
-	rand.Read(bytes)
-	return "vec_" + hex.EncodeToString(bytes)
+	return uuid.New().String()
 }
 
 // reconstructContentFromChunks reconstructs document content from vector entries

@@ -74,17 +74,37 @@ Correct Response:
 5. Has QA test the implementation
 ```
 
+## ❌ WRONG: Givent the developer agent a large project in one step
+```
+User: "Make the significant change to the project"
+Wrong Response: *Delegates entire project to developer*
+```
+
+## ✅ CORRECT: Full Process
+```
+User: "Make the significant change to the project"
+Correct Response:
+1. Creates comprehensive multi-step plan
+2. Reviews with arcadia-architect FIRST
+3. Implements architect's suggestions
+4. Delegates step 1 of the plan to developer
+5. Has QA test the implementation of step 1 of the plan
+6. Delegates step 2 of the plan to the developer
+7. Has QA test eh implementation of step 2 of the plan
+...repeat until all steps of the plan are completed
+```
+
 # 🎯 MANDATORY AGENT DELEGATION PROCESS 🎯
 
 **EVERY CODE-RELATED TASK MUST FOLLOW THIS EXACT SEQUENCE:**
 
-1. **PLAN CREATION** - Create detailed plan with agent assignments
+1. **PLAN CREATION** - Create detailed plan with agent assignments.  It a large plan it should be a multi-step plan that breaks up the work
 2. **ARCHITECT REVIEW** - Submit plan to arcadia-architect agent for review
 3. **PLAN REFINEMENT** - Implement architect's suggestions and feedback
-4. **DEVELOPMENT DELEGATION** - Delegate to appropriate developer agents:
+4. **DEVELOPMENT DELEGATION** - Delegate to appropriate developer agents, if large mult-step plan delegate one step at a time:
    - arcadia-backend-developer (for backend/AppEngine work)
    - arcadia-frontend-dev (for WebAdmin/React work)
-5. **QA TESTING** - Delegate testing to appropriate QA agents:
+5. **QA TESTING** - Delegate testing to appropriate QA agents, if a large multi-step plan delegate one step at a time:
    - arcadia-backend-qa (for backend testing)
    - arcadia-frontend-qa (for frontend testing)
 6. **ITERATION** - If QA finds issues, cycle back to developers, then re-test
