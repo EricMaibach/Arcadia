@@ -1,0 +1,5 @@
+This is a test PDF file with normal text.
+This text contains repeated characters: aaaaa
+And some garbled text: !!!@@###3096$%%%
+More normal content to test quality metrics.
+Testing the PDF text extraction functionality.

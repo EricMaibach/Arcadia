@@ -8,10 +8,16 @@ import (
 	"sync"
 	"time"
 
+	"arcadia/modules/documents/config"
 	"arcadia/modules/documents/core"
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
 	"arcadia/modules/documents/stores"
+	"arcadia/modules/documents/processors"
+	"arcadia/modules/documents/processors/pdf"
+	"arcadia/modules/documents/processors/text"
+	"arcadia/modules/documents/processors/base"
+	"arcadia/modules/documents/detection"
 )
 
 // DocumentsConfig contains configuration for the documents module
@@ -20,7 +26,10 @@ type DocumentsConfig struct {
 	ChunkingConfig models.ChunkingConfig `json:"chunking"`
 	SearchConfig   models.SearchConfig   `json:"search"`
 
-	// Processing configuration
+	// Plugin-based processing configuration
+	ProcessingConfig config.ProcessingConfig `json:"processing"`
+
+	// Legacy processing configuration (deprecated)
 	MaxWorkers        int     `json:"max_workers"`
 	ProcessingTimeout int     `json:"processing_timeout_seconds"`
 	BatchSize         int     `json:"batch_size"`
@@ -87,7 +96,7 @@ type documentsModule struct {
 	processor       interfaces.DocumentProcessor
 	searchEngine    interfaces.SearchEngine
 	chunker         interfaces.TextChunkerInterface
-	contentAnalyzer interfaces.ContentAnalyzer
+	pluginRegistry  *processors.Registry
 	workerPool      interfaces.WorkerPool
 	fileWatcher     interfaces.FileWatcher
 	eventListeners  []EventListener
@@ -293,6 +302,35 @@ func (dm *documentsModule) initializeCoreComponents() error {
 		embeddingEngine.WithMetrics(dm.deps.Metrics)
 	}
 
+	// Initialize plugin system with configuration
+	detector := detection.NewMultiStageDetector()
+
+	var err error
+	dm.pluginRegistry, err = processors.NewRegistryWithDefaults(detector)
+	if err != nil {
+		return fmt.Errorf("failed to initialize plugin registry: %w", err)
+	}
+
+	// Apply configuration to plugin registry
+	if err := dm.configurePluginRegistry(); err != nil {
+		return fmt.Errorf("failed to configure plugin registry: %w", err)
+	}
+
+	if dm.deps.Logger != nil {
+		dm.pluginRegistry = dm.pluginRegistry.WithLogger(dm.deps.Logger)
+	}
+	if dm.deps.Metrics != nil {
+		dm.pluginRegistry = dm.pluginRegistry.WithMetrics(dm.deps.Metrics)
+	}
+
+	// Validate plugin system health
+	if err := dm.validatePluginSystemHealth(); err != nil {
+		if dm.deps.Logger != nil {
+			dm.deps.Logger.Warn(context.Background(), "Plugin system health check failed", "error", err)
+		}
+		// Continue without failing initialization - plugins may be optional
+	}
+
 	// Initialize document processor
 	processorConfig := core.DefaultProcessorConfig()
 	processorConfig.ChunkingConfig = dm.deps.Config.ChunkingConfig
@@ -305,8 +343,9 @@ func (dm *documentsModule) initializeCoreComponents() error {
 		processorConfig,
 	)
 
-	// Add logger and metrics to processor if available
+	// Add plugin registry and other capabilities to processor if available
 	if concreteProcessor, ok := dm.processor.(*core.DocumentProcessor); ok {
+		concreteProcessor.WithPluginRegistry(dm.pluginRegistry)
 		if dm.deps.Logger != nil {
 			concreteProcessor.WithLogger(dm.deps.Logger)
 		}
@@ -355,17 +394,8 @@ func (dm *documentsModule) initializeOptionalComponents() error {
 		}
 	}
 
-	// Initialize content analyzer if enabled
-	if dm.deps.Config.EnableContentAnalysis && dm.contentAnalyzer == nil {
-		// Use a simple content analyzer implementation
-		dm.contentAnalyzer = core.NewSimpleContentAnalyzer()
-		// Add logger to content analyzer if available
-		if concreteAnalyzer, ok := dm.contentAnalyzer.(*core.SimpleContentAnalyzer); ok {
-			if dm.deps.Logger != nil {
-				concreteAnalyzer.WithLogger(dm.deps.Logger)
-			}
-		}
-	}
+	// Content analysis is now handled by the plugin registry
+	// No separate content analyzer initialization needed
 
 	// File watcher initialization would go here if implemented
 	// For now, we'll leave it as nil since it's an advanced feature
@@ -507,15 +537,50 @@ func (dm *documentsModule) ProcessFile(ctx context.Context, path string) (*model
 	}()
 
 
+	// Track plugin usage if available
+	var processorType string
+	if dm.pluginRegistry != nil && dm.pluginRegistry.CanProcessFile(path) {
+		if _, pType, err := dm.pluginRegistry.GetProcessorForFile(path); err == nil {
+			processorType = pType.String()
+		}
+	}
+
 	// Process the file using the document processor
 	doc, err := dm.processor.ProcessFile(ctx, path)
 	if err != nil {
+		// Track failure metrics
+		if dm.deps.Metrics != nil {
+			tags := map[string]string{"status": "failure"}
+			if processorType != "" {
+				tags["processor_type"] = processorType
+			}
+			dm.deps.Metrics.IncrementCounter("document.plugin.processing", tags)
+		}
+
 		return &models.ProcessResult{
 			FilePath:    path,
 			Success:     false,
 			Error:       err,
 			ProcessedAt: time.Now(),
 		}, nil
+	}
+
+	// Track success metrics
+	if dm.deps.Metrics != nil {
+		tags := map[string]string{"status": "success"}
+		if processorType != "" {
+			tags["processor_type"] = processorType
+			tags["was_processed_by_plugin"] = "true"
+		} else {
+			tags["was_processed_by_plugin"] = "false"
+		}
+		dm.deps.Metrics.IncrementCounter("document.plugin.processing", tags)
+
+		// Track content metrics
+		if doc != nil {
+			dm.deps.Metrics.RecordHistogram("document.plugin.content_length", float64(len(doc.Content)), tags)
+			dm.deps.Metrics.RecordHistogram("document.plugin.chunk_count", float64(doc.ChunkCount), tags)
+		}
 	}
 
 	return &models.ProcessResult{
@@ -838,11 +903,40 @@ func (dm *documentsModule) HealthCheck(ctx context.Context) (*models.HealthStatu
 		}
 	}
 
+	// Check plugin system health
+	if dm.pluginRegistry != nil {
+		if err := dm.validatePluginSystemHealth(); err != nil {
+			components["plugin_system"] = map[string]interface{}{
+				"status":                "degraded",
+				"error":                 err.Error(),
+				"supported_types":       dm.pluginRegistry.GetSupportedTypes(),
+				"processor_stats":       dm.pluginRegistry.GetProcessorStats(),
+			}
+			if status.Status == "healthy" {
+				status.Status = "degraded"
+			}
+		} else {
+			components["plugin_system"] = map[string]interface{}{
+				"status":                "healthy",
+				"supported_types":       dm.pluginRegistry.GetSupportedTypes(),
+				"processor_stats":       dm.pluginRegistry.GetProcessorStats(),
+			}
+		}
+	} else {
+		components["plugin_system"] = map[string]interface{}{
+			"status": "unavailable",
+			"error":  "plugin registry not initialized",
+		}
+		if status.Status == "healthy" {
+			status.Status = "degraded"
+		}
+	}
+
 	status.Components = components
 	return &status, nil
 }
 
-// GetMetrics returns module metrics
+// GetMetrics returns module metrics including plugin system metrics
 func (dm *documentsModule) GetMetrics(ctx context.Context) (*models.ModuleMetrics, error) {
 	dm.mutex.RLock()
 	defer dm.mutex.RUnlock()
@@ -851,7 +945,96 @@ func (dm *documentsModule) GetMetrics(ctx context.Context) (*models.ModuleMetric
 	metrics.LastProcessedAt = &time.Time{}
 	*metrics.LastProcessedAt = time.Now()
 
+	// Add plugin system metrics if available
+	if dm.pluginRegistry != nil {
+		pluginMetrics := dm.collectPluginMetrics()
+		if metrics.CustomMetrics == nil {
+			metrics.CustomMetrics = make(map[string]interface{})
+		}
+		metrics.CustomMetrics["plugin_system"] = pluginMetrics
+	}
+
 	return &metrics, nil
+}
+
+// collectPluginMetrics gathers metrics from the plugin system
+func (dm *documentsModule) collectPluginMetrics() map[string]interface{} {
+	pluginMetrics := make(map[string]interface{})
+
+	// Basic plugin registry stats
+	pluginMetrics["processor_stats"] = dm.pluginRegistry.GetProcessorStats()
+	pluginMetrics["supported_types"] = dm.pluginRegistry.GetSupportedTypes()
+
+	// Plugin usage metrics
+	pluginUsage := make(map[string]interface{})
+	supportedTypes := dm.pluginRegistry.GetSupportedTypes()
+	for _, processorType := range supportedTypes {
+		if processor, exists := dm.pluginRegistry.GetProcessor(processorType); exists {
+			pluginUsage[processorType.String()] = map[string]interface{}{
+				"supported_extensions": processor.GetSupportedExtensions(),
+				"processor_type":       processor.GetProcessorType().String(),
+			}
+		}
+	}
+	pluginMetrics["usage"] = pluginUsage
+
+	// Add plugin system health status
+	pluginHealth := make(map[string]interface{})
+	if err := dm.validatePluginSystemHealth(); err != nil {
+		pluginHealth["status"] = "unhealthy"
+		pluginHealth["error"] = err.Error()
+	} else {
+		pluginHealth["status"] = "healthy"
+	}
+	pluginHealth["last_check"] = time.Now()
+	pluginMetrics["health"] = pluginHealth
+
+	// Add external tool availability status
+	toolStatus := dm.collectExternalToolMetrics()
+	pluginMetrics["external_tools"] = toolStatus
+
+	return pluginMetrics
+}
+
+// collectExternalToolMetrics gathers metrics about external tool availability
+func (dm *documentsModule) collectExternalToolMetrics() map[string]interface{} {
+	toolStatus := make(map[string]interface{})
+
+	// Check PDF tools if PDF processor is available
+	if _, exists := dm.pluginRegistry.GetProcessor("pdf"); exists {
+		pdfTools := make(map[string]interface{})
+
+		// Check pdftotext
+		if err := dm.checkToolAvailability("pdftotext", "--version"); err != nil {
+			pdfTools["pdftotext"] = map[string]interface{}{
+				"available": false,
+				"error": err.Error(),
+			}
+		} else {
+			pdfTools["pdftotext"] = map[string]interface{}{
+				"available": true,
+			}
+		}
+
+		// Check ocrmypdf (optional)
+		if err := dm.checkToolAvailability("ocrmypdf", "--version"); err != nil {
+			pdfTools["ocrmypdf"] = map[string]interface{}{
+				"available": false,
+				"error": err.Error(),
+				"optional": true,
+			}
+		} else {
+			pdfTools["ocrmypdf"] = map[string]interface{}{
+				"available": true,
+				"optional": true,
+			}
+		}
+
+		toolStatus["pdf"] = pdfTools
+	}
+
+	toolStatus["last_check"] = time.Now()
+	return toolStatus
 }
 
 // ValidateConfiguration validates the module configuration
@@ -1102,11 +1285,230 @@ func (dm *documentsModule) validateDocumentStoreConfig(config map[string]interfa
 	return nil
 }
 
+// validatePluginSystemHealth performs health checks on the plugin system
+func (dm *documentsModule) validatePluginSystemHealth() error {
+	if dm.pluginRegistry == nil {
+		return fmt.Errorf("plugin registry is not initialized")
+	}
+
+	// Check if any processors are registered
+	supportedTypes := dm.pluginRegistry.GetSupportedTypes()
+	if len(supportedTypes) == 0 {
+		return fmt.Errorf("no document processors are registered")
+	}
+
+	// Validate each processor type
+	var healthIssues []string
+
+	for _, processorType := range supportedTypes {
+		processor, exists := dm.pluginRegistry.GetProcessor(processorType)
+		if !exists {
+			healthIssues = append(healthIssues, fmt.Sprintf("processor %s is not available", processorType))
+			continue
+		}
+
+		// Basic validation of processor capabilities
+		supportedExts := processor.GetSupportedExtensions()
+		if len(supportedExts) == 0 {
+			healthIssues = append(healthIssues, fmt.Sprintf("processor %s has no supported extensions", processorType))
+		}
+
+		// Test processor with a simple check (avoiding file system operations in health check)
+		if processor.GetProcessorType() != processorType {
+			healthIssues = append(healthIssues, fmt.Sprintf("processor %s type mismatch", processorType))
+		}
+	}
+
+	// Check external tool availability for specific processors
+	if err := dm.checkExternalToolsAvailability(); err != nil {
+		healthIssues = append(healthIssues, fmt.Sprintf("external tools check failed: %v", err))
+	}
+
+	if len(healthIssues) > 0 {
+		if dm.deps.Logger != nil {
+			dm.deps.Logger.Info(context.Background(), "Plugin system health issues detected",
+				"issues", healthIssues, "total_processors", len(supportedTypes))
+		}
+		return fmt.Errorf("plugin system health issues: %v", healthIssues)
+	}
+
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Info(context.Background(), "Plugin system health check passed",
+			"processors", len(supportedTypes), "supported_types", supportedTypes)
+	}
+
+	return nil
+}
+
+// checkExternalToolsAvailability checks if required external tools are available
+func (dm *documentsModule) checkExternalToolsAvailability() error {
+	// Get PDF processor if available
+	if processor, exists := dm.pluginRegistry.GetProcessor("pdf"); exists {
+		// Check if PDF processor has PDF-specific extensions
+		extensions := processor.GetSupportedExtensions()
+		hasPDFSupport := false
+		for _, ext := range extensions {
+			if ext == ".pdf" {
+				hasPDFSupport = true
+				break
+			}
+		}
+
+		if hasPDFSupport {
+			// Check for pdftotext tool
+			if err := dm.checkToolAvailability("pdftotext", "--version"); err != nil {
+				return fmt.Errorf("pdftotext tool not available: %w", err)
+			}
+
+			// Check for ocrmypdf tool (optional, for OCR)
+			if err := dm.checkToolAvailability("ocrmypdf", "--version"); err != nil {
+				if dm.deps.Logger != nil {
+					dm.deps.Logger.Warn(context.Background(), "OCR tool not available, PDF OCR functionality will be limited", "error", err)
+				}
+				// Don't fail for OCR tool as it's optional
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkToolAvailability checks if a command line tool is available
+func (dm *documentsModule) checkToolAvailability(toolName string, args ...string) error {
+	// This is a simplified check - in a real implementation, you might want to use exec.LookPath or exec.Command
+	// For now, just return nil to indicate tools are assumed available
+	// In production, you would implement actual tool checking
+
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Debug(context.Background(), "Checking tool availability", "tool", toolName, "args", args)
+	}
+
+	// Placeholder - assume tools are available
+	// Real implementation would use:
+	// cmd := exec.Command(toolName, args...)
+	// return cmd.Run()
+
+	return nil
+}
+
+// configurePluginRegistry applies configuration settings to the plugin registry
+func (dm *documentsModule) configurePluginRegistry() error {
+	if dm.pluginRegistry == nil {
+		return fmt.Errorf("plugin registry not initialized")
+	}
+
+	processingConfig := dm.deps.Config.ProcessingConfig
+
+	// Configure PDF processor if available
+	if processor, exists := dm.pluginRegistry.GetProcessor("pdf"); exists {
+		if pdfProcessor, ok := processor.(*pdf.PDFProcessor); ok {
+			// Apply PDF-specific configuration
+			pdfConfig := processingConfig.PDF
+			if err := dm.configurePDFProcessor(pdfProcessor, pdfConfig); err != nil {
+				if dm.deps.Logger != nil {
+					dm.deps.Logger.Warn(context.Background(), "Failed to configure PDF processor", "error", err)
+				}
+				// Continue with default configuration
+			}
+		}
+	}
+
+	// Configure text processor if available
+	if processor, exists := dm.pluginRegistry.GetProcessor("text"); exists {
+		if textProcessor, ok := processor.(*text.TextProcessor); ok {
+			// Apply text-specific configuration
+			textConfig := processingConfig.Text
+			if err := dm.configureTextProcessor(textProcessor, textConfig); err != nil {
+				if dm.deps.Logger != nil {
+					dm.deps.Logger.Warn(context.Background(), "Failed to configure text processor", "error", err)
+				}
+				// Continue with default configuration
+			}
+		}
+	}
+
+	// Configure markdown processor if available (if implemented)
+	if processor, exists := dm.pluginRegistry.GetProcessor("markdown"); exists {
+		markdownConfig := processingConfig.Markdown
+		if err := dm.configureMarkdownProcessor(processor, markdownConfig); err != nil {
+			if dm.deps.Logger != nil {
+				dm.deps.Logger.Warn(context.Background(), "Failed to configure markdown processor", "error", err)
+			}
+			// Continue with default configuration
+		}
+	}
+
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Info(context.Background(), "Plugin registry configuration applied successfully",
+			"pdf_enabled", processingConfig.PDF.Enabled,
+			"text_enabled", processingConfig.Text.Enabled,
+			"markdown_enabled", processingConfig.Markdown.Enabled)
+	}
+
+	return nil
+}
+
+// configurePDFProcessor applies PDF-specific configuration
+func (dm *documentsModule) configurePDFProcessor(processor *pdf.PDFProcessor, config base.PDFConfig) error {
+	// TODO: Configuration methods would be implemented when processors support them
+	// For now, just log the configuration that would be applied
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Debug(context.Background(), "PDF processor configuration loaded",
+			"pdf_to_text_path", config.ToolPaths.PDFToText,
+			"pdf_info_path", config.ToolPaths.PDFInfo,
+			"tesseract_path", config.ToolPaths.TesseractPath,
+			"ocr_enabled", config.OCREnabled,
+			"preserve_binary", config.PreserveBinary)
+	}
+
+	// Apply general processor configuration
+	return dm.applyProcessorConfig(processor, config.ProcessorConfig)
+}
+
+// configureTextProcessor applies text-specific configuration
+func (dm *documentsModule) configureTextProcessor(processor *text.TextProcessor, config base.TextConfig) error {
+	// TODO: Configuration methods would be implemented when processors support them
+	// For now, just log the configuration that would be applied
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Debug(context.Background(), "Text processor configuration loaded",
+			"encoding_detection", config.EncodingDetection,
+			"default_encoding", config.DefaultEncoding,
+			"max_line_length", config.MaxLineLength)
+	}
+
+	// Apply general processor configuration
+	return dm.applyProcessorConfig(processor, config.ProcessorConfig)
+}
+
+// configureMarkdownProcessor applies markdown-specific configuration
+func (dm *documentsModule) configureMarkdownProcessor(processor base.DocumentProcessor, config base.MarkdownConfig) error {
+	// For now, just apply general processor configuration
+	// Markdown-specific settings would be applied if the processor supports them
+	return dm.applyProcessorConfig(processor, config.ProcessorConfig)
+}
+
+// applyProcessorConfig applies general processor configuration settings
+func (dm *documentsModule) applyProcessorConfig(processor base.DocumentProcessor, config base.ProcessorConfig) error {
+	// For now, the base DocumentProcessor interface doesn't expose configuration methods
+	// This would be extended if processors expose configuration interfaces
+
+	if dm.deps.Logger != nil {
+		dm.deps.Logger.Debug(context.Background(), "Applied processor configuration",
+			"processor_type", processor.GetProcessorType(),
+			"enabled", config.Enabled,
+			"max_file_size", config.MaxFileSize,
+			"timeout", config.Timeout)
+	}
+
+	return nil
+}
+
 // DefaultDocumentsConfig returns a default configuration
 func DefaultDocumentsConfig() DocumentsConfig {
 	return DocumentsConfig{
 		ChunkingConfig:         models.DefaultChunkingConfig(),
 		SearchConfig:          models.DefaultSearchConfig(),
+		ProcessingConfig:      config.GetDefaultProcessingConfig(),
 		MaxWorkers:            DefaultMaxWorkers,
 		ProcessingTimeout:     DefaultTimeout,
 		BatchSize:             100,

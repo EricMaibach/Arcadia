@@ -17,6 +17,7 @@ import (
 
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
+	"arcadia/modules/documents/processors"
 )
 
 // DocumentProcessor handles document processing operations
@@ -25,7 +26,7 @@ type DocumentProcessor struct {
 	embeddingEngine *EmbeddingEngine
 	vectorStore     interfaces.VectorStoreInterface
 	documentStore   interfaces.DocumentStoreInterface
-	contentAnalyzer interfaces.ContentAnalyzer
+	pluginRegistry  *processors.Registry
 	logger          interfaces.Logger
 	metrics         interfaces.MetricsCollector
 
@@ -62,9 +63,9 @@ func NewDocumentProcessor(
 	}
 }
 
-// WithContentAnalyzer adds content analysis capabilities
-func (dp *DocumentProcessor) WithContentAnalyzer(analyzer interfaces.ContentAnalyzer) *DocumentProcessor {
-	dp.contentAnalyzer = analyzer
+// WithPluginRegistry adds plugin-based document processing capabilities
+func (dp *DocumentProcessor) WithPluginRegistry(registry *processors.Registry) *DocumentProcessor {
+	dp.pluginRegistry = registry
 	return dp
 }
 
@@ -135,21 +136,65 @@ func (dp *DocumentProcessor) ProcessFile(ctx context.Context, filePath string) (
 			fmt.Sprintf("file size %d exceeds maximum allowed size %d", fileInfo.Size(), dp.config.MaxFileSize)).WithFilePath(filePath)
 	}
 
-	// Check if file is supported text type
-	isText, contentType, err := dp.IsTextFile(filePath)
-	if err != nil {
-		return nil, models.NewDocumentErrorWithCause(models.ErrUnsupportedFormat, "failed to analyze file type", err).WithFilePath(filePath)
-	}
+	// Use plugin registry to process the file if available
+	var content string
+	var contentType string
+	var pluginMetadata map[string]interface{}
 
-	if !isText {
-		return nil, models.NewDocumentError(models.ErrUnsupportedFormat,
-			fmt.Sprintf("unsupported file type: %s (detected: %s)", filepath.Ext(filePath), contentType)).WithFilePath(filePath)
-	}
+	if dp.pluginRegistry != nil {
+		// Try to process with plugin registry first
+		if dp.pluginRegistry.CanProcessFile(filePath) {
+			result, err := dp.pluginRegistry.ProcessDocument(ctx, filePath)
+			if err != nil {
+				return nil, models.NewDocumentErrorWithCause(models.ErrProcessingFailed, "plugin processing failed", err).WithFilePath(filePath)
+			}
 
-	// Read file content
-	content, err := dp.ReadTextFile(filePath)
-	if err != nil {
-		return nil, models.NewDocumentErrorWithCause(models.ErrFileReadError, "failed to read file", err).WithFilePath(filePath)
+			content = result.Content
+			contentType = result.ContentType
+			pluginMetadata = result.Metadata
+
+			if dp.logger != nil {
+				dp.logger.Info(ctx, "Processed file using plugin system", "path", filePath, "type", contentType, "size", len(content))
+			}
+		} else {
+			// Fall back to legacy text file processing
+			isText, detectedType, err := dp.IsTextFile(filePath)
+			if err != nil {
+				return nil, models.NewDocumentErrorWithCause(models.ErrUnsupportedFormat, "failed to analyze file type", err).WithFilePath(filePath)
+			}
+
+			if !isText {
+				return nil, models.NewDocumentError(models.ErrUnsupportedFormat,
+					fmt.Sprintf("unsupported file type: %s (detected: %s)", filepath.Ext(filePath), detectedType)).WithFilePath(filePath)
+			}
+
+			content, err = dp.ReadTextFile(filePath)
+			if err != nil {
+				return nil, models.NewDocumentErrorWithCause(models.ErrFileReadError, "failed to read file", err).WithFilePath(filePath)
+			}
+
+			contentType = detectedType
+			pluginMetadata = make(map[string]interface{})
+		}
+	} else {
+		// Legacy text file processing when no plugin registry available
+		isText, detectedType, err := dp.IsTextFile(filePath)
+		if err != nil {
+			return nil, models.NewDocumentErrorWithCause(models.ErrUnsupportedFormat, "failed to analyze file type", err).WithFilePath(filePath)
+		}
+
+		if !isText {
+			return nil, models.NewDocumentError(models.ErrUnsupportedFormat,
+				fmt.Sprintf("unsupported file type: %s (detected: %s)", filepath.Ext(filePath), detectedType)).WithFilePath(filePath)
+		}
+
+		content, err = dp.ReadTextFile(filePath)
+		if err != nil {
+			return nil, models.NewDocumentErrorWithCause(models.ErrFileReadError, "failed to read file", err).WithFilePath(filePath)
+		}
+
+		contentType = detectedType
+		pluginMetadata = make(map[string]interface{})
 	}
 
 	// Validate content if configured
@@ -199,15 +244,21 @@ func (dp *DocumentProcessor) ProcessFile(ctx context.Context, filePath string) (
 		UpdatedAt: time.Now(),
 	}
 
-	// Extract additional metadata if configured
-	if dp.config.ExtractMetadata && dp.contentAnalyzer != nil {
-		if analysis, err := dp.contentAnalyzer.AnalyzeFile(filePath); err == nil {
-			doc.Metadata["analysis"] = analysis
-		}
+	// Merge plugin metadata with document metadata
+	for key, value := range pluginMetadata {
+		doc.Metadata[key] = value
 	}
 
-	if dp.logger != nil {
-		dp.logger.Info(ctx, "Processing text file", "path", filePath, "type", contentType, "size", len(content))
+	// Add plugin processing information
+	if dp.pluginRegistry != nil && dp.pluginRegistry.CanProcessFile(filePath) {
+		doc.Metadata["processed_with_plugins"] = true
+		if processor, processorType, err := dp.pluginRegistry.GetProcessorForFile(filePath); err == nil {
+			doc.Metadata["processor_type"] = processorType.String()
+			doc.Metadata["processor_extensions"] = processor.GetSupportedExtensions()
+		}
+	} else {
+		doc.Metadata["processed_with_plugins"] = false
+		doc.Metadata["processor_type"] = "legacy"
 	}
 
 	// Process the document
