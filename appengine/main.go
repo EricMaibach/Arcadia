@@ -1,16 +1,25 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 
 	"arcadia/config"
 	"arcadia/handlers"
+	"arcadia/modules/documents"
+	"arcadia/modules/documents/interfaces"
+	"arcadia/modules/documents/models"
+	"arcadia/modules/documents/providers"
 	"arcadia/services"
 	"arcadia/services/ai"
 	_ "arcadia/services/ai/providers/claude" // Import to register Claude provider
@@ -23,6 +32,10 @@ var (
 	registryManager *services.RegistryManager
 	wasmRuntime     *services.WasmRuntime
 	fileWatcher     services.FileWatcher
+
+	// Documents module components
+	documentsModule documents.DocumentsModule
+	queueProcessor  *QueueProcessor
 )
 
 // --- Request Types ---
@@ -45,11 +58,109 @@ type FileEventData struct {
 
 // QueueProcessor handles background processing of queued file events
 type QueueProcessor struct {
-	queue       *services.QueueService
-	embedding   services.EmbeddingServiceInterface
-	workers     int
-	stopChannel chan bool
-	running     bool
+	queue           *services.QueueService
+	documentsModule documents.DocumentsModule
+	workers         int
+	stopChannel     chan bool
+	running         bool
+}
+
+// --- Adapter Implementations for Documents Module ---
+
+// DatabaseAdapter adapts services.Database to the documents module interface
+type DatabaseAdapter struct {
+	systemDB services.Database
+}
+
+func NewDatabaseAdapter(systemDB services.Database) *DatabaseAdapter {
+	return &DatabaseAdapter{systemDB: systemDB}
+}
+
+func (da *DatabaseAdapter) Execute(ctx context.Context, query string, args ...interface{}) error {
+	_, err := da.systemDB.Exec(query, args...)
+	return err
+}
+
+func (da *DatabaseAdapter) Query(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
+	return da.systemDB.Query(query, args...)
+}
+
+func (da *DatabaseAdapter) QueryRow(ctx context.Context, query string, args ...interface{}) *sql.Row {
+	// Check if systemDB is nil first
+	if da.systemDB == nil {
+		// Create a temporary database to return a proper sql.Row with error
+		tempDB, err := sql.Open("sqlite3", ":memory:")
+		if err != nil {
+			// If we can't even create a temp DB, return a nil row
+			// This will cause a panic when scanned, which is appropriate for this critical error
+			return nil
+		}
+		defer tempDB.Close()
+		return tempDB.QueryRowContext(ctx, "SELECT 1 WHERE 0") // Returns sql.ErrNoRows
+	}
+
+	// Use the proper QueryRow method from the Database interface
+	return da.systemDB.QueryRow(query, args...)
+}
+
+func (da *DatabaseAdapter) Transaction(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	// This requires access to the underlying *sql.DB which isn't exposed
+	// For now, we'll return an error indicating this isn't implemented
+	return fmt.Errorf("transactions not implemented in database adapter")
+}
+
+func (da *DatabaseAdapter) Begin(ctx context.Context) (*sql.Tx, error) {
+	return nil, fmt.Errorf("transactions not implemented in database adapter")
+}
+
+func (da *DatabaseAdapter) Ping(ctx context.Context) error {
+	// Test with a simple query
+	_, err := da.systemDB.Query("SELECT 1")
+	return err
+}
+
+func (da *DatabaseAdapter) Close() error {
+	return da.systemDB.Close()
+}
+
+func (da *DatabaseAdapter) Stats() sql.DBStats {
+	return sql.DBStats{} // Default stats since not available in current interface
+}
+
+
+// SimpleLogger adapts Go's standard log to the documents module interface
+type SimpleLogger struct{}
+
+func NewSimpleLogger() *SimpleLogger {
+	return &SimpleLogger{}
+}
+
+func (sl *SimpleLogger) Debug(ctx context.Context, msg string, fields ...interface{}) {
+	log.Printf("[DEBUG] %s %v", msg, fields)
+}
+
+func (sl *SimpleLogger) Info(ctx context.Context, msg string, fields ...interface{}) {
+	log.Printf("[INFO] %s %v", msg, fields)
+}
+
+func (sl *SimpleLogger) Warn(ctx context.Context, msg string, fields ...interface{}) {
+	log.Printf("[WARN] %s %v", msg, fields)
+}
+
+func (sl *SimpleLogger) Error(ctx context.Context, msg string, fields ...interface{}) {
+	log.Printf("[ERROR] %s %v", msg, fields)
+}
+
+func (sl *SimpleLogger) Fatal(ctx context.Context, msg string, fields ...interface{}) {
+	log.Fatalf("[FATAL] %s %v", msg, fields)
+}
+
+func (sl *SimpleLogger) WithFields(fields map[string]interface{}) interfaces.Logger {
+	return sl // For simplicity, return self
+}
+
+func (sl *SimpleLogger) WithContext(ctx context.Context) interfaces.Logger {
+	return sl // For simplicity, return self
 }
 
 
@@ -58,13 +169,13 @@ func executeAppTool(appID, toolName string, input json.RawMessage) (string, erro
 }
 
 // newQueueProcessor creates a new queue processor instance with single worker
-func newQueueProcessor(queue *services.QueueService, embedding services.EmbeddingServiceInterface) *QueueProcessor {
+func newQueueProcessor(queue *services.QueueService, documentsModule documents.DocumentsModule) *QueueProcessor {
 	return &QueueProcessor{
-		queue:       queue,
-		embedding:   embedding,
-		workers:     1, // Single worker for Ollama compatibility
-		stopChannel: make(chan bool, 1),
-		running:     false,
+		queue:           queue,
+		documentsModule: documentsModule,
+		workers:         1, // Single worker for Ollama compatibility
+		stopChannel:     make(chan bool, 1),
+		running:         false,
 	}
 }
 
@@ -177,48 +288,68 @@ func (qp *QueueProcessor) processFileEvent(item *services.QueueItem) {
 
 // processFileForEmbedding sends a file to the embedding service for processing
 func (qp *QueueProcessor) processFileForEmbedding(filePath string) error {
-	if qp.embedding == nil {
-		return fmt.Errorf("embedding service not available")
+	// Use documents module only - no fallback to legacy services
+	if qp.documentsModule == nil {
+		return fmt.Errorf("documents module not available")
 	}
-	
-	// Use the embedding service to process the file
-	doc, err := qp.embedding.ProcessFile(filePath)
+
+	log.Printf("[QueueProcessor] Processing file with documents module: %s", filePath)
+
+	ctx := context.Background()
+	result, err := qp.documentsModule.ProcessFile(ctx, filePath)
 	if err != nil {
-		return fmt.Errorf("embedding processing failed: %v", err)
+		return fmt.Errorf("documents module processing failed: %v", err)
 	}
-	
-	log.Printf("[QueueProcessor] Embedded file %s: %d chunks", 
-		filePath, doc.ChunkCount)
-		
+
+	if result != nil && result.Success {
+		log.Printf("[QueueProcessor] Documents module processed file %s: document ID %s",
+			filePath, result.DocumentID)
+	} else {
+		log.Printf("[QueueProcessor] Documents module processing failed for %s: %v",
+			filePath, result.Error)
+	}
+
 	return nil
 }
 
-// EmbeddingSearchAdapter adapts services.EmbeddingServiceInterface to ai.EmbeddingSearch
+
+// EmbeddingSearchAdapter adapts documents module to ai.EmbeddingSearch
 type EmbeddingSearchAdapter struct {
-	service services.EmbeddingServiceInterface
+	documentsModule documents.DocumentsModule
 }
 
-func NewEmbeddingSearchAdapter(service services.EmbeddingServiceInterface) *EmbeddingSearchAdapter {
-	return &EmbeddingSearchAdapter{service: service}
+func NewEmbeddingSearchAdapter(documentsModule documents.DocumentsModule) *EmbeddingSearchAdapter {
+	return &EmbeddingSearchAdapter{
+		documentsModule: documentsModule,
+	}
 }
 
 func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*ai.DocumentSearchResult, error) {
-	// Check if embedding service is available
-	if esa.service == nil {
-		return nil, fmt.Errorf("embedding service not available")
+	// Use documents module only - no fallback to legacy services
+	if esa.documentsModule == nil {
+		return nil, fmt.Errorf("documents module not available")
 	}
 
-	results, err := esa.service.SearchDocuments(query, topK)
+	log.Printf("[EmbeddingSearchAdapter] Searching with documents module: %s", query)
+
+	ctx := context.Background()
+	docResults, err := esa.documentsModule.SearchDocuments(ctx, query, topK)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("documents module search failed: %v", err)
 	}
 
-	// Convert services.DocumentSearchResult to ai.DocumentSearchResult
-	aiResults := make([]*ai.DocumentSearchResult, 0, len(results))
-	for i, result := range results {
+	// Convert documents module results to AI service format
+	return esa.convertDocumentSearchResults(docResults), nil
+}
+
+
+// convertDocumentSearchResults converts documents module results to AI service format
+func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*models.DocumentSearchResult) []*ai.DocumentSearchResult {
+	aiResults := make([]*ai.DocumentSearchResult, 0, len(docResults))
+	for i, result := range docResults {
 		// Skip results with nil documents to prevent crashes
 		if result.Document == nil {
-			log.Printf("[EmbeddingSearchAdapter] Warning: Skipping result %d with nil document", i)
+			log.Printf("[EmbeddingSearchAdapter] Warning: Skipping documents module result %d with nil document", i)
 			continue
 		}
 
@@ -250,24 +381,26 @@ func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*a
 		})
 	}
 
-	return aiResults, nil
+	return aiResults
 }
 
 func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK int, config ai.SearchConfig) ([]*ai.EnhancedDocumentSearchResult, error) {
-	// Check if embedding service is available
-	if esa.service == nil {
-		return nil, fmt.Errorf("embedding service not available")
+	// Use documents module only - no fallback to legacy services
+	if esa.documentsModule == nil {
+		return nil, fmt.Errorf("documents module not available")
 	}
 
-	// Convert ai.SearchConfig (empty interface) to services.SearchConfig (struct)
-	// Since ai.SearchConfig is an empty interface, we'll use the default services config
-	servicesConfig := services.DefaultSearchConfig()
-	results, err := esa.service.SearchDocumentsEnhanced(query, topK, servicesConfig)
+	ctx := context.Background()
+
+	// Convert ai.SearchConfig (empty interface) to models.SearchConfig
+	// Since ai.SearchConfig is an empty interface, we'll use the default documents config
+	documentsConfig := models.DefaultSearchConfig()
+	results, err := esa.documentsModule.SearchDocumentsEnhanced(ctx, query, topK, documentsConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("documents module enhanced search failed: %v", err)
 	}
 
-	// Convert services.EnhancedDocumentSearchResult to ai.EnhancedDocumentSearchResult
+	// Convert models.EnhancedDocumentSearchResult to ai.EnhancedDocumentSearchResult
 	aiResults := make([]*ai.EnhancedDocumentSearchResult, 0, len(results))
 	for i, result := range results {
 		// Skip results with nil documents to prevent crashes
@@ -299,16 +432,22 @@ func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK in
 }
 
 func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*ai.Document, error) {
-	doc, err := esa.service.GetDocument(documentID)
+	// Use documents module only - no fallback to legacy services
+	if esa.documentsModule == nil {
+		return nil, fmt.Errorf("documents module not available")
+	}
+
+	ctx := context.Background()
+	doc, err := esa.documentsModule.GetDocument(ctx, documentID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("documents module get document failed: %v", err)
 	}
 
 	if doc == nil {
 		return nil, nil
 	}
 
-	// Convert services.Document to ai.Document
+	// Convert models.Document to ai.Document
 	return &ai.Document{
 		ID:         doc.ID,
 		FilePath:   doc.FilePath,
@@ -360,6 +499,66 @@ func handleFileEvent(event services.FileEvent) {
 
 	log.Printf("[FileWatcher] Queued file event: %s %s (queue ID: %s)", 
 		event.Operation, event.Path, item.ID)
+}
+
+
+
+// initializeDocumentsModule initializes the documents module with existing services
+func initializeDocumentsModule(dm *services.DatabaseManager) error {
+	log.Printf("Initializing documents module...")
+
+	// Get existing services
+	systemDB := dm.GetSystemDB()
+	if systemDB == nil {
+		return fmt.Errorf("system database not available")
+	}
+
+	// Create database adapter
+	dbAdapter := NewDatabaseAdapter(systemDB)
+
+	// Create embedding provider for documents module
+	embeddingProvider := providers.NewOllamaEmbeddingProvider("", "") // Use defaults: localhost:11434, embeddinggemma
+
+	// Create logger adapter
+	logger := NewSimpleLogger()
+
+	// Create documents config with defaults
+	documentsConfig := documents.DefaultDocumentsConfig()
+	documentsConfig.ChunkingConfig.MaxChunkSize = 500
+	documentsConfig.ChunkingConfig.ChunkOverlap = 50
+	documentsConfig.SearchConfig.MaxDocumentSize = 10000
+	documentsConfig.VectorStoreConfig = map[string]interface{}{
+		"type":      "memory", // Start with memory store for safety
+		"dimension": embeddingProvider.GetDimension(),
+	}
+	documentsConfig.DocumentStoreConfig = map[string]interface{}{
+		"type":       "sql",
+		"table_name": "documents",
+	}
+
+	// Create dependencies for documents module
+	deps := documents.Dependencies{
+		DB:                dbAdapter,
+		EmbeddingProvider: embeddingProvider,
+		Logger:            logger,
+		Queue:             nil, // No queue adapter for now
+		Metrics:           nil, // No metrics adapter for now
+		Cache:             nil, // No cache adapter for now
+		RateLimiter:       nil, // No rate limiter for now
+		ConfigProvider:    nil, // No config provider for now
+		EventBus:          nil, // No event bus for now
+		Config:            documentsConfig,
+	}
+
+	// Create documents module
+	var err error
+	documentsModule, err = documents.NewDocumentsModule(deps)
+	if err != nil {
+		return fmt.Errorf("failed to create documents module: %w", err)
+	}
+
+	log.Printf("Documents module created successfully")
+	return nil
 }
 
 
@@ -446,47 +645,37 @@ func main() {
 	
 	log.Println("File watcher service initialized and started")
 
-	// Initialize embedding service for file processing
-	log.Printf("[DEBUG] Initializing embedding service...")
-	chunker := services.NewSimpleTextChunker()
-	model := services.NewOllamaEmbeddingModel("", "") // Use defaults: localhost:11434, embeddinggemma
-	vectorStore := services.GetVectorStore()
-	documentStore := services.GetDocumentStore()
-	embeddingConfig := services.DefaultChunkingConfig()
-	
-	if vectorStore != nil && documentStore != nil {
-		services.InitDefaultEmbeddingService(chunker, model, vectorStore, documentStore, embeddingConfig)
-		
-		// Initialize the model
-		embeddingService := services.GetDefaultEmbeddingService()
-		if embeddingService != nil {
-			if err := embeddingService.Initialize(); err != nil {
-				log.Printf("WARNING: Failed to initialize embedding service: %v", err)
-			} else {
-				log.Println("Embedding service initialized successfully")
-			}
-		}
+	// Legacy embedding service initialization removed - using documents module only
+
+	// Initialize documents module
+	if err := initializeDocumentsModule(dm); err != nil {
+		log.Printf("WARNING: Failed to initialize documents module: %v", err)
+		log.Printf("Documents module will not be available")
 	} else {
-		log.Printf("WARNING: Cannot initialize embedding service - vectorStore: %v, documentStore: %v", 
-			vectorStore != nil, documentStore != nil)
+		log.Printf("Documents module initialized successfully")
+		// Start the documents module
+		if err := documentsModule.Start(context.Background()); err != nil {
+			log.Printf("WARNING: Failed to start documents module: %v", err)
+		} else {
+			log.Printf("Documents module started successfully")
+		}
 	}
 
 	// Initialize and start queue processor for file processing
 	queueService := services.GetDefaultQueue()
-	embeddingService := services.GetDefaultEmbeddingService()
-	
+
 	log.Printf("[DEBUG] Queue service available: %v", queueService != nil)
-	log.Printf("[DEBUG] Embedding service available: %v", embeddingService != nil)
-	
-	if queueService != nil && embeddingService != nil {
+	log.Printf("[DEBUG] Documents module available: %v", documentsModule != nil)
+
+	if queueService != nil && documentsModule != nil {
 		log.Printf("[DEBUG] Initializing queue processor...")
-		queueProcessor := newQueueProcessor(queueService, embeddingService)
+		queueProcessor = newQueueProcessor(queueService, documentsModule)
 		queueProcessor.start()
 		defer queueProcessor.stop()
 		log.Println("Queue processor initialized and started")
 	} else {
-		log.Printf("WARNING: Queue processor not started - queue: %v, embedding: %v", 
-			queueService != nil, embeddingService != nil)
+		log.Printf("WARNING: Queue processor not started - queue: %v, documents: %v",
+			queueService != nil, documentsModule != nil)
 	}
 
 	// Initialize AI service with auto-configuration
@@ -523,24 +712,15 @@ func main() {
 		registryManager.GetAppCreator(),
 	)
 
-	// Add embedding search capability to AI service
-	embeddingService = services.GetDefaultEmbeddingService()
-	if embeddingService != nil {
-		services.SetEmbeddingSearch(embeddingService)
-		log.Println("RAG capabilities enabled - AI service can now search and retrieve documents")
-	} else {
-		log.Printf("WARNING: Embedding service not available - RAG tools will not function")
-	}
-
 	// Set up dependency injection for the new AI service now that all components are available
 	if ai.IsGlobalServiceInitialized() {
 		var embeddingAdapter ai.EmbeddingSearch
-		if embeddingService != nil {
-			log.Printf("Creating embedding search adapter...")
-			embeddingAdapter = NewEmbeddingSearchAdapter(embeddingService)
+		if documentsModule != nil {
+			log.Printf("Creating embedding search adapter with documents module...")
+			embeddingAdapter = NewEmbeddingSearchAdapter(documentsModule)
 			log.Printf("Embedding search adapter created successfully")
 		} else {
-			log.Printf("WARNING: Embedding service is nil, skipping embedding adapter creation")
+			log.Printf("WARNING: Documents module is nil, skipping embedding adapter creation")
 		}
 
 		if err := ai.SetupGlobalDependencies(
@@ -600,25 +780,94 @@ func main() {
 	setupAIRoutes()
 
 
-	port := configManager.GetServerPort()
-	log.Printf("Starting Arcadia App Engine server on port %s...", port)
-	log.Printf("Available endpoints:")
-	log.Printf("  /list_apps - List all registered apps")
-	log.Printf("  /run_tool - Execute a tool from an app")
-	log.Printf("  /submit_app_src - Submit new app source code")
-	log.Printf("  /schedule_app_run - Schedule app runs (one-time or recurring)")
-	log.Printf("  /list_schedules - List all schedules")
-	log.Printf("  /get_schedule?id=<id> - Get specific schedule")
-	log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
-	log.Printf("  /update_schedule?id=<id> - Update a schedule")
-	log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
-	log.Printf("  /claude - Legacy Claude AI endpoint (POST {\"message\": \"your message\"})")
-	log.Printf("  /api/ai/v2/chat - Provider-agnostic AI chat (POST {\"message\": \"...\", \"session_id\": \"...\"})")
-	log.Printf("  /api/ai/provider/switch - Switch AI provider (POST {\"provider\": \"...\", \"api_key\": \"...\"})")
-	log.Printf("  /api/ai/provider/status - Get current provider status (GET)")
-	log.Printf("  /filewatcher/add - Add directory to file watcher (POST {\"path\": \"/path/to/watch\"})")
-	log.Printf("  /filewatcher/remove - Remove directory from file watcher (POST {\"path\": \"/path/to/remove\"})")
-	log.Printf("  /filewatcher/list - List all watched directories (GET)")
-	log.Fatal(http.ListenAndServe(":"+port, nil))
+	// Set up graceful shutdown
+	server := &http.Server{
+		Addr: ":" + configManager.GetServerPort(),
+	}
+
+	// Channel to listen for interrupt signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		port := configManager.GetServerPort()
+		log.Printf("Starting Arcadia App Engine server on port %s...", port)
+		log.Printf("Available endpoints:")
+		log.Printf("  /list_apps - List all registered apps")
+		log.Printf("  /run_tool - Execute a tool from an app")
+		log.Printf("  /submit_app_src - Submit new app source code")
+		log.Printf("  /schedule_app_run - Schedule app runs (one-time or recurring)")
+		log.Printf("  /list_schedules - List all schedules")
+		log.Printf("  /get_schedule?id=<id> - Get specific schedule")
+		log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
+		log.Printf("  /update_schedule?id=<id> - Update a schedule")
+		log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
+		log.Printf("  /claude - Legacy Claude AI endpoint (POST {\"message\": \"your message\"})")
+		log.Printf("  /api/ai/v2/chat - Provider-agnostic AI chat (POST {\"message\": \"...\", \"session_id\": \"...\"})")
+		log.Printf("  /api/ai/provider/switch - Switch AI provider (POST {\"provider\": \"...\", \"api_key\": \"...\"})")
+		log.Printf("  /api/ai/provider/status - Get current provider status (GET)")
+		log.Printf("  /filewatcher/add - Add directory to file watcher (POST {\"path\": \"/path/to/watch\"})")
+		log.Printf("  /filewatcher/remove - Remove directory from file watcher (POST {\"path\": \"/path/to/remove\"})")
+		log.Printf("  /filewatcher/list - List all watched directories (GET)")
+
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Server failed to start: %v", err)
+		}
+	}()
+
+	// Wait for interrupt signal
+	<-quit
+	log.Println("Shutting down server...")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+
+	// Stop documents module
+	if documentsModule != nil {
+		log.Printf("Stopping documents module...")
+		if err := documentsModule.Stop(ctx); err != nil {
+			log.Printf("Error stopping documents module: %v", err)
+		} else {
+			log.Printf("Documents module stopped successfully")
+		}
+	}
+
+	// Stop queue processor
+	if queueProcessor != nil {
+		log.Printf("Stopping queue processor...")
+		queueProcessor.stop()
+		log.Printf("Queue processor stopped successfully")
+	}
+
+	// Stop scheduler
+	log.Printf("Stopping scheduler...")
+	services.StopScheduler()
+
+	// Stop file watcher
+	if fileWatcher != nil {
+		log.Printf("Stopping file watcher...")
+		fileWatcher.Stop()
+	}
+
+	// Close database manager
+	if dm != nil {
+		log.Printf("Closing database connections...")
+		dm.Close()
+	}
+
+	// Close loggers
+	log.Printf("Closing loggers...")
+	services.CloseAllLoggers()
+
+	// Shutdown HTTP server
+	log.Printf("Shutting down HTTP server...")
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Error during server shutdown: %v", err)
+	}
+
+	log.Println("Server gracefully stopped")
 }
 

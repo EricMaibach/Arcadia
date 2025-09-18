@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"arcadia/services/ai"
 )
 
 // --- Claude Configuration ---
@@ -104,16 +106,12 @@ type AppCreator interface {
 	CreateApp(appID, version, runtime string, tools []any, appSrc string, dependencies map[string]string) (string, error)
 }
 
-type EmbeddingSearch interface {
-	SearchDocuments(query string, topK int) ([]*DocumentSearchResult, error)
-	SearchDocumentsEnhanced(query string, topK int, config SearchConfig) ([]*EnhancedDocumentSearchResult, error)
-	GetDocument(documentID string) (*Document, error)
-}
+// EmbeddingSearch interface now defined in ai/tool_manager.go
 
 var registryAccess RegistryAccess
 var appRunner AppRunner
 var appCreator AppCreator
-var embeddingSearch EmbeddingSearch
+var embeddingSearch ai.EmbeddingSearch
 
 func SetRegistryAccess(ra RegistryAccess) {
 	registryAccess = ra
@@ -127,7 +125,7 @@ func SetAppCreator(ac AppCreator) {
 	appCreator = ac
 }
 
-func SetEmbeddingSearch(es EmbeddingSearch) {
+func SetEmbeddingSearch(es ai.EmbeddingSearch) {
 	embeddingSearch = es
 }
 
@@ -1218,14 +1216,13 @@ func (cs *ClaudeService) executeSearchDocuments(input any) (string, error) {
 		return "", fmt.Errorf("top_k must be between 1 and 10")
 	}
 
-	// Use type assertion to call SearchDocumentsEnhanced with proper types
-	if embeddingServiceInstance, ok := embeddingSearch.(*EmbeddingService); ok {
-		// Get default search config from embedding service
-		// We'll use the DefaultSearchConfig function from the embedding service
-		defaultConfig := DefaultSearchConfig()
+	// Use the EmbeddingSearch interface directly (embeddingSearch is now EmbeddingSearchAdapter)
+	if embeddingSearch != nil {
+		// Use empty config since ai.SearchConfig is an empty interface
+		var defaultConfig ai.SearchConfig
 
-		// This will call the enhanced method directly
-		results, err := embeddingServiceInstance.SearchDocumentsEnhanced(searchReq.Query, searchReq.TopK, defaultConfig)
+		// Call the enhanced method through the interface
+		results, err := embeddingSearch.SearchDocumentsEnhanced(searchReq.Query, searchReq.TopK, defaultConfig)
 		if err != nil {
 			return "", fmt.Errorf("enhanced search failed: %w", err)
 		}
