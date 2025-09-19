@@ -528,8 +528,11 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	documentsConfig.ChunkingConfig.ChunkOverlap = 50
 	documentsConfig.SearchConfig.MaxDocumentSize = 10000
 	documentsConfig.VectorStoreConfig = map[string]interface{}{
-		"type":      "memory", // Start with memory store for safety
-		"dimension": embeddingProvider.GetDimension(),
+		"type":       "qdrant", // Use QDrant for persistent vector storage
+		"host":       "localhost",
+		"port":       6334, // Use gRPC port for QDrant Go client
+		"collection": "arcadia_vectors", // Use existing collection
+		"dimension":  embeddingProvider.GetDimension(),
 	}
 	documentsConfig.DocumentStoreConfig = map[string]interface{}{
 		"type":       "sql",

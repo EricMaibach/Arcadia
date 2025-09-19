@@ -178,5 +178,41 @@ func getDefaultExtensionMapping() map[string]base.ProcessorType {
 		"gradle":     base.ProcessorTypeText,
 		"pom":        base.ProcessorTypeText,
 		"sql":        base.ProcessorTypeText,
+
+		// Microsoft Office formats -> Tika
+		"doc":  base.ProcessorTypeTika,
+		"docx": base.ProcessorTypeTika,
+		"xls":  base.ProcessorTypeTika,
+		"xlsx": base.ProcessorTypeTika,
+		"ppt":  base.ProcessorTypeTika,
+		"pptx": base.ProcessorTypeTika,
+		"docm": base.ProcessorTypeTika,
+		"xlsm": base.ProcessorTypeTika,
+		"pptm": base.ProcessorTypeTika,
+		"xlsb": base.ProcessorTypeTika,
+		"xltx": base.ProcessorTypeTika,
+		"xltm": base.ProcessorTypeTika,
+		"potx": base.ProcessorTypeTika,
+		"potm": base.ProcessorTypeTika,
+
+		// OpenDocument formats -> Tika
+		"odt": base.ProcessorTypeTika,
+		"ods": base.ProcessorTypeTika,
+		"odp": base.ProcessorTypeTika,
+		"odg": base.ProcessorTypeTika,
+		"odf": base.ProcessorTypeTika,
+
+		// LibreOffice/OpenOffice legacy formats -> Tika
+		"sxw": base.ProcessorTypeTika,
+		"sxc": base.ProcessorTypeTika,
+		"sxi": base.ProcessorTypeTika,
+
+		// Other office-like formats -> Tika
+		"rtf": base.ProcessorTypeTika,
+		"wpd": base.ProcessorTypeTika,
+		"wps": base.ProcessorTypeTika,
+		"pub": base.ProcessorTypeTika,
+		"vsd": base.ProcessorTypeTika,
+		"msg": base.ProcessorTypeTika,
 	}
 }

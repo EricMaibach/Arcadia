@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qdrant/go-client/qdrant"
+	"google.golang.org/grpc"
 
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
@@ -31,7 +32,7 @@ type QdrantConfig struct {
 	Collection string `json:"collection"`
 	Dimension  int    `json:"dimension"`
 	UseHTTPS   bool   `json:"use_https"`
-	Timeout    int    `json:"timeout"`    // Connection timeout in seconds
+	Timeout    int    `json:"timeout"` // Connection timeout in seconds
 	MaxRetries int    `json:"max_retries"`
 	RetryDelay int    `json:"retry_delay"` // Delay between retries in seconds
 }
@@ -40,11 +41,11 @@ type QdrantConfig struct {
 // Uses custom JSON marshaling to handle any type for chunk_id field
 type QDRantPayload struct {
 	DocumentID string            `json:"document_id"`
-	ChunkID    *string           `json:"-"`                    // Handle manually
+	ChunkID    *string           `json:"-"` // Handle manually
 	Content    string            `json:"content"`
 	Metadata   string            `json:"metadata,omitempty"`
 	CreatedAt  int64             `json:"created_at"`
-	logger     interfaces.Logger `json:"-"`                    // For logging warnings
+	logger     interfaces.Logger `json:"-"` // For logging warnings
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for QDRantPayload
@@ -180,8 +181,12 @@ func NewQdrantVectorStore(config QdrantConfig) (*QdrantVectorStore, error) {
 	}
 
 	if config.Port <= 0 {
-		config.Port = 6333 // Default QDrant port
+		config.Port = 6334 // Default QDrant port
 	}
+
+	// Debug logging: Print the actual configuration being used
+	fmt.Printf("[QDrant] NewQdrantVectorStore: Host=%s, Port=%d, Collection=%s, Dimension=%d\n",
+		config.Host, config.Port, config.Collection, config.Dimension)
 
 	if config.Collection == "" {
 		return nil, models.NewDocumentError(models.ErrInvalidConfig, "QDrant collection cannot be empty")
@@ -226,12 +231,20 @@ func (qvs *QdrantVectorStore) initializeClient() error {
 
 	url := fmt.Sprintf("%s://%s:%d", scheme, qvs.config.Host, qvs.config.Port)
 
-	// Create client configuration
+	// Debug logging: Print the connection details
+	fmt.Printf("[QDrant] initializeClient: Connecting to %s (gRPC port: %d)\n", url, qvs.config.Port)
+
+	// Create client configuration with increased gRPC frame size limits
 	config := &qdrant.Config{
 		Host:   qvs.config.Host,
 		Port:   qvs.config.Port,
 		APIKey: qvs.config.ApiKey,
 		UseTLS: qvs.config.UseHTTPS,
+		GrpcOptions: []grpc.DialOption{
+			// Use extremely small frame sizes to isolate the issue
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(64 * 1024)), // 64KB
+			grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(64 * 1024)), // 64KB
+		},
 	}
 
 	// Create client
@@ -672,17 +685,29 @@ func (qvs *QdrantVectorStore) StoreBatch(ctx context.Context, entries []*models.
 		return nil // No valid entries to store
 	}
 
-	// Batch upsert all points
-	_, err := qvs.client.Upsert(ctx, &qdrant.UpsertPoints{
-		CollectionName: qvs.collection,
-		Points:         points,
-	})
-
-	if err != nil {
-		if qvs.metrics != nil {
-			qvs.metrics.IncrementCounter("vector_store.qdrant.store_batch.error", nil)
+	// Process points in very small batches to avoid gRPC frame size limits
+	batchSize := 1 // Process only 1 point per batch to debug frame size issues
+	for i := 0; i < len(points); i += batchSize {
+		end := i + batchSize
+		if end > len(points) {
+			end = len(points)
 		}
-		return models.NewDocumentErrorWithCause(models.ErrVectorStoreFailed, fmt.Sprintf("failed to batch upsert %d points", len(points)), err)
+
+		batch := points[i:end]
+
+		// Batch upsert points
+		_, err := qvs.client.Upsert(ctx, &qdrant.UpsertPoints{
+			CollectionName: qvs.collection,
+			Points:         batch,
+		})
+
+		if err != nil {
+			if qvs.metrics != nil {
+				qvs.metrics.IncrementCounter("vector_store.qdrant.store_batch.error", nil)
+			}
+			return models.NewDocumentErrorWithCause(models.ErrVectorStoreFailed,
+				fmt.Sprintf("failed to batch upsert %d points", len(batch)), err)
+		}
 	}
 
 	if qvs.metrics != nil {
@@ -838,7 +863,7 @@ func (qvs *QdrantVectorStore) convertPointToVectorEntry(point *qdrant.RetrievedP
 func DefaultQdrantConfig() QdrantConfig {
 	return QdrantConfig{
 		Host:       "localhost",
-		Port:       6333,
+		Port:       6334,
 		Collection: "documents",
 		Dimension:  768, // Default for EmbeddingGemma
 		UseHTTPS:   false,
@@ -847,4 +872,3 @@ func DefaultQdrantConfig() QdrantConfig {
 		RetryDelay: 5,
 	}
 }
-

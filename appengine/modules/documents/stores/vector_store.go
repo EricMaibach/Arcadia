@@ -16,18 +16,18 @@ import (
 
 // VectorStoreConfig contains configuration for vector stores
 type VectorStoreConfig struct {
-	Type           string                 `json:"type"`             // "memory", "qdrant", "pinecone", etc.
-	Host           string                 `json:"host,omitempty"`
-	Port           int                    `json:"port,omitempty"`
-	ApiKey         string                 `json:"api_key,omitempty"`
-	Collection     string                 `json:"collection,omitempty"`
-	Dimension      int                    `json:"dimension"`
-	Metric         string                 `json:"metric"`           // "cosine", "euclidean", "dot"
-	BatchSize      int                    `json:"batch_size"`
-	Timeout        int                    `json:"timeout_seconds"`
-	MaxRetries     int                    `json:"max_retries"`
-	RetryDelay     int                    `json:"retry_delay_seconds"`
-	CustomConfig   map[string]interface{} `json:"custom_config,omitempty"`
+	Type         string                 `json:"type"` // "memory", "qdrant", "pinecone", etc.
+	Host         string                 `json:"host,omitempty"`
+	Port         int                    `json:"port,omitempty"`
+	ApiKey       string                 `json:"api_key,omitempty"`
+	Collection   string                 `json:"collection,omitempty"`
+	Dimension    int                    `json:"dimension"`
+	Metric       string                 `json:"metric"` // "cosine", "euclidean", "dot"
+	BatchSize    int                    `json:"batch_size"`
+	Timeout      int                    `json:"timeout_seconds"`
+	MaxRetries   int                    `json:"max_retries"`
+	RetryDelay   int                    `json:"retry_delay_seconds"`
+	CustomConfig map[string]interface{} `json:"custom_config,omitempty"`
 }
 
 // MemoryVectorStore implements VectorStoreInterface using in-memory storage
@@ -148,7 +148,7 @@ func (mvs *MemoryVectorStore) SearchSimilar(ctx context.Context, queryVector []f
 
 	if mvs.metrics != nil {
 		mvs.metrics.IncrementCounter("vector_store.search", map[string]string{
-			"status": "success",
+			"status":  "success",
 			"results": fmt.Sprintf("%d", len(results)),
 		})
 	}
@@ -310,9 +310,9 @@ func (mvs *MemoryVectorStore) StoreBatch(ctx context.Context, entries []*models.
 
 	if mvs.metrics != nil {
 		mvs.metrics.IncrementCounter("vector_store.store_batch", map[string]string{
-			"count":   fmt.Sprintf("%d", successCount),
-			"total":   fmt.Sprintf("%d", len(entries)),
-			"status":  "success",
+			"count":  fmt.Sprintf("%d", successCount),
+			"total":  fmt.Sprintf("%d", len(entries)),
+			"status": "success",
 		})
 	}
 
@@ -600,8 +600,51 @@ func (vsf *VectorStoreFactory) CreateVectorStore(config VectorStoreConfig) (inte
 		}
 		return store, nil
 	case "qdrant":
-		// This will be implemented in qdrant.go
-		return nil, models.NewDocumentError(models.ErrInvalidConfig, "QDrant vector store not implemented yet")
+		// Convert VectorStoreConfig to QdrantConfig
+		qdrantConfig := QdrantConfig{
+			Host:       config.Host,
+			Port:       config.Port,
+			Collection: config.Collection,
+			Dimension:  config.Dimension,
+			UseHTTPS:   false, // Default to HTTP
+			Timeout:    config.Timeout,
+			MaxRetries: config.MaxRetries,
+			RetryDelay: config.RetryDelay,
+		}
+
+		// Set defaults if not provided
+		if qdrantConfig.Host == "" {
+			qdrantConfig.Host = "localhost"
+		}
+		if qdrantConfig.Port == 0 {
+			qdrantConfig.Port = 6334
+		}
+		if qdrantConfig.Collection == "" {
+			qdrantConfig.Collection = "documents"
+		}
+		if qdrantConfig.Timeout == 0 {
+			qdrantConfig.Timeout = 30
+		}
+		if qdrantConfig.MaxRetries == 0 {
+			qdrantConfig.MaxRetries = 3
+		}
+		if qdrantConfig.RetryDelay == 0 {
+			qdrantConfig.RetryDelay = 1
+		}
+
+		store, err := NewQdrantVectorStore(qdrantConfig)
+		if err != nil {
+			return nil, models.NewDocumentErrorWithCause(models.ErrVectorStoreFailed, "failed to create QDrant vector store", err)
+		}
+
+		if vsf.logger != nil {
+			store.WithLogger(vsf.logger)
+		}
+		if vsf.metrics != nil {
+			store.WithMetrics(vsf.metrics)
+		}
+
+		return store, nil
 	default:
 		return nil, models.NewDocumentError(models.ErrInvalidConfig, fmt.Sprintf("unsupported vector store type: %s", config.Type))
 	}

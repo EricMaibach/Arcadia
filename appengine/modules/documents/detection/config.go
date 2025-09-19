@@ -21,6 +21,18 @@ type DetectionConfig struct {
 	// EnableContentDetection enables/disables content analysis-based detection
 	EnableContentDetection bool `json:"enable_content_detection" yaml:"enable_content_detection"`
 
+	// EnableTikaDetection enables/disables Tika-based detection for Office documents
+	EnableTikaDetection bool `json:"enable_tika_detection" yaml:"enable_tika_detection"`
+
+	// EnableTikaFallback enables Tika as a fallback for unknown document types
+	EnableTikaFallback bool `json:"enable_tika_fallback" yaml:"enable_tika_fallback"`
+
+	// TikaOfficeConfidence is the confidence level for known Office format detection
+	TikaOfficeConfidence float64 `json:"tika_office_confidence" yaml:"tika_office_confidence"`
+
+	// TikaFallbackConfidence is the confidence level for fallback detection
+	TikaFallbackConfidence float64 `json:"tika_fallback_confidence" yaml:"tika_fallback_confidence"`
+
 	// ExtensionDetectorConfig holds configuration specific to extension-based detection
 	ExtensionDetectorConfig ExtensionDetectorConfig `json:"extension_detector" yaml:"extension_detector"`
 
@@ -81,6 +93,10 @@ func DefaultDetectionConfig() *DetectionConfig {
 		EnableExtensionDetection: true,
 		EnableMIMEDetection:      true,
 		EnableContentDetection:   true,
+		EnableTikaDetection:      true,
+		EnableTikaFallback:       false,
+		TikaOfficeConfidence:     0.9,
+		TikaFallbackConfidence:   0.3,
 
 		ExtensionDetectorConfig: ExtensionDetectorConfig{
 			Priority:         100,
@@ -151,7 +167,7 @@ func (c *DetectionConfig) Validate() error {
 	}
 
 	// At least one detector must be enabled
-	if !c.EnableExtensionDetection && !c.EnableMIMEDetection && !c.EnableContentDetection {
+	if !c.EnableExtensionDetection && !c.EnableMIMEDetection && !c.EnableContentDetection && !c.EnableTikaDetection {
 		return models.NewDocumentError(models.ErrInvalidConfig,
 			"at least one detector must be enabled")
 	}
@@ -198,6 +214,18 @@ func (c *DetectionConfig) Validate() error {
 		}
 	}
 
+	// Validate Tika detector config
+	if c.EnableTikaDetection {
+		if c.TikaOfficeConfidence < 0.0 || c.TikaOfficeConfidence > 1.0 {
+			return models.NewDocumentError(models.ErrInvalidConfig,
+				"Tika office confidence must be between 0.0 and 1.0")
+		}
+		if c.TikaFallbackConfidence < 0.0 || c.TikaFallbackConfidence > 1.0 {
+			return models.NewDocumentError(models.ErrInvalidConfig,
+				"Tika fallback confidence must be between 0.0 and 1.0")
+		}
+	}
+
 	return nil
 }
 
@@ -209,6 +237,10 @@ func (c *DetectionConfig) Clone() *DetectionConfig {
 		EnableExtensionDetection: c.EnableExtensionDetection,
 		EnableMIMEDetection:      c.EnableMIMEDetection,
 		EnableContentDetection:   c.EnableContentDetection,
+		EnableTikaDetection:      c.EnableTikaDetection,
+		EnableTikaFallback:       c.EnableTikaFallback,
+		TikaOfficeConfidence:     c.TikaOfficeConfidence,
+		TikaFallbackConfidence:   c.TikaFallbackConfidence,
 
 		ExtensionDetectorConfig: ExtensionDetectorConfig{
 			Priority:         c.ExtensionDetectorConfig.Priority,
@@ -254,6 +286,10 @@ func (c *DetectionConfig) MergeWith(other *DetectionConfig) {
 	c.EnableExtensionDetection = other.EnableExtensionDetection
 	c.EnableMIMEDetection = other.EnableMIMEDetection
 	c.EnableContentDetection = other.EnableContentDetection
+	c.EnableTikaDetection = other.EnableTikaDetection
+	c.EnableTikaFallback = other.EnableTikaFallback
+	c.TikaOfficeConfidence = other.TikaOfficeConfidence
+	c.TikaFallbackConfidence = other.TikaFallbackConfidence
 
 	// Merge detector-specific configs
 	c.ExtensionDetectorConfig.Priority = other.ExtensionDetectorConfig.Priority

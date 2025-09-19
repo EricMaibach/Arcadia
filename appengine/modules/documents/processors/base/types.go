@@ -12,6 +12,9 @@ const (
 
 	// ProcessorTypeMarkdown handles Markdown files
 	ProcessorTypeMarkdown ProcessorType = "markdown"
+
+	// ProcessorTypeTika handles documents using Apache Tika
+	ProcessorTypeTika ProcessorType = "tika"
 )
 
 // DocumentType represents metadata about a document type
@@ -40,7 +43,7 @@ func (pt ProcessorType) String() string {
 // IsValid checks if the ProcessorType is valid
 func (pt ProcessorType) IsValid() bool {
 	switch pt {
-	case ProcessorTypeText, ProcessorTypePDF, ProcessorTypeMarkdown:
+	case ProcessorTypeText, ProcessorTypePDF, ProcessorTypeMarkdown, ProcessorTypeTika:
 		return true
 	default:
 		return false

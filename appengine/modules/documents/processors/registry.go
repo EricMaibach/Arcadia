@@ -8,6 +8,7 @@ import (
 	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/processors/text"
 	"arcadia/modules/documents/processors/pdf"
+	"arcadia/modules/documents/processors/tika"
 	"arcadia/modules/documents/detection"
 	"arcadia/modules/documents/interfaces"
 )
@@ -289,6 +290,19 @@ func (r *Registry) InitializeWithDefaults() error {
 
 	if err := r.RegisterProcessor(base.ProcessorTypePDF, pdfProcessor); err != nil {
 		return fmt.Errorf("failed to register PDF processor: %w", err)
+	}
+
+	// Register Tika processor (Office documents + fallback)
+	tikaProcessor, err := tika.NewTikaProcessor(r.logger)
+	if err != nil {
+		if r.logger != nil {
+			r.logger.Warn(context.Background(), "Failed to initialize Tika processor, skipping registration", "error", err)
+		}
+		// Don't fail the entire initialization if Tika is unavailable
+	} else {
+		if err := r.RegisterProcessor(base.ProcessorTypeTika, tikaProcessor); err != nil {
+			return fmt.Errorf("failed to register Tika processor: %w", err)
+		}
 	}
 
 	if r.logger != nil {

@@ -207,6 +207,43 @@ func (dm *documentsModule) initializeStores() error {
 		if dimension, ok := dm.deps.Config.VectorStoreConfig["dimension"].(int); ok {
 			vectorStoreConfig.Dimension = dimension
 		}
+		if host, ok := dm.deps.Config.VectorStoreConfig["host"].(string); ok {
+			vectorStoreConfig.Host = host
+		}
+		if port, ok := dm.deps.Config.VectorStoreConfig["port"].(int); ok {
+			vectorStoreConfig.Port = port
+		}
+		if collection, ok := dm.deps.Config.VectorStoreConfig["collection"].(string); ok {
+			vectorStoreConfig.Collection = collection
+		}
+		if apiKey, ok := dm.deps.Config.VectorStoreConfig["api_key"].(string); ok {
+			vectorStoreConfig.ApiKey = apiKey
+		}
+		if metric, ok := dm.deps.Config.VectorStoreConfig["metric"].(string); ok {
+			vectorStoreConfig.Metric = metric
+		}
+		if batchSize, ok := dm.deps.Config.VectorStoreConfig["batch_size"].(int); ok {
+			vectorStoreConfig.BatchSize = batchSize
+		}
+		if timeout, ok := dm.deps.Config.VectorStoreConfig["timeout_seconds"].(int); ok {
+			vectorStoreConfig.Timeout = timeout
+		}
+		if maxRetries, ok := dm.deps.Config.VectorStoreConfig["max_retries"].(int); ok {
+			vectorStoreConfig.MaxRetries = maxRetries
+		}
+		if retryDelay, ok := dm.deps.Config.VectorStoreConfig["retry_delay_seconds"].(int); ok {
+			vectorStoreConfig.RetryDelay = retryDelay
+		}
+		if customConfig, ok := dm.deps.Config.VectorStoreConfig["custom_config"].(map[string]interface{}); ok {
+			vectorStoreConfig.CustomConfig = customConfig
+		}
+	}
+
+	// For SQLite vector store, add database connection to custom config
+	if vectorStoreConfig.Type == "sqlite" && dm.deps.DB != nil {
+		vectorStoreConfig.CustomConfig = map[string]interface{}{
+			"database": dm.deps.DB,
+		}
 	}
 
 	vectorStoreFactory := stores.NewVectorStoreFactory()

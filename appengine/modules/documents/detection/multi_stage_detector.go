@@ -35,6 +35,7 @@ func NewMultiStageDetector() *MultiStageDetectorImpl {
 	// Register default detectors in priority order
 	detector.RegisterDetector(NewExtensionDetector())
 	detector.RegisterDetector(NewMIMEDetector())
+	detector.RegisterDetector(NewTikaDetector())
 	detector.RegisterDetector(NewContentDetector())
 
 	return detector
@@ -54,6 +55,16 @@ func NewMultiStageDetectorWithConfig(config *DetectionConfig) *MultiStageDetecto
 	}
 	if config.EnableMIMEDetection {
 		detector.RegisterDetector(NewMIMEDetector())
+	}
+	if config.EnableTikaDetection {
+		tikaDetector := NewTikaDetector()
+		if config.EnableTikaFallback {
+			tikaDetector.SetFallbackEnabled(true)
+		}
+		if config.TikaOfficeConfidence > 0 && config.TikaFallbackConfidence > 0 {
+			tikaDetector.SetConfidenceLevels(config.TikaOfficeConfidence, config.TikaFallbackConfidence)
+		}
+		detector.RegisterDetector(tikaDetector)
 	}
 	if config.EnableContentDetection {
 		detector.RegisterDetector(NewContentDetector())
@@ -274,6 +285,16 @@ func (msd *MultiStageDetectorImpl) GetSupportedTypes() []base.ProcessorType {
 			typeSet[base.ProcessorTypeText] = true
 			typeSet[base.ProcessorTypeMarkdown] = true
 			typeSet[base.ProcessorTypePDF] = true
+		}
+		// For Tika detector
+		if tikaDetector, ok := detector.(*TikaDetector); ok {
+			for _, ext := range tikaDetector.GetSupportedExtensions() {
+				if docType, err := tikaDetector.DetectType("dummy." + ext); err == nil && docType != nil {
+					typeSet[docType.Type] = true
+				}
+			}
+			// Also add Tika type directly since it might support fallback mode
+			typeSet[base.ProcessorTypeTika] = true
 		}
 	}
 
