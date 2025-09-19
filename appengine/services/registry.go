@@ -7,6 +7,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"arcadia/services/ai"
 )
 
 const registryFilePath = "app_registry.json"
@@ -190,9 +192,9 @@ func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []inte
 // Manager manages the registry and provides dependency injection implementations
 type RegistryManager struct {
 	registry     *Registry
-	registryAccess RegistryAccess
-	appRunner      AppRunner
-	appCreator     AppCreator
+	registryAccess ai.RegistryAccess
+	appRunner      ai.AppRunner
+	appCreator     ai.AppCreator
 }
 
 // NewRegistryManager creates a new registry manager
@@ -226,17 +228,17 @@ func (rm *RegistryManager) GetRegistry() *Registry {
 }
 
 // GetRegistryAccess returns the RegistryAccess implementation
-func (rm *RegistryManager) GetRegistryAccess() RegistryAccess {
+func (rm *RegistryManager) GetRegistryAccess() ai.RegistryAccess {
 	return rm.registryAccess
 }
 
 // GetAppRunner returns the AppRunner implementation
-func (rm *RegistryManager) GetAppRunner() AppRunner {
+func (rm *RegistryManager) GetAppRunner() ai.AppRunner {
 	return rm.appRunner
 }
 
 // GetAppCreator returns the AppCreator implementation
-func (rm *RegistryManager) GetAppCreator() AppCreator {
+func (rm *RegistryManager) GetAppCreator() ai.AppCreator {
 	return rm.appCreator
 }
 

@@ -5,29 +5,23 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 
 	"github.com/bytecodealliance/wasmtime-go"
+
+	"arcadia/services/ai"
 )
 
 // WasmRuntime handles WASM execution and host function management
 type WasmRuntime struct {
 	engine          *wasmtime.Engine
-	configManager   WasmConfigManager
 	registryManager *RegistryManager
 	databaseManager *DatabaseManager
 }
 
-// WasmConfigManager interface for accessing configuration (renamed to avoid conflict)
-type WasmConfigManager interface {
-	GetClaudeService() *ClaudeService
-}
-
 // NewWasmRuntime creates a new WASM runtime instance
-func NewWasmRuntime(configMgr WasmConfigManager, registryMgr *RegistryManager, dbMgr *DatabaseManager) *WasmRuntime {
+func NewWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager) *WasmRuntime {
 	return &WasmRuntime{
 		engine:          wasmtime.NewEngine(),
-		configManager:   configMgr,
 		registryManager: registryMgr,
 		databaseManager: dbMgr,
 	}
@@ -38,8 +32,8 @@ func (wr *WasmRuntime) GetEngine() *wasmtime.Engine {
 	return wr.engine
 }
 
-// claudeQuery sends a message to Claude AI and returns the response
-func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32, appID string) int32 {
+// aiQuery sends a message to AI service and returns the response
+func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32, appID string) int32 {
 	// Get memory instance
 	memory := caller.GetExport("memory").Memory()
 	data := memory.UnsafeData(caller)
@@ -48,24 +42,20 @@ func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr,
 	messageBytes := data[messagePtr : messagePtr+messageLen]
 	message := string(messageBytes)
 
-	log.Printf("[WASM Claude] claudeQuery called from app %s with message: %s", appID, message)
+	log.Printf("[WASM AI] aiQuery called from app %s with message: %s", appID, message)
 
-	// Check if Claude service is available
-	claudeService := wr.configManager.GetClaudeService()
-	if claudeService == nil {
-		log.Printf("[WASM Claude] Claude service not initialized")
-		return -1 // Claude service not initialized
+	// Check if AI service is available
+	aiService := ai.GetGlobalService()
+	if aiService == nil {
+		log.Printf("[WASM AI] AI service not initialized")
+		return -1 // AI service not initialized
 	}
 
-	// Generate a unique context ID for this specific WASM query
-	// Don't reuse the main conversation context to avoid tool_use/tool_result conflicts
-	contextID := fmt.Sprintf("wasm:%s:%d", appID, time.Now().UnixNano())
-
-	// Send message to Claude with a fresh context for this WASM app query
-	response, err := claudeService.SendMessageWithContext(message, contextID)
+	// Send message to AI service WITHOUT context (keep WASM apps stateless)
+	response, err := aiService.SendMessage(message)
 	if err != nil {
-		log.Printf("[WASM Claude] Claude API error: %v", err)
-		return -2 // Claude API error
+		log.Printf("[WASM AI] AI service error: %v", err)
+		return -2 // AI service error
 	}
 
 	// Create response JSON
@@ -77,7 +67,7 @@ func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr,
 	// Marshal response to JSON
 	jsonBytes, err := json.Marshal(responseObj)
 	if err != nil {
-		log.Printf("[WASM Claude] JSON marshal error: %v", err)
+		log.Printf("[WASM AI] JSON marshal error: %v", err)
 		return -3 // JSON marshal error
 	}
 
@@ -85,7 +75,7 @@ func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr,
 	allocateFunc := caller.GetExport("allocate").Func()
 	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
 	if err != nil {
-		log.Printf("[WASM Claude] Memory allocation error: %v", err)
+		log.Printf("[WASM AI] Memory allocation error: %v", err)
 		return -4 // Allocation error
 	}
 	resultPtr := resultLenResult.(int32)
@@ -100,7 +90,7 @@ func (wr *WasmRuntime) claudeQueryWithAppID(caller *wasmtime.Caller, messagePtr,
 	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
 	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
 
-	log.Printf("[WASM Claude] Claude query completed successfully")
+	log.Printf("[WASM AI] AI query completed successfully")
 	return int32(len(jsonBytes))
 }
 
@@ -349,9 +339,9 @@ func (wr *WasmRuntime) setupHostFunctions(linker *wasmtime.Linker, store *wasmti
 		return wr.dbPreparedQuery(caller, stmtPtr, stmtLen, paramsPtr, paramsLen, resultPtrPtr)
 	})
 
-	// Define Claude AI host function with app-specific context
+	// Define AI host function with app-specific context (backward compatible with claude_query name)
 	linker.DefineFunc(store, "env", "claude_query", func(caller *wasmtime.Caller, messagePtr, messageLen, resultPtrPtr int32) int32 {
-		return wr.claudeQueryWithAppID(caller, messagePtr, messageLen, resultPtrPtr, appID)
+		return wr.aiQueryWithAppID(caller, messagePtr, messageLen, resultPtrPtr, appID)
 	})
 }
 
@@ -491,8 +481,8 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 var globalRuntime *WasmRuntime
 
 // InitializeWasmRuntime initializes the global WASM runtime
-func InitializeWasmRuntime(configMgr WasmConfigManager, registryMgr *RegistryManager, dbMgr *DatabaseManager) {
-	globalRuntime = NewWasmRuntime(configMgr, registryMgr, dbMgr)
+func InitializeWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager) {
+	globalRuntime = NewWasmRuntime(registryMgr, dbMgr)
 }
 
 // GetGlobalWasmRuntime returns the global WASM runtime instance

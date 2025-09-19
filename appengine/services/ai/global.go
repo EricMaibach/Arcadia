@@ -106,16 +106,17 @@ func InitializeGlobalServiceFromConfigWithFallback(legacyConfigFunc func() *AICo
 
 	log.Printf("[AI Global] Initializing AI service with auto-configuration...")
 
-	// Check if Claude provider is available (since it's imported)
-	if err := globalFactory.ValidateProvider("claude"); err != nil {
-		log.Printf("[AI Global] Warning: Claude provider not available: %v", err)
-		log.Printf("[AI Global] Available providers: %v", globalFactory.GetSupportedProviders())
+	// Check if any providers are available
+	availableProviders := globalFactory.GetSupportedProviders()
+	if len(availableProviders) == 0 {
+		log.Printf("[AI Global] Warning: No AI providers available")
 		return &AIError{
 			Type:     ErrorTypeValidation,
 			Message:  "no supported AI providers available",
 			Provider: "global",
 		}
 	}
+	log.Printf("[AI Global] Available providers: %v", availableProviders)
 
 	// Try to load configuration from multiple sources, in order of preference:
 	var config *AIConfig
@@ -126,10 +127,19 @@ func InitializeGlobalServiceFromConfigWithFallback(legacyConfigFunc func() *AICo
 	if err != nil {
 		log.Printf("[AI Global] No environment configuration found: %v", err)
 
-		// Try default Claude configuration file
-		config, err = LoadConfigFromDefaultFile("claude")
-		if err != nil {
-			log.Printf("[AI Global] No AI configuration file found: %v", err)
+		// Try configuration files for available providers
+		var configErr error
+		for _, provider := range availableProviders {
+			config, configErr = LoadConfigFromDefaultFile(provider)
+			if configErr == nil {
+				log.Printf("[AI Global] Loaded configuration from file: config/ai-%s.json", provider)
+				break
+			}
+			log.Printf("[AI Global] No %s configuration file found: %v", provider, configErr)
+		}
+
+		if config == nil {
+			log.Printf("[AI Global] No AI configuration file found for any available provider")
 
 			// Try legacy configuration fallback if provided
 			if legacyConfigFunc != nil {
@@ -150,8 +160,6 @@ func InitializeGlobalServiceFromConfigWithFallback(legacyConfigFunc func() *AICo
 					Provider: "global",
 				}
 			}
-		} else {
-			log.Printf("[AI Global] Loaded configuration from file: config/ai-claude.json")
 		}
 	} else {
 		log.Printf("[AI Global] Loaded configuration from environment variables")

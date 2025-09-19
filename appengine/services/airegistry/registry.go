@@ -2,7 +2,6 @@ package airegistry
 
 import (
 	"arcadia/services/ai"
-	"arcadia/services/ai/providers/claude"
 	"arcadia/services/ai/providers/openai"
 )
 
@@ -10,6 +9,5 @@ import (
 // This function should be called once during application initialization
 func SetupProviders() {
 	factory := ai.GetGlobalFactory()
-	claude.RegisterProvider(factory)
 	openai.RegisterProvider(factory)
 }

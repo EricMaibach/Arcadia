@@ -1,3 +1,5 @@
+Stop being overly agreeable and saying everything is a good idea. 
+
 # ⚠️ CRITICAL WARNING: AGENT DELEGATION IS MANDATORY ⚠️
 
 **DIRECT CODE EDITING IS STRICTLY FORBIDDEN**

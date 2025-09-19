@@ -22,7 +22,6 @@ import (
 	"arcadia/modules/documents/providers"
 	"arcadia/services"
 	"arcadia/services/ai"
-	_ "arcadia/services/ai/providers/claude" // Import to register Claude provider
 	_ "arcadia/services/ai/providers/openai" // Import to register OpenAI provider
 )
 
@@ -586,10 +585,6 @@ func setupAIRoutes() {
 		log.Printf("  /api/ai/provider/status - Get provider status")
 	}
 
-	// Backward compatibility endpoint using the compatibility layer
-	http.HandleFunc("/claude", handlers.CorsHandler(ai.HandleClaudeAPI))
-	log.Printf("Backward compatibility endpoint:")
-	log.Printf("  /claude - Legacy Claude API endpoint (now provider-agnostic)")
 }
 
 // --- Main ---
@@ -622,7 +617,7 @@ func main() {
 	}
 
 	// Initialize WASM runtime
-	wasmRuntime = services.NewWasmRuntime(configManager, registryManager, dm)
+	wasmRuntime = services.NewWasmRuntime(registryManager, dm)
 
 	// Initialize file watcher service
 	fileWatcherConfig := services.DefaultFileWatcherConfig()
@@ -683,37 +678,13 @@ func main() {
 
 	// Initialize AI service with auto-configuration
 	log.Printf("Initializing AI service...")
-	if err := ai.InitializeGlobalServiceFromConfigWithFallback(func() *ai.AIConfig {
-		// Fallback to legacy Claude configuration from config manager
-		legacyConfig := configManager.GetConfig()
-		return &ai.AIConfig{
-			Provider:           "claude",
-			MaxTokens:          legacyConfig.Claude.MaxTokens,
-			TimeoutSeconds:     legacyConfig.Claude.TimeoutSeconds,
-			MaxContextMessages: legacyConfig.Claude.MaxContextMessages,
-			ContextCompaction:  legacyConfig.Claude.ContextCompaction,
-			ContextTTLMinutes:  legacyConfig.Claude.ContextTTLMinutes,
-			EnableMCP:          legacyConfig.Claude.EnableMCP,
-			MCPServerCmd:       legacyConfig.Claude.MCPServerCmd,
-			ProviderSettings: map[string]any{
-				"api_key":  legacyConfig.Claude.APIKey,
-				"base_url": legacyConfig.Claude.BaseURL,
-				"model":    legacyConfig.Claude.Model,
-			},
-		}
-	}); err != nil {
+	if err := ai.InitializeGlobalServiceFromConfig(); err != nil {
 		log.Printf("Warning: Failed to initialize AI service: %v", err)
 		log.Printf("AI endpoints will not be available")
 	} else {
 		log.Printf("AI service initialized successfully")
 	}
 
-	// Set up dependency injection for legacy Claude service
-	configManager.SetupDependencyInjection(
-		registryManager.GetRegistryAccess(),
-		registryManager.GetAppRunner(),
-		registryManager.GetAppCreator(),
-	)
 
 	// Set up dependency injection for the new AI service now that all components are available
 	if ai.IsGlobalServiceInitialized() {
@@ -742,8 +713,6 @@ func main() {
 		}
 	}
 
-	// Trigger initial tool refresh now that registry access is set up
-	services.TriggerClaudeToolRefresh()
 
 	// Start the scheduler (now properly initialized)
 	if err := services.StartScheduler(); err != nil {
@@ -806,7 +775,6 @@ func main() {
 		log.Printf("  /delete_schedule?id=<id> - Delete a schedule")
 		log.Printf("  /update_schedule?id=<id> - Update a schedule")
 		log.Printf("  /list_scheduled_runs[?schedule_id=<id>] - List scheduled runs")
-		log.Printf("  /claude - Legacy Claude AI endpoint (POST {\"message\": \"your message\"})")
 		log.Printf("  /api/ai/v2/chat - Provider-agnostic AI chat (POST {\"message\": \"...\", \"session_id\": \"...\"})")
 		log.Printf("  /api/ai/provider/switch - Switch AI provider (POST {\"provider\": \"...\", \"api_key\": \"...\"})")
 		log.Printf("  /api/ai/provider/status - Get current provider status (GET)")

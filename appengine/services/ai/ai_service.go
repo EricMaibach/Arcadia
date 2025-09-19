@@ -28,8 +28,8 @@ type AIService interface {
 
 // ProviderInfo contains metadata about the AI provider and its capabilities
 type ProviderInfo struct {
-	Name     string   `json:"name"`     // Provider name (e.g., "claude", "openai")
-	Model    string   `json:"model"`    // Model being used (e.g., "claude-3-sonnet", "gpt-4")
+	Name     string   `json:"name"`     // Provider name (e.g., "openai")
+	Model    string   `json:"model"`    // Model being used (e.g., "gpt-4")
 	Features []string `json:"features"` // Supported features (e.g., "tools", "context", "vision")
 }
 
@@ -69,7 +69,7 @@ type Tool struct {
 
 // AIConfig holds configuration for AI service providers
 type AIConfig struct {
-	Provider         string         `json:"provider"` // "claude" | "openai"
+	Provider         string         `json:"provider"` // "openai"
 	ProviderSettings map[string]any `json:"provider_settings"`
 
 	// Common settings
