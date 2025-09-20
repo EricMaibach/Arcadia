@@ -571,13 +571,13 @@ func setupAIRoutes() {
 	service := ai.GetGlobalService()
 
 	if service != nil {
-		// Create HTTP handler for the new AI service
-		handler := ai.NewHTTPHandler(service)
+		// Set up dependency injection for AI handlers
+		handlers.SetAIDependencies(service)
 
 		// New provider-agnostic endpoints
-		http.HandleFunc("/api/ai/v2/chat", handlers.CorsHandler(handler.HandleAIAPI))
-		http.HandleFunc("/api/ai/provider/switch", handlers.CorsHandler(handler.HandleProviderSwitch))
-		http.HandleFunc("/api/ai/provider/status", handlers.CorsHandler(handler.HandleProviderStatus))
+		http.HandleFunc("/api/ai/v2/chat", handlers.CorsHandler(handlers.HandleAIAPI))
+		http.HandleFunc("/api/ai/provider/switch", handlers.CorsHandler(handlers.HandleProviderSwitch))
+		http.HandleFunc("/api/ai/provider/status", handlers.CorsHandler(handlers.HandleProviderStatus))
 
 		log.Printf("New AI API endpoints registered:")
 		log.Printf("  /api/ai/v2/chat - Provider-agnostic chat endpoint")

@@ -1,25 +1,42 @@
-package ai
+package handlers
 
 import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
+
+	"arcadia/services/ai"
 )
 
-// HTTPHandler provides HTTP endpoints for AI services
-type HTTPHandler struct {
-	aiService AIService
+// Dependencies that will be injected
+var (
+	aiService ai.AIService
+	aiServiceMu sync.RWMutex
+)
+
+// SetAIDependencies configures the AI service dependency for the AI handlers
+func SetAIDependencies(service ai.AIService) {
+	aiServiceMu.Lock()
+	defer aiServiceMu.Unlock()
+	aiService = service
 }
 
-// NewHTTPHandler creates a new HTTP handler for AI services
-func NewHTTPHandler(aiService AIService) *HTTPHandler {
-	return &HTTPHandler{
-		aiService: aiService,
-	}
+// getAIService safely returns the AI service with proper locking
+func getAIService() ai.AIService {
+	aiServiceMu.RLock()
+	defer aiServiceMu.RUnlock()
+	return aiService
 }
 
 // HandleAIAPI handles AI chat requests (provider-agnostic)
-func (h *HTTPHandler) HandleAIAPI(w http.ResponseWriter, r *http.Request) {
+func HandleAIAPI(w http.ResponseWriter, r *http.Request) {
+	service := getAIService()
+	if service == nil {
+		http.Error(w, "AI service not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -54,12 +71,12 @@ func (h *HTTPHandler) HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 		contextID = "web:" + contextParam
 	}
 
-	response, err := h.aiService.SendMessageWithContext(request.Message, contextID)
+	response, err := service.SendMessageWithContext(request.Message, contextID)
 	if err != nil {
 		log.Printf("AI API error: %v", err)
 
 		// Check if it's an AIError for better error reporting
-		if aiErr, ok := err.(*AIError); ok {
+		if aiErr, ok := err.(*ai.AIError); ok {
 			w.WriteHeader(getHTTPStatusForAIError(aiErr))
 			json.NewEncoder(w).Encode(map[string]any{
 				"error": map[string]any{
@@ -76,8 +93,8 @@ func (h *HTTPHandler) HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Include context stats and provider info in response
-	messages, tokens, _ := h.aiService.GetContextStats(contextID)
-	providerInfo := h.aiService.GetProviderInfo()
+	messages, tokens, _ := service.GetContextStats(contextID)
+	providerInfo := service.GetProviderInfo()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -95,7 +112,13 @@ func (h *HTTPHandler) HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleProviderSwitch allows switching providers mid-conversation
-func (h *HTTPHandler) HandleProviderSwitch(w http.ResponseWriter, r *http.Request) {
+func HandleProviderSwitch(w http.ResponseWriter, r *http.Request) {
+	service := getAIService()
+	if service == nil {
+		http.Error(w, "AI service not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -114,9 +137,9 @@ func (h *HTTPHandler) HandleProviderSwitch(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Create new service with the requested provider
-	factory := GetGlobalFactory()
+	factory := ai.GetGlobalFactory()
 
-	var newService AIService
+	var newService ai.AIService
 	var err error
 
 	if request.APIKey != "" {
@@ -160,16 +183,22 @@ func (h *HTTPHandler) HandleProviderSwitch(w http.ResponseWriter, r *http.Reques
 }
 
 // HandleProviderStatus returns current provider information
-func (h *HTTPHandler) HandleProviderStatus(w http.ResponseWriter, r *http.Request) {
+func HandleProviderStatus(w http.ResponseWriter, r *http.Request) {
+	service := getAIService()
+	if service == nil {
+		http.Error(w, "AI service not initialized", http.StatusServiceUnavailable)
+		return
+	}
+
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	providerInfo := h.aiService.GetProviderInfo()
+	providerInfo := service.GetProviderInfo()
 
 	// Get supported providers from factory
-	factory := GetGlobalFactory()
+	factory := ai.GetGlobalFactory()
 	supportedProviders := factory.GetSupportedProviders()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -184,21 +213,21 @@ func (h *HTTPHandler) HandleProviderStatus(w http.ResponseWriter, r *http.Reques
 }
 
 // Helper function to map AIError types to HTTP status codes
-func getHTTPStatusForAIError(err *AIError) int {
+func getHTTPStatusForAIError(err *ai.AIError) int {
 	switch err.Type {
-	case ErrorTypeValidation:
+	case ai.ErrorTypeValidation:
 		return http.StatusBadRequest
-	case ErrorTypeAuth:
+	case ai.ErrorTypeAuth:
 		return http.StatusUnauthorized
-	case ErrorTypeRateLimit:
+	case ai.ErrorTypeRateLimit:
 		return http.StatusTooManyRequests
-	case ErrorTypeQuota:
+	case ai.ErrorTypeQuota:
 		return http.StatusPaymentRequired
-	case ErrorTypeTimeout:
+	case ai.ErrorTypeTimeout:
 		return http.StatusRequestTimeout
-	case ErrorTypeNetwork:
+	case ai.ErrorTypeNetwork:
 		return http.StatusBadGateway
-	case ErrorTypeProvider:
+	case ai.ErrorTypeProvider:
 		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError
