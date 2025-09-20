@@ -241,9 +241,9 @@ func (qvs *QdrantVectorStore) initializeClient() error {
 		APIKey: qvs.config.ApiKey,
 		UseTLS: qvs.config.UseHTTPS,
 		GrpcOptions: []grpc.DialOption{
-			// Use extremely small frame sizes to isolate the issue
-			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(64 * 1024)), // 64KB
-			grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(64 * 1024)), // 64KB
+			// Configure gRPC message size limits for document search operations
+			grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(4 * 1024 * 1024)), // 4MB
+			grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(4 * 1024 * 1024)), // 4MB
 		},
 	}
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
@@ -48,7 +49,10 @@ func (se *SearchEngine) WithMetrics(metrics interfaces.MetricsCollector) *Search
 
 // SearchDocuments searches for documents using semantic similarity
 func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK int) ([]*models.DocumentSearchResult, error) {
+	log.Printf("[DEBUG] SearchDocuments called with query='%s', topK=%d", query, topK)
+
 	if query == "" {
+		log.Printf("[DEBUG] Empty query, returning empty results")
 		return []*models.DocumentSearchResult{}, nil
 	}
 
@@ -61,21 +65,30 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 	}()
 
 	// Generate embedding for query
+	log.Printf("[DEBUG] Generating embedding for query")
 	queryVector, err := se.embeddingEngine.GenerateEmbedding(ctx, query)
 	if err != nil {
+		log.Printf("[ERROR] Failed to generate query embedding: %v", err)
 		return nil, models.NewDocumentErrorWithCause(models.ErrSearchFailed, "failed to generate query embedding", err)
 	}
+	log.Printf("[DEBUG] Generated embedding vector of length %d", len(queryVector))
 
 	// Search for similar vectors
-	vectorResults, err := se.vectorStore.SearchSimilar(ctx, queryVector, topK*5) // Get more vectors to group by document
+	searchTopK := topK * 5 // Get more vectors to group by document
+	log.Printf("[DEBUG] Searching for similar vectors with topK=%d", searchTopK)
+	vectorResults, err := se.vectorStore.SearchSimilar(ctx, queryVector, searchTopK)
 	if err != nil {
+		log.Printf("[ERROR] Vector search failed: %v", err)
 		return nil, models.NewDocumentErrorWithCause(models.ErrSearchFailed, "vector search failed", err)
 	}
+	log.Printf("[DEBUG] Vector search returned %d results", len(vectorResults))
 
 	// Group results by document
 	documentGroups := make(map[string]*models.DocumentSearchResult)
-	for _, result := range vectorResults {
+	for i, result := range vectorResults {
 		docID := result.Entry.DocumentID
+		log.Printf("[DEBUG] Processing vector result %d: DocID=%s, Score=%f, ContentLength=%d",
+			i, docID, result.Score, len(result.Entry.Content))
 
 		if existing, exists := documentGroups[docID]; exists {
 			// Add chunk to existing document result
@@ -90,6 +103,7 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 			if result.Score > existing.BestScore {
 				existing.BestScore = result.Score
 			}
+			log.Printf("[DEBUG] Added chunk to existing document group for DocID=%s (total chunks: %d)", docID, len(existing.Chunks))
 		} else {
 			// Create new document result
 			documentGroups[docID] = &models.DocumentSearchResult{
@@ -101,19 +115,27 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 				BestScore:   result.Score,
 				TotalChunks: 1,
 			}
+			log.Printf("[DEBUG] Created new document group for DocID=%s", docID)
 		}
 	}
+
+	log.Printf("[DEBUG] Grouped results into %d unique documents", len(documentGroups))
 
 	// Fetch document details
 	var results []*models.DocumentSearchResult
 	for docID, docResult := range documentGroups {
+		log.Printf("[DEBUG] Fetching document details for DocID=%s", docID)
 		doc, err := se.documentStore.GetDocument(ctx, docID)
 		if err != nil {
+			log.Printf("[WARN] Failed to fetch document %s: %v", docID, err)
 			if se.logger != nil {
 				se.logger.Warn(ctx, "Failed to fetch document for search result", "doc_id", docID, "error", err)
 			}
 			continue
 		}
+
+		log.Printf("[DEBUG] Successfully fetched document: ID=%s, FilePath=%s, ContentLength=%d",
+			doc.ID, doc.FilePath, len(doc.Content))
 
 		docResult.Document = doc
 		docResult.TotalChunks = len(docResult.Chunks)
@@ -125,6 +147,8 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 
 		results = append(results, docResult)
 	}
+
+	log.Printf("[DEBUG] Successfully processed %d documents", len(results))
 
 	// Sort results by best score (highest first)
 	sort.Slice(results, func(i, j int) bool {
@@ -138,6 +162,7 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 
 	// Limit to topK results
 	if len(results) > topK {
+		log.Printf("[DEBUG] Limiting results from %d to %d", len(results), topK)
 		results = results[:topK]
 	}
 
@@ -147,21 +172,35 @@ func (se *SearchEngine) SearchDocuments(ctx context.Context, query string, topK 
 		})
 	}
 
+	log.Printf("[DEBUG] SearchDocuments returning %d final results", len(results))
 	return results, nil
 }
 
 // SearchDocumentsEnhanced performs enhanced document search with full content
 func (se *SearchEngine) SearchDocumentsEnhanced(ctx context.Context, query string, topK int, config models.SearchConfig) ([]*models.EnhancedDocumentSearchResult, error) {
+	log.Printf("[DEBUG] SearchDocumentsEnhanced called with query='%s', topK=%d, config=%+v", query, topK, config)
+
 	// First perform basic search
 	basicResults, err := se.SearchDocuments(ctx, query, topK)
 	if err != nil {
+		log.Printf("[ERROR] SearchDocuments failed: %v", err)
 		return nil, err
 	}
+
+	log.Printf("[DEBUG] SearchDocuments returned %d basic results", len(basicResults))
 
 	// Convert to enhanced results
 	enhancedResults := make([]*models.EnhancedDocumentSearchResult, 0, len(basicResults))
 
-	for _, result := range basicResults {
+	for i, result := range basicResults {
+		log.Printf("[DEBUG] Processing basic result %d: Document=%v, BestScore=%f, ChunksCount=%d",
+			i, result.Document != nil, result.BestScore, len(result.Chunks))
+
+		if result.Document != nil {
+			log.Printf("[DEBUG] Document %d details: ID=%s, FilePath=%s, ContentLength=%d",
+				i, result.Document.ID, result.Document.FilePath, len(result.Document.Content))
+		}
+
 		enhanced := &models.EnhancedDocumentSearchResult{
 			Document:      result.Document,
 			BestScore:     result.BestScore,
@@ -170,21 +209,25 @@ func (se *SearchEngine) SearchDocumentsEnhanced(ctx context.Context, query strin
 
 		// Generate context highlights
 		enhanced.ContextHighlights = se.generateContextHighlights(result.Chunks, config.MaxHighlights)
+		log.Printf("[DEBUG] Generated %d context highlights for result %d", len(enhanced.ContextHighlights), i)
 
 		// Generate content preview
 		contentSize := len(result.Document.Content)
 		if config.IncludeFullContent || contentSize <= config.MaxDocumentSize {
 			enhanced.ContentPreview = result.Document.Content
 			enhanced.IsTruncated = false
+			log.Printf("[DEBUG] Using full content for result %d (size: %d)", i, contentSize)
 		} else {
 			// Truncate content and add ellipsis
 			enhanced.ContentPreview = result.Document.Content[:config.MaxDocumentSize] + "..."
 			enhanced.IsTruncated = true
+			log.Printf("[DEBUG] Truncated content for result %d (size: %d -> %d)", i, contentSize, config.MaxDocumentSize)
 		}
 
 		enhancedResults = append(enhancedResults, enhanced)
 	}
 
+	log.Printf("[DEBUG] SearchDocumentsEnhanced returning %d enhanced results", len(enhancedResults))
 	return enhancedResults, nil
 }
 

@@ -6,24 +6,25 @@ import (
 	"net/http"
 	"sync"
 
-	"arcadia/services/ai"
+	"arcadia/modules/ai"
+	"arcadia/modules/ai/models"
 )
 
 // Dependencies that will be injected
 var (
-	aiService ai.AIService
+	aiService ai.AIModule
 	aiServiceMu sync.RWMutex
 )
 
 // SetAIDependencies configures the AI service dependency for the AI handlers
-func SetAIDependencies(service ai.AIService) {
+func SetAIDependencies(service ai.AIModule) {
 	aiServiceMu.Lock()
 	defer aiServiceMu.Unlock()
 	aiService = service
 }
 
 // getAIService safely returns the AI service with proper locking
-func getAIService() ai.AIService {
+func getAIService() ai.AIModule {
 	aiServiceMu.RLock()
 	defer aiServiceMu.RUnlock()
 	return aiService
@@ -71,12 +72,12 @@ func HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 		contextID = "web:" + contextParam
 	}
 
-	response, err := service.SendMessageWithContext(request.Message, contextID)
+	response, err := service.SendMessageWithContext(r.Context(), request.Message, contextID)
 	if err != nil {
 		log.Printf("AI API error: %v", err)
 
 		// Check if it's an AIError for better error reporting
-		if aiErr, ok := err.(*ai.AIError); ok {
+		if aiErr, ok := err.(*models.AIError); ok {
 			w.WriteHeader(getHTTPStatusForAIError(aiErr))
 			json.NewEncoder(w).Encode(map[string]any{
 				"error": map[string]any{
@@ -93,20 +94,45 @@ func HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Include context stats and provider info in response
-	messages, tokens, _ := service.GetContextStats(contextID)
-	providerInfo := service.GetProviderInfo()
+	ctxStats, _ := service.GetContextStats(r.Context(), contextID)
+	providerInfo, _ := service.GetProviderInfo(r.Context())
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
 		"response": response,
-		"context_stats": map[string]int{
-			"message_count": messages,
-			"total_tokens":  tokens,
+		"context_stats": map[string]interface{}{
+			"message_count": func() int {
+				if ctxStats != nil {
+					return ctxStats.Messages
+				}
+				return 0
+			}(),
+			"total_tokens": func() int {
+				if ctxStats != nil {
+					return ctxStats.Tokens
+				}
+				return 0
+			}(),
 		},
-		"provider_info": map[string]any{
-			"name":     providerInfo.Name,
-			"model":    providerInfo.Model,
-			"features": providerInfo.Features,
+		"provider_info": map[string]interface{}{
+			"name": func() string {
+				if providerInfo != nil {
+					return providerInfo.Name
+				}
+				return "unknown"
+			}(),
+			"model": func() string {
+				if providerInfo != nil {
+					return providerInfo.Model
+				}
+				return "unknown"
+			}(),
+			"features": func() []string {
+				if providerInfo != nil {
+					return providerInfo.Features
+				}
+				return []string{}
+			}(),
 		},
 	})
 }
@@ -136,50 +162,16 @@ func HandleProviderSwitch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create new service with the requested provider
-	factory := ai.GetGlobalFactory()
-
-	var newService ai.AIService
-	var err error
-
-	if request.APIKey != "" {
-		newService, err = factory.CreateServiceWithDefaults(request.Provider, request.APIKey)
-	} else {
-		// Try to use existing configuration but switch provider
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]any{
-			"error": "API key required for provider switch",
-		})
-		return
-	}
-
-	if err != nil {
-		log.Printf("Provider switch error: %v", err)
-		http.Error(w, "Failed to switch provider", http.StatusBadRequest)
-		return
-	}
-
-	// For demo purposes, we'll just validate the new service
-	// In a real implementation, you might want to update the global service
-	// or manage per-session services
-
-	if err := newService.Validate(); err != nil {
-		log.Printf("New provider validation failed: %v", err)
-		http.Error(w, "Provider validation failed", http.StatusBadRequest)
-		return
-	}
-
-	providerInfo := newService.GetProviderInfo()
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"status": "provider switched successfully",
-		"provider_info": map[string]any{
-			"name":     providerInfo.Name,
-			"model":    providerInfo.Model,
-			"features": providerInfo.Features,
-		},
+	// Provider switching functionality - simplified for new architecture
+	// In the new module architecture, provider switching should be handled
+	// through the module's SwitchProvider method
+	w.WriteHeader(http.StatusNotImplemented)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"error": "Provider switching not yet implemented in new architecture",
+		"message": "This feature will be available in a future update",
 	})
+	return
+
 }
 
 // HandleProviderStatus returns current provider information
@@ -195,11 +187,10 @@ func HandleProviderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	providerInfo := service.GetProviderInfo()
+	providerInfo, _ := service.GetProviderInfo(r.Context())
 
-	// Get supported providers from factory
-	factory := ai.GetGlobalFactory()
-	supportedProviders := factory.GetSupportedProviders()
+	// Get supported providers - simplified for new architecture
+	supportedProviders := []string{"openai"} // Would come from module configuration
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -213,21 +204,21 @@ func HandleProviderStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // Helper function to map AIError types to HTTP status codes
-func getHTTPStatusForAIError(err *ai.AIError) int {
+func getHTTPStatusForAIError(err *models.AIError) int {
 	switch err.Type {
-	case ai.ErrorTypeValidation:
+	case models.ErrorTypeValidation:
 		return http.StatusBadRequest
-	case ai.ErrorTypeAuth:
+	case models.ErrorTypeAuth:
 		return http.StatusUnauthorized
-	case ai.ErrorTypeRateLimit:
+	case models.ErrorTypeRateLimit:
 		return http.StatusTooManyRequests
-	case ai.ErrorTypeQuota:
+	case models.ErrorTypeQuota:
 		return http.StatusPaymentRequired
-	case ai.ErrorTypeTimeout:
+	case models.ErrorTypeTimeout:
 		return http.StatusRequestTimeout
-	case ai.ErrorTypeNetwork:
+	case models.ErrorTypeNetwork:
 		return http.StatusBadGateway
-	case ai.ErrorTypeProvider:
+	case models.ErrorTypeProvider:
 		return http.StatusBadGateway
 	default:
 		return http.StatusInternalServerError

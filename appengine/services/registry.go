@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"arcadia/services/ai"
+	"arcadia/modules/ai/interfaces"
 )
 
 const registryFilePath = "app_registry.json"
@@ -125,15 +125,15 @@ func (r *Registry) GetMutex() *sync.RWMutex {
 	return &r.mutex
 }
 
-// registryAccessImpl implements the services.RegistryAccess interface
+// registryAccessImpl implements the interfaces.RegistryAccess interface
 type registryAccessImpl struct {
 	registry *Registry
 }
 
-// GetRegistry returns the registry as a map[string]interface{} for compatibility
-func (ra *registryAccessImpl) GetRegistry() map[string]interface{} {
+// GetRegistry returns the registry as a map[string]any for compatibility
+func (ra *registryAccessImpl) GetRegistry() map[string]any {
 	apps := ra.registry.GetAllApps()
-	result := make(map[string]interface{})
+	result := make(map[string]any)
 	for k, v := range apps {
 		result[k] = v
 	}
@@ -145,9 +145,25 @@ func (ra *registryAccessImpl) GetRegistryMutex() *sync.RWMutex {
 	return ra.registry.GetMutex()
 }
 
-// appRunnerImpl implements the services.AppRunner interface
+// GetApp retrieves an app by ID
+func (ra *registryAccessImpl) GetApp(appID string) (interface{}, bool) {
+	return ra.registry.GetApp(appID)
+}
+
+// ListApps returns a list of all app IDs
+func (ra *registryAccessImpl) ListApps() []string {
+	apps := ra.registry.GetAllApps()
+	result := make([]string, 0, len(apps))
+	for k := range apps {
+		result = append(result, k)
+	}
+	return result
+}
+
+// appRunnerImpl implements the interfaces.AppRunner interface
 type appRunnerImpl struct {
 	executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)
+	registry       *Registry
 }
 
 // ExecuteAppTool executes a tool from an app
@@ -155,25 +171,46 @@ func (ar *appRunnerImpl) ExecuteAppTool(appID, toolName string, input json.RawMe
 	return ar.executeAppTool(appID, toolName, input)
 }
 
-// appCreatorImpl implements the services.AppCreator interface
+// IsAppAvailable checks if an app is available
+func (ar *appRunnerImpl) IsAppAvailable(appID string) bool {
+	_, exists := ar.registry.GetApp(appID)
+	return exists
+}
+
+// GetAppInfo returns information about an app
+func (ar *appRunnerImpl) GetAppInfo(appID string) (interface{}, error) {
+	app, exists := ar.registry.GetApp(appID)
+	if !exists {
+		return nil, fmt.Errorf("app not found: %s", appID)
+	}
+	return app, nil
+}
+
+// appCreatorImpl implements the interfaces.AppCreator interface
 type appCreatorImpl struct {
 	registryManager     *RegistryManager
 	appCreationService  AppCreationServiceInterface
 }
 
 // CreateApp creates a new app using the centralized app creation service
-func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []interface{}, appSrc string, dependencies map[string]string) (string, error) {
+func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []any, appSrc string, dependencies map[string]string) (string, error) {
 	// Convert tools back to the expected format
 	toolInfos := make([]ToolInfo, len(tools))
 	for i, tool := range tools {
 		if toolMap, ok := tool.(map[string]interface{}); ok {
-			toolInfos[i] = ToolInfo{
-				Name:        toolMap["name"].(string),
-				InputFormat: toolMap["inputFormat"].(string),
+			if name, ok := toolMap["name"].(string); ok {
+				inputFormat := ""
+				if format, ok := toolMap["inputFormat"].(string); ok {
+					inputFormat = format
+				}
+				toolInfos[i] = ToolInfo{
+					Name:        name,
+					InputFormat: inputFormat,
+				}
 			}
 		}
 	}
-	
+
 	// Create standardized request
 	req := AppCreationRequest{
 		AppID:        appID,
@@ -183,18 +220,54 @@ func (ac *appCreatorImpl) CreateApp(appID, version, runtime string, tools []inte
 		AppSrc:       appSrc,
 		Dependencies: dependencies,
 	}
-	
+
 	// Use centralized service to create the app
 	sessionID := fmt.Sprintf("claude_mcp_%d", time.Now().UnixNano())
 	return ac.appCreationService.CreateApp(req, sessionID)
 }
 
+// UpdateApp updates an existing app
+func (ac *appCreatorImpl) UpdateApp(appID string, version string, tools []any, appSrc string, dependencies map[string]string) (string, error) {
+	// For now, implement as a create operation
+	return ac.CreateApp(appID, version, "wasm", tools, appSrc, dependencies)
+}
+
+// DeleteApp deletes an app
+func (ac *appCreatorImpl) DeleteApp(appID string) error {
+	// Remove from registry
+	registry := ac.registryManager.GetRegistry()
+	registry.GetMutex().Lock()
+	defer registry.GetMutex().Unlock()
+
+	// Note: This is a simplified implementation
+	// In a real implementation, we'd need access to the internal registry map
+	return fmt.Errorf("app deletion not fully implemented")
+}
+
+// ValidateApp validates an app configuration
+func (ac *appCreatorImpl) ValidateApp(appID, version, runtime string, tools []any, appSrc string) error {
+	// Basic validation
+	if appID == "" {
+		return fmt.Errorf("appID cannot be empty")
+	}
+	if version == "" {
+		return fmt.Errorf("version cannot be empty")
+	}
+	if runtime == "" {
+		return fmt.Errorf("runtime cannot be empty")
+	}
+	if appSrc == "" {
+		return fmt.Errorf("appSrc cannot be empty")
+	}
+	return nil
+}
+
 // Manager manages the registry and provides dependency injection implementations
 type RegistryManager struct {
 	registry     *Registry
-	registryAccess ai.RegistryAccess
-	appRunner      ai.AppRunner
-	appCreator     ai.AppCreator
+	registryAccess interfaces.RegistryAccess
+	appRunner      interfaces.AppRunner
+	appCreator     interfaces.AppCreator
 }
 
 // NewRegistryManager creates a new registry manager
@@ -204,7 +277,7 @@ func NewRegistryManager(executeAppTool func(appID, toolName string, input json.R
 	rm := &RegistryManager{
 		registry:       registry,
 		registryAccess: &registryAccessImpl{registry: registry},
-		appRunner:      &appRunnerImpl{executeAppTool: executeAppTool},
+		appRunner:      &appRunnerImpl{executeAppTool: executeAppTool, registry: registry},
 	}
 	
 	// Create app creation service with logging function
@@ -228,17 +301,17 @@ func (rm *RegistryManager) GetRegistry() *Registry {
 }
 
 // GetRegistryAccess returns the RegistryAccess implementation
-func (rm *RegistryManager) GetRegistryAccess() ai.RegistryAccess {
+func (rm *RegistryManager) GetRegistryAccess() interfaces.RegistryAccess {
 	return rm.registryAccess
 }
 
 // GetAppRunner returns the AppRunner implementation
-func (rm *RegistryManager) GetAppRunner() ai.AppRunner {
+func (rm *RegistryManager) GetAppRunner() interfaces.AppRunner {
 	return rm.appRunner
 }
 
 // GetAppCreator returns the AppCreator implementation
-func (rm *RegistryManager) GetAppCreator() ai.AppCreator {
+func (rm *RegistryManager) GetAppCreator() interfaces.AppCreator {
 	return rm.appCreator
 }
 

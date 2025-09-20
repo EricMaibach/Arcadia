@@ -17,12 +17,13 @@ import (
 	"arcadia/config"
 	"arcadia/handlers"
 	"arcadia/modules/documents"
-	"arcadia/modules/documents/interfaces"
+	docInterfaces "arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
 	"arcadia/modules/documents/providers"
 	"arcadia/services"
-	"arcadia/services/ai"
-	_ "arcadia/services/ai/providers/openai" // Import to register OpenAI provider
+	"arcadia/modules/ai"
+	aiInterfaces "arcadia/modules/ai/interfaces"
+	aiModels "arcadia/modules/ai/models"
 )
 
 var (
@@ -32,7 +33,7 @@ var (
 	wasmRuntime     *services.WasmRuntime
 	fileWatcher     services.FileWatcher
 
-	// Documents module components
+	// Module components
 	documentsModule documents.DocumentsModule
 	queueProcessor  *QueueProcessor
 )
@@ -154,11 +155,11 @@ func (sl *SimpleLogger) Fatal(ctx context.Context, msg string, fields ...interfa
 	log.Fatalf("[FATAL] %s %v", msg, fields)
 }
 
-func (sl *SimpleLogger) WithFields(fields map[string]interface{}) interfaces.Logger {
+func (sl *SimpleLogger) WithFields(fields map[string]interface{}) docInterfaces.Logger {
 	return sl // For simplicity, return self
 }
 
-func (sl *SimpleLogger) WithContext(ctx context.Context) interfaces.Logger {
+func (sl *SimpleLogger) WithContext(ctx context.Context) docInterfaces.Logger {
 	return sl // For simplicity, return self
 }
 
@@ -323,7 +324,7 @@ func NewEmbeddingSearchAdapter(documentsModule documents.DocumentsModule) *Embed
 	}
 }
 
-func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*ai.DocumentSearchResult, error) {
+func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*aiModels.DocumentSearchResult, error) {
 	// Use documents module only - no fallback to legacy services
 	if esa.documentsModule == nil {
 		return nil, fmt.Errorf("documents module not available")
@@ -343,8 +344,8 @@ func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*a
 
 
 // convertDocumentSearchResults converts documents module results to AI service format
-func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*models.DocumentSearchResult) []*ai.DocumentSearchResult {
-	aiResults := make([]*ai.DocumentSearchResult, 0, len(docResults))
+func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*models.DocumentSearchResult) []*aiModels.DocumentSearchResult {
+	aiResults := make([]*aiModels.DocumentSearchResult, 0, len(docResults))
 	for i, result := range docResults {
 		// Skip results with nil documents to prevent crashes
 		if result.Document == nil {
@@ -352,8 +353,8 @@ func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*mo
 			continue
 		}
 
-		aiResults = append(aiResults, &ai.DocumentSearchResult{
-			Document: &ai.Document{
+		aiResults = append(aiResults, &aiModels.DocumentSearchResult{
+			Document: &aiModels.Document{
 				ID:         result.Document.ID,
 				FilePath:   result.Document.FilePath,
 				FileHash:   result.Document.FileHash,
@@ -363,10 +364,10 @@ func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*mo
 				CreatedAt:  result.Document.CreatedAt,
 				UpdatedAt:  result.Document.UpdatedAt,
 			},
-			Chunks: func() []*ai.ChunkResult {
-				chunks := make([]*ai.ChunkResult, len(result.Chunks))
+			Chunks: func() []*aiModels.ChunkResult {
+				chunks := make([]*aiModels.ChunkResult, len(result.Chunks))
 				for j, chunk := range result.Chunks {
-					chunks[j] = &ai.ChunkResult{
+					chunks[j] = &aiModels.ChunkResult{
 						Content:    chunk.Content,
 						Score:      chunk.Score,
 						ChunkIndex: chunk.ChunkIndex,
@@ -383,7 +384,7 @@ func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*mo
 	return aiResults
 }
 
-func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK int, config ai.SearchConfig) ([]*ai.EnhancedDocumentSearchResult, error) {
+func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK int, config aiModels.SearchConfig) ([]*aiModels.EnhancedDocumentSearchResult, error) {
 	// Use documents module only - no fallback to legacy services
 	if esa.documentsModule == nil {
 		return nil, fmt.Errorf("documents module not available")
@@ -399,8 +400,8 @@ func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK in
 		return nil, fmt.Errorf("documents module enhanced search failed: %v", err)
 	}
 
-	// Convert models.EnhancedDocumentSearchResult to ai.EnhancedDocumentSearchResult
-	aiResults := make([]*ai.EnhancedDocumentSearchResult, 0, len(results))
+	// Convert models.EnhancedDocumentSearchResult to aiModels.EnhancedDocumentSearchResult
+	aiResults := make([]*aiModels.EnhancedDocumentSearchResult, 0, len(results))
 	for i, result := range results {
 		// Skip results with nil documents to prevent crashes
 		if result.Document == nil {
@@ -408,8 +409,8 @@ func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK in
 			continue
 		}
 
-		aiResults = append(aiResults, &ai.EnhancedDocumentSearchResult{
-			Document: &ai.Document{
+		aiResults = append(aiResults, &aiModels.EnhancedDocumentSearchResult{
+			Document: &aiModels.Document{
 				ID:         result.Document.ID,
 				FilePath:   result.Document.FilePath,
 				FileHash:   result.Document.FileHash,
@@ -430,7 +431,7 @@ func (esa *EmbeddingSearchAdapter) SearchDocumentsEnhanced(query string, topK in
 	return aiResults, nil
 }
 
-func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*ai.Document, error) {
+func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*aiModels.Document, error) {
 	// Use documents module only - no fallback to legacy services
 	if esa.documentsModule == nil {
 		return nil, fmt.Errorf("documents module not available")
@@ -446,8 +447,8 @@ func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*ai.Document,
 		return nil, nil
 	}
 
-	// Convert models.Document to ai.Document
-	return &ai.Document{
+	// Convert models.Document to aiModels.Document
+	return &aiModels.Document{
 		ID:         doc.ID,
 		FilePath:   doc.FilePath,
 		FileHash:   doc.FileHash,
@@ -457,6 +458,40 @@ func (esa *EmbeddingSearchAdapter) GetDocument(documentID string) (*ai.Document,
 		CreatedAt:  doc.CreatedAt,
 		UpdatedAt:  doc.UpdatedAt,
 	}, nil
+}
+
+func (esa *EmbeddingSearchAdapter) ListDocuments() ([]*aiModels.Document, error) {
+	// Use documents module only - no fallback to legacy services
+	if esa.documentsModule == nil {
+		return nil, fmt.Errorf("documents module not available")
+	}
+
+	ctx := context.Background()
+	docs, err := esa.documentsModule.ListDocuments(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("documents module list failed: %v", err)
+	}
+
+	// Convert models.Document to aiModels.Document
+	aiDocs := make([]*aiModels.Document, 0, len(docs))
+	for _, doc := range docs {
+		if doc == nil {
+			continue
+		}
+
+		aiDocs = append(aiDocs, &aiModels.Document{
+			ID:         doc.ID,
+			FilePath:   doc.FilePath,
+			FileHash:   doc.FileHash,
+			Content:    doc.Content,
+			ChunkCount: doc.ChunkCount,
+			Metadata:   doc.Metadata,
+			CreatedAt:  doc.CreatedAt,
+			UpdatedAt:  doc.UpdatedAt,
+		})
+	}
+
+	return aiDocs, nil
 }
 
 // File event handler - enqueues file events for processing
@@ -688,7 +723,7 @@ func main() {
 
 	// Set up dependency injection for the new AI service now that all components are available
 	if ai.IsGlobalServiceInitialized() {
-		var embeddingAdapter ai.EmbeddingSearch
+		var embeddingAdapter aiInterfaces.EmbeddingSearch
 		if documentsModule != nil {
 			log.Printf("Creating embedding search adapter with documents module...")
 			embeddingAdapter = NewEmbeddingSearchAdapter(documentsModule)

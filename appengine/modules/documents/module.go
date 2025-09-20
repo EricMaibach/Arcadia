@@ -308,6 +308,11 @@ func (dm *documentsModule) initializeStores() error {
 		return fmt.Errorf("failed to create document store: %w", err)
 	}
 
+	// Initialize vector store (e.g., to create QDrant collection if needed)
+	if err := dm.vectorStore.Initialize(dm.ctx); err != nil {
+		return fmt.Errorf("failed to initialize vector store: %w", err)
+	}
+
 	// Initialize document store if it's SQL-based
 	if sqlStore, ok := dm.documentStore.(*stores.SQLDocumentStore); ok {
 		if err := sqlStore.Initialize(dm.ctx); err != nil {

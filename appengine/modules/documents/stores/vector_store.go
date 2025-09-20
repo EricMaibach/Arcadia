@@ -60,6 +60,15 @@ func (mvs *MemoryVectorStore) WithMetrics(metrics interfaces.MetricsCollector) *
 	return mvs
 }
 
+// Initialize initializes the memory vector store (no-op for memory store)
+func (mvs *MemoryVectorStore) Initialize(ctx context.Context) error {
+	// Memory store doesn't need initialization - everything is already set up
+	if mvs.logger != nil {
+		mvs.logger.Debug(ctx, "Memory vector store initialized", "dimension", mvs.config.Dimension)
+	}
+	return nil
+}
+
 // StoreVector stores a vector entry
 func (mvs *MemoryVectorStore) StoreVector(ctx context.Context, entry *models.VectorEntry) error {
 	if entry == nil {
@@ -681,6 +690,22 @@ func (svs *SQLiteVectorStore) WithLogger(logger interfaces.Logger) *SQLiteVector
 func (svs *SQLiteVectorStore) WithMetrics(metrics interfaces.MetricsCollector) *SQLiteVectorStore {
 	svs.metrics = metrics
 	return svs
+}
+
+// Initialize initializes the SQLite vector store by creating necessary tables
+func (svs *SQLiteVectorStore) Initialize(ctx context.Context) error {
+	if svs.db == nil {
+		return models.NewDocumentError(models.ErrVectorStoreFailed, "database not initialized")
+	}
+
+	// Create tables and indexes if they don't exist
+	svs.initializeTables()
+
+	if svs.logger != nil {
+		svs.logger.Info(ctx, "SQLite vector store initialized", "dimension", svs.config.Dimension)
+	}
+
+	return nil
 }
 
 // initializeTables creates the necessary tables if they don't exist

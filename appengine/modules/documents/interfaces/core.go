@@ -8,6 +8,10 @@ import (
 
 // VectorStoreInterface defines the interface for vector storage
 type VectorStoreInterface interface {
+	// Initialization and management
+	Initialize(ctx context.Context) error
+
+	// Core vector operations
 	StoreVector(ctx context.Context, entry *models.VectorEntry) error
 	SearchSimilar(ctx context.Context, queryVector []float32, topK int) ([]*models.SearchResult, error)
 	GetVector(ctx context.Context, id string) (*models.VectorEntry, error)

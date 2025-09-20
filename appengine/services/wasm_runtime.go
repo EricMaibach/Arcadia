@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,7 +9,7 @@ import (
 
 	"github.com/bytecodealliance/wasmtime-go"
 
-	"arcadia/services/ai"
+	"arcadia/modules/ai"
 )
 
 // WasmRuntime handles WASM execution and host function management
@@ -52,7 +53,8 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 	}
 
 	// Send message to AI service WITHOUT context (keep WASM apps stateless)
-	response, err := aiService.SendMessage(message)
+	ctx := context.Background()
+	response, err := aiService.SendMessage(ctx, message)
 	if err != nil {
 		log.Printf("[WASM AI] AI service error: %v", err)
 		return -2 // AI service error
