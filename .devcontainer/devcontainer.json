@@ -1,0 +1,12 @@
+{
+  "name": "Arcadia Dev",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "forwardPorts": [
+    8080,  // Go backend (adjust if different)
+    3000,  // React frontend (typical port)
+    5000   // Python MCP server (adjust if needed)
+  ],
+  "postCreateCommand": "cd /workspaces/Arcadia/appengine && go mod download && cd /workspaces/Arcadia/webadmin && npm install"
+}
