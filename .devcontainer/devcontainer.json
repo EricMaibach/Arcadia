@@ -1,12 +1,19 @@
 {
   "name": "Arcadia Dev",
-  "build": {
-    "dockerfile": "Dockerfile"
-  },
+  "dockerComposeFile": "docker-compose.yml",
+  "service": "devcontainer",
+  "workspaceFolder": "/workspace",
   "forwardPorts": [
     8080,  // Go backend (adjust if different)
     3000,  // React frontend (typical port)
     5000   // Python MCP server (adjust if needed)
   ],
-  "postCreateCommand": "cd /workspaces/Arcadia/appengine && go mod download && cd /workspaces/Arcadia/webadmin && npm install"
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "anthropics.claude-code"
+      ]
+    }
+  },
+  "postCreateCommand": "cd /workspace/appengine && go mod download && cd /workspace/webadmin && npm install"
 }

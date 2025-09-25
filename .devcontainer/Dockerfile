@@ -3,7 +3,7 @@ FROM ubuntu:24.04
 ARG DEBIAN_FRONTEND=noninteractive
 
 # Install essentials
-RUN apt update && apt install -y curl git build-essential pkg-config libssl-dev
+RUN apt update && apt install -y curl git build-essential pkg-config libssl-dev poppler-utils
 
 # Install Go (latest stable, e.g., 1.23 as of 2025)
 RUN curl -LO https://go.dev/dl/go1.23.1.linux-amd64.tar.gz && \

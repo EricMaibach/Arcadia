@@ -551,7 +551,7 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	dbAdapter := NewDatabaseAdapter(systemDB)
 
 	// Create embedding provider for documents module
-	embeddingProvider := providers.NewOllamaEmbeddingProvider("", "") // Use defaults: localhost:11434, embeddinggemma
+	embeddingProvider := providers.NewOllamaEmbeddingProvider("http://ollama:11434", "") // Use ollama container, default model: embeddinggemma
 
 	// Create logger adapter
 	logger := NewSimpleLogger()
@@ -563,7 +563,7 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	documentsConfig.SearchConfig.MaxDocumentSize = 10000
 	documentsConfig.VectorStoreConfig = map[string]interface{}{
 		"type":       "qdrant", // Use QDrant for persistent vector storage
-		"host":       "localhost",
+		"host":       "qdrant",
 		"port":       6334, // Use gRPC port for QDrant Go client
 		"collection": "arcadia_vectors", // Use existing collection
 		"dimension":  embeddingProvider.GetDimension(),

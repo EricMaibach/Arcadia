@@ -63,7 +63,7 @@ type TikaConfig struct {
 // DefaultTikaConfig returns a TikaConfig with sensible defaults
 func DefaultTikaConfig() *TikaConfig {
 	return &TikaConfig{
-		ServerURL:       "http://localhost:9998",
+		ServerURL:       "http://tika:9998",
 		Timeout:         30 * time.Second,
 		MaxRetries:      3,
 		EnableFallback:  true,
