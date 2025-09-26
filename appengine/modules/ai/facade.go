@@ -2,9 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
-
-	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
 )
 
@@ -69,95 +66,6 @@ type ModuleInfo struct {
 	ActiveProvider string              `json:"active_provider"`
 }
 
-// AIModuleV1 implements version 1 of the AIModule interface
-// This provides a versioned implementation to support API evolution
-type AIModuleV1 interface {
-	AIModule
-
-	// V1 specific methods
-	GenerateCompletion(ctx context.Context, prompt string, options models.CompletionOptions) (*models.CompletionResult, error)
-	StreamCompletion(ctx context.Context, prompt string, options models.CompletionOptions) (<-chan models.CompletionChunk, error)
-	EstimateTokens(ctx context.Context, text string) (int, error)
-
-	// Advanced context operations
-	CompactContext(ctx context.Context, contextID string) error
-	ExportContext(ctx context.Context, contextID string) (*models.ContextExport, error)
-	ImportContext(ctx context.Context, contextID string, export *models.ContextExport) error
-
-	// Tool registration
-	RegisterTool(ctx context.Context, tool models.Tool) error
-	UnregisterTool(ctx context.Context, toolName string) error
-	GetToolSchema(ctx context.Context, toolName string) (json.RawMessage, error)
-
-	// Experimental features (may change or be removed)
-	ExperimentalFeatures() map[string]interface{}
-}
-
-// MessageOptions defines options for sending messages
-type MessageOptions struct {
-	ContextID      string                 `json:"context_id,omitempty"`
-	MaxTokens      int                    `json:"max_tokens,omitempty"`
-	Temperature    float64                `json:"temperature,omitempty"`
-	TimeoutSeconds int                    `json:"timeout_seconds,omitempty"`
-	ToolChoice     string                 `json:"tool_choice,omitempty"` // "auto", "none", or specific tool name
-	Metadata       map[string]interface{} `json:"metadata,omitempty"`
-	RetryCount     int                    `json:"retry_count,omitempty"`
-}
-
-// ConversationOptions defines options for conversation management
-type ConversationOptions struct {
-	MaxMessages        int                    `json:"max_messages,omitempty"`
-	ContextCompaction  bool                   `json:"context_compaction,omitempty"`
-	TTLMinutes         int                    `json:"ttl_minutes,omitempty"`
-	PersistToDisk      bool                   `json:"persist_to_disk,omitempty"`
-	Metadata           map[string]interface{} `json:"metadata,omitempty"`
-}
-
-// BulkOperationResult represents the result of a bulk operation
-type BulkOperationResult struct {
-	TotalRequested int                      `json:"total_requested"`
-	Successful     int                      `json:"successful"`
-	Failed         int                      `json:"failed"`
-	Results        []models.OperationResult `json:"results"`
-	Errors         []error                  `json:"errors,omitempty"`
-	Duration       float64                  `json:"duration_ms"`
-}
-
-// AdvancedAIModule extends the basic interface with advanced features
-type AdvancedAIModule interface {
-	AIModule
-
-	// Advanced messaging
-	SendMessageWithOptions(ctx context.Context, message string, options MessageOptions) (*models.MessageResult, error)
-	SendBatchMessages(ctx context.Context, messages []models.BatchMessage) (*BulkOperationResult, error)
-
-	// Advanced conversation management
-	CreateConversationWithOptions(ctx context.Context, contextID string, options ConversationOptions) error
-	GetConversationHistory(ctx context.Context, contextID string, limit int, offset int) ([]*models.Message, error)
-	SearchConversations(ctx context.Context, query string, limit int) ([]*models.ConversationSearchResult, error)
-
-	// Tool analytics
-	GetToolUsageStats(ctx context.Context) (*models.ToolUsageStats, error)
-	GetToolPerformanceMetrics(ctx context.Context, toolName string) (*models.ToolMetrics, error)
-
-	// Provider management
-	RegisterProvider(ctx context.Context, provider interfaces.AIProvider) error
-	UnregisterProvider(ctx context.Context, providerName string) error
-	GetProviderMetrics(ctx context.Context, providerName string) (*models.ProviderMetrics, error)
-
-	// Context analytics
-	GetContextUsageStats(ctx context.Context) (*models.ContextUsageStats, error)
-	GetContextMetrics(ctx context.Context, contextID string) (*models.ContextMetrics, error)
-
-	// Data management
-	BackupContexts(ctx context.Context, path string) error
-	RestoreContexts(ctx context.Context, path string) error
-	CleanupExpiredContexts(ctx context.Context) (*models.CleanupResult, error)
-
-	// Data integrity
-	ValidateContextIntegrity(ctx context.Context) (*models.IntegrityReport, error)
-}
-
 // EventListener defines the interface for listening to module events
 type EventListener interface {
 	OnMessageSent(ctx context.Context, contextID string, message *models.Message) error
@@ -169,85 +77,10 @@ type EventListener interface {
 	OnError(ctx context.Context, err error, context map[string]interface{}) error
 }
 
-// ModuleBuilder provides a fluent interface for constructing the AI module
-type ModuleBuilder interface {
-	// Dependencies
-	WithDatabase(db interface{}) ModuleBuilder
-	WithLogger(logger interface{}) ModuleBuilder
-	WithMetrics(metrics interface{}) ModuleBuilder
-	WithCache(cache interface{}) ModuleBuilder
-
-	// Services
-	WithRegistryAccess(registry interface{}) ModuleBuilder
-	WithAppRunner(runner interface{}) ModuleBuilder
-	WithAppCreator(creator interface{}) ModuleBuilder
-	WithEmbeddingSearch(search interface{}) ModuleBuilder
-
-	// Configuration
-	WithConfig(config map[string]interface{}) ModuleBuilder
-	WithProvider(providerName string) ModuleBuilder
-	WithProviderConfig(providerName string, config map[string]interface{}) ModuleBuilder
-
-	// Features
-	EnableMCP() ModuleBuilder
-	EnableMetrics() ModuleBuilder
-	EnableCaching() ModuleBuilder
-	EnablePersistence() ModuleBuilder
-	EnableEventBus() ModuleBuilder
-
-	// Listeners
-	AddEventListener(listener EventListener) ModuleBuilder
-
-	// Build
-	Build(ctx context.Context) (AIModule, error)
-	BuildAdvanced(ctx context.Context) (AdvancedAIModule, error)
-}
-
-// Factory function type for creating the module
-type ModuleFactory func(ctx context.Context, config map[string]interface{}) (AIModule, error)
-
 // Constants for the module
 const (
 	ModuleVersion        = "1.0.0"
 	ModuleName           = "ai"
 	DefaultMaxTokens     = 4096
 	DefaultTimeout       = 120 // seconds
-	DefaultMaxMessages   = 20
-	DefaultTTLMinutes    = 60
-)
-
-// Well-known configuration keys
-const (
-	ConfigKeyProvider         = "provider"
-	ConfigKeyProviders        = "providers"
-	ConfigKeyMaxTokens        = "max_tokens"
-	ConfigKeyTimeout          = "timeout_seconds"
-	ConfigKeyMaxMessages      = "max_context_messages"
-	ConfigKeyContextTTL       = "context_ttl_minutes"
-	ConfigKeyContextCompaction = "context_compaction"
-	ConfigKeyMCP              = "enable_mcp"
-	ConfigKeyPersistence      = "enable_persistence"
-	ConfigKeyCache            = "cache"
-	ConfigKeyMetrics          = "metrics"
-	ConfigKeyLogging          = "logging"
-	ConfigKeyEventBus         = "event_bus"
-)
-
-// Well-known event types
-const (
-	EventMessageSent       = "message.sent"
-	EventMessageReceived   = "message.received"
-	EventToolExecuted      = "tool.executed"
-	EventContextCreated    = "context.created"
-	EventContextDeleted    = "context.deleted"
-	EventProviderSwitched  = "provider.switched"
-	EventError             = "error.occurred"
-	EventModuleStarted     = "module.started"
-	EventModuleStopped     = "module.stopped"
-)
-
-// Supported AI providers
-const (
-	ProviderOpenAI = "openai"
-	ProviderClaude = "claude"
 )

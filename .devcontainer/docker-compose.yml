@@ -20,6 +20,7 @@ services:
       - ..:/workspace:cached
       - ~/.config/Code/User:/root/.config/Code/User:cached
       - ~/.vscode-server:/root/.vscode-server:cached
+      - /mnt/synology_homes/Eric/secondbrain:/arcadiadocuments:cached
     ports:
       - "8080:8080"
       - "3000:3000"
