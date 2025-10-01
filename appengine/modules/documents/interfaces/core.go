@@ -52,7 +52,7 @@ type TextChunkerInterface interface {
 type DocumentProcessor interface {
 	ProcessDocument(ctx context.Context, doc *models.Document, content string) error
 	ProcessFile(ctx context.Context, filePath string) (*models.Document, error)
-	ProcessBatch(ctx context.Context, filePaths []string) ([]models.ProcessResult, error)
+	ProcessFiles(ctx context.Context, filePaths []string) ([]models.ProcessResult, error)
 
 	// Content analysis
 	IsTextFile(filePath string) (bool, string, error)

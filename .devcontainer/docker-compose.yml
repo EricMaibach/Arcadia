@@ -20,11 +20,24 @@ services:
       - ..:/workspace:cached
       - ~/.config/Code/User:/root/.config/Code/User:cached
       - ~/.vscode-server:/root/.vscode-server:cached
-      - /mnt/synology_homes/Eric/secondbrain:/arcadiadocuments:cached
+      - ${ARCAIDA_DOC_DIR}:/arcadiadocuments:cached
     ports:
       - "8080:8080"
       - "3000:3000"
     command: sleep infinity
+  blip2:
+    build:
+      context: .
+      dockerfile: Dockerfile.blip2
+    ports:
+      - "8001:8001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
   tika:
     image: apache/tika:latest
     ports:

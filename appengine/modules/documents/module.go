@@ -3,21 +3,19 @@ package documents
 import (
 	"context"
 	"fmt"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
 	"arcadia/modules/documents/config"
 	"arcadia/modules/documents/core"
+	"arcadia/modules/documents/detection"
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
-	"arcadia/modules/documents/stores"
 	"arcadia/modules/documents/processors"
+	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/processors/pdf"
 	"arcadia/modules/documents/processors/text"
-	"arcadia/modules/documents/processors/base"
-	"arcadia/modules/documents/detection"
+	"arcadia/modules/documents/stores"
 )
 
 // DocumentsConfig contains configuration for the documents module
@@ -30,20 +28,20 @@ type DocumentsConfig struct {
 	ProcessingConfig config.ProcessingConfig `json:"processing"`
 
 	// Legacy processing configuration (deprecated)
-	MaxWorkers        int     `json:"max_workers"`
-	ProcessingTimeout int     `json:"processing_timeout_seconds"`
-	BatchSize         int     `json:"batch_size"`
-	RetryAttempts     int     `json:"retry_attempts"`
-	RetryDelay        int     `json:"retry_delay_seconds"`
+	MaxWorkers        int `json:"max_workers"`
+	ProcessingTimeout int `json:"processing_timeout_seconds"`
+	BatchSize         int `json:"batch_size"`
+	RetryAttempts     int `json:"retry_attempts"`
+	RetryDelay        int `json:"retry_delay_seconds"`
 
 	// Storage configuration
-	VectorStoreConfig    map[string]interface{} `json:"vector_store"`
-	DocumentStoreConfig  map[string]interface{} `json:"document_store"`
+	VectorStoreConfig   map[string]interface{} `json:"vector_store"`
+	DocumentStoreConfig map[string]interface{} `json:"document_store"`
 
 	// Cache configuration
-	CacheEnabled    bool `json:"cache_enabled"`
-	CacheTTL        int  `json:"cache_ttl_seconds"`
-	CacheMaxSize    int  `json:"cache_max_size"`
+	CacheEnabled bool `json:"cache_enabled"`
+	CacheTTL     int  `json:"cache_ttl_seconds"`
+	CacheMaxSize int  `json:"cache_max_size"`
 
 	// File watching configuration
 	FileWatcherEnabled bool     `json:"file_watcher_enabled"`
@@ -51,37 +49,37 @@ type DocumentsConfig struct {
 	IgnorePatterns     []string `json:"ignore_patterns"`
 
 	// Metrics and monitoring
-	MetricsEnabled  bool `json:"metrics_enabled"`
-	HealthCheckInterval int `json:"health_check_interval_seconds"`
+	MetricsEnabled      bool `json:"metrics_enabled"`
+	HealthCheckInterval int  `json:"health_check_interval_seconds"`
 
 	// Rate limiting
-	RateLimitEnabled   bool `json:"rate_limit_enabled"`
-	RateLimitRequests  int  `json:"rate_limit_requests"`
-	RateLimitDuration  int  `json:"rate_limit_duration_seconds"`
+	RateLimitEnabled  bool `json:"rate_limit_enabled"`
+	RateLimitRequests int  `json:"rate_limit_requests"`
+	RateLimitDuration int  `json:"rate_limit_duration_seconds"`
 
 	// Feature flags
-	EnableAdvancedSearch   bool `json:"enable_advanced_search"`
-	EnableContentAnalysis  bool `json:"enable_content_analysis"`
-	EnableEventBus         bool `json:"enable_event_bus"`
+	EnableAdvancedSearch  bool `json:"enable_advanced_search"`
+	EnableContentAnalysis bool `json:"enable_content_analysis"`
+	EnableEventBus        bool `json:"enable_event_bus"`
 }
 
 // Dependencies contains all external dependencies for the documents module
 type Dependencies struct {
 	// Required dependencies
-	DB                interfaces.DatabaseProvider   `json:"-"`
-	EmbeddingProvider interfaces.EmbeddingProvider  `json:"-"`
-	Logger            interfaces.Logger             `json:"-"`
+	DB                interfaces.DatabaseProvider  `json:"-"`
+	EmbeddingProvider interfaces.EmbeddingProvider `json:"-"`
+	Logger            interfaces.Logger            `json:"-"`
 
 	// Optional dependencies with defaults
-	Queue             interfaces.QueueService       `json:"-"`
-	Metrics           interfaces.MetricsCollector   `json:"-"`
-	Cache             interfaces.CacheService       `json:"-"`
-	RateLimiter       interfaces.RateLimiter        `json:"-"`
-	ConfigProvider    interfaces.ConfigProvider     `json:"-"`
-	EventBus          interfaces.EventBus           `json:"-"`
+	Queue          interfaces.QueueService     `json:"-"`
+	Metrics        interfaces.MetricsCollector `json:"-"`
+	Cache          interfaces.CacheService     `json:"-"`
+	RateLimiter    interfaces.RateLimiter      `json:"-"`
+	ConfigProvider interfaces.ConfigProvider   `json:"-"`
+	EventBus       interfaces.EventBus         `json:"-"`
 
 	// Configuration
-	Config            DocumentsConfig               `json:"config"`
+	Config DocumentsConfig `json:"config"`
 }
 
 // documentsModule implements the DocumentsModule interface
@@ -91,27 +89,27 @@ type documentsModule struct {
 	deps      Dependencies
 
 	// Internal components
-	vectorStore     interfaces.VectorStoreInterface
-	documentStore   interfaces.DocumentStoreInterface
-	processor       interfaces.DocumentProcessor
-	searchEngine    interfaces.SearchEngine
-	chunker         interfaces.TextChunkerInterface
-	pluginRegistry  *processors.Registry
-	workerPool      interfaces.WorkerPool
-	fileWatcher     interfaces.FileWatcher
-	eventListeners  []EventListener
+	vectorStore    interfaces.VectorStoreInterface
+	documentStore  interfaces.DocumentStoreInterface
+	processor      interfaces.DocumentProcessor
+	searchEngine   interfaces.SearchEngine
+	chunker        interfaces.TextChunkerInterface
+	pluginRegistry *processors.Registry
+	workerPool     interfaces.WorkerPool
+	fileWatcher    interfaces.FileWatcher
+	eventListeners []EventListener
 
 	// State management
-	ctx           context.Context
-	cancel        context.CancelFunc
-	started       bool
-	startedAt     time.Time
-	healthStatus  *models.HealthStatus
-	metrics       *models.ModuleMetrics
+	ctx          context.Context
+	cancel       context.CancelFunc
+	started      bool
+	startedAt    time.Time
+	healthStatus *models.HealthStatus
+	metrics      *models.ModuleMetrics
 
 	// Synchronization
-	mutex         sync.RWMutex
-	stateMutex    sync.Mutex
+	mutex      sync.RWMutex
+	stateMutex sync.Mutex
 }
 
 // NewDocumentsModule creates a new documents module instance
@@ -123,19 +121,19 @@ func NewDocumentsModule(deps Dependencies) (DocumentsModule, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	module := &documentsModule{
-		version:   ModuleVersion,
-		deps:      deps,
-		ctx:       ctx,
-		cancel:    cancel,
-		started:   false,
+		version: ModuleVersion,
+		deps:    deps,
+		ctx:     ctx,
+		cancel:  cancel,
+		started: false,
 		buildInfo: &ModuleInfo{
 			Version:   ModuleVersion,
 			BuildTime: time.Now().Format(time.RFC3339),
 			Status:    "initialized",
 		},
 		healthStatus: &models.HealthStatus{
-			Status:    "initializing",
-			Timestamp: time.Now(),
+			Status:     "initializing",
+			Timestamp:  time.Now(),
 			Components: make(map[string]interface{}),
 		},
 		metrics: &models.ModuleMetrics{
@@ -578,7 +576,6 @@ func (dm *documentsModule) ProcessFile(ctx context.Context, path string) (*model
 		}
 	}()
 
-
 	// Track plugin usage if available
 	var processorType string
 	if dm.pluginRegistry != nil && dm.pluginRegistry.CanProcessFile(path) {
@@ -658,11 +655,6 @@ func (dm *documentsModule) ProcessFiles(ctx context.Context, paths []string) ([]
 	}
 
 	return results, nil
-}
-
-// ProcessBatch processes files in a batch operation
-func (dm *documentsModule) ProcessBatch(ctx context.Context, paths []string) ([]models.ProcessResult, error) {
-	return dm.ProcessFiles(ctx, paths)
 }
 
 // SearchDocuments searches for documents
@@ -810,104 +802,6 @@ func (dm *documentsModule) GetDocumentByPath(ctx context.Context, filePath strin
 	return dm.documentStore.GetDocumentByPath(ctx, filePath)
 }
 
-// UpdateDocumentMetadata updates document metadata
-func (dm *documentsModule) UpdateDocumentMetadata(ctx context.Context, docID string, metadata map[string]interface{}) error {
-	if !dm.started {
-		return models.NewDocumentError(models.ErrModuleNotInitialized, "module not started")
-	}
-
-	if docID == "" {
-		return models.NewDocumentError(models.ErrInvalidInput, "document ID cannot be empty")
-	}
-
-	if metadata == nil {
-		return models.NewDocumentError(models.ErrInvalidInput, "metadata cannot be nil")
-	}
-
-	if dm.documentStore == nil {
-		return models.NewDocumentError(models.ErrStorageFailed, "document store not initialized")
-	}
-
-	startTime := time.Now()
-	defer func() {
-		duration := time.Since(startTime).Seconds() * 1000
-		if dm.deps.Metrics != nil {
-			dm.deps.Metrics.RecordTimer("document.update_metadata.duration", duration, map[string]string{"operation": "update_metadata"})
-		}
-	}()
-
-	// Get existing document
-	doc, err := dm.documentStore.GetDocument(ctx, docID)
-	if err != nil {
-		if dm.deps.Logger != nil {
-			dm.deps.Logger.Warn(ctx, "Failed to get document for metadata update", "docID", docID, "error", err)
-		}
-		return err
-	}
-
-	// Merge new metadata with existing metadata
-	if doc.Metadata == nil {
-		doc.Metadata = make(map[string]interface{})
-	}
-
-	// Track what changes were made for logging
-	var changedKeys []string
-	for key, value := range metadata {
-		// Validate metadata key and value
-		if key == "" {
-			if dm.deps.Logger != nil {
-				dm.deps.Logger.Warn(ctx, "Skipping empty metadata key", "docID", docID)
-			}
-			continue
-		}
-
-		// Prevent updating system-controlled metadata
-		if dm.isSystemMetadataKey(key) {
-			if dm.deps.Logger != nil {
-				dm.deps.Logger.Warn(ctx, "Skipping system metadata key", "docID", docID, "key", key)
-			}
-			continue
-		}
-
-		// Update the metadata
-		oldValue := doc.Metadata[key]
-		doc.Metadata[key] = value
-
-		if oldValue != value {
-			changedKeys = append(changedKeys, key)
-		}
-	}
-
-	if len(changedKeys) == 0 {
-		if dm.deps.Logger != nil {
-			dm.deps.Logger.Info(ctx, "No metadata changes detected", "docID", docID)
-		}
-		return nil
-	}
-
-	// Update the document with new metadata
-	doc.UpdatedAt = time.Now()
-	if err := dm.documentStore.UpdateDocument(ctx, doc); err != nil {
-		if dm.deps.Logger != nil {
-			dm.deps.Logger.Error(ctx, "Failed to update document metadata", "docID", docID, "error", err)
-		}
-		return models.NewDocumentErrorWithCause(models.ErrStorageFailed, "failed to update document metadata", err)
-	}
-
-	if dm.deps.Logger != nil {
-		dm.deps.Logger.Info(ctx, "Document metadata updated successfully",
-			"docID", docID,
-			"changedKeys", changedKeys,
-			"totalKeys", len(doc.Metadata))
-	}
-
-	if dm.deps.Metrics != nil {
-		dm.deps.Metrics.IncrementCounter("document.update_metadata.success", map[string]string{"operation": "update_metadata"})
-	}
-
-	return nil
-}
-
 // HealthCheck performs a health check
 func (dm *documentsModule) HealthCheck(ctx context.Context) (*models.HealthStatus, error) {
 	dm.mutex.RLock()
@@ -949,19 +843,19 @@ func (dm *documentsModule) HealthCheck(ctx context.Context) (*models.HealthStatu
 	if dm.pluginRegistry != nil {
 		if err := dm.validatePluginSystemHealth(); err != nil {
 			components["plugin_system"] = map[string]interface{}{
-				"status":                "degraded",
-				"error":                 err.Error(),
-				"supported_types":       dm.pluginRegistry.GetSupportedTypes(),
-				"processor_stats":       dm.pluginRegistry.GetProcessorStats(),
+				"status":          "degraded",
+				"error":           err.Error(),
+				"supported_types": dm.pluginRegistry.GetSupportedTypes(),
+				"processor_stats": dm.pluginRegistry.GetProcessorStats(),
 			}
 			if status.Status == "healthy" {
 				status.Status = "degraded"
 			}
 		} else {
 			components["plugin_system"] = map[string]interface{}{
-				"status":                "healthy",
-				"supported_types":       dm.pluginRegistry.GetSupportedTypes(),
-				"processor_stats":       dm.pluginRegistry.GetProcessorStats(),
+				"status":          "healthy",
+				"supported_types": dm.pluginRegistry.GetSupportedTypes(),
+				"processor_stats": dm.pluginRegistry.GetProcessorStats(),
 			}
 		}
 	} else {
@@ -1050,7 +944,7 @@ func (dm *documentsModule) collectExternalToolMetrics() map[string]interface{} {
 		if err := dm.checkToolAvailability("pdftotext", "--version"); err != nil {
 			pdfTools["pdftotext"] = map[string]interface{}{
 				"available": false,
-				"error": err.Error(),
+				"error":     err.Error(),
 			}
 		} else {
 			pdfTools["pdftotext"] = map[string]interface{}{
@@ -1062,13 +956,13 @@ func (dm *documentsModule) collectExternalToolMetrics() map[string]interface{} {
 		if err := dm.checkToolAvailability("ocrmypdf", "--version"); err != nil {
 			pdfTools["ocrmypdf"] = map[string]interface{}{
 				"available": false,
-				"error": err.Error(),
-				"optional": true,
+				"error":     err.Error(),
+				"optional":  true,
 			}
 		} else {
 			pdfTools["ocrmypdf"] = map[string]interface{}{
 				"available": true,
-				"optional": true,
+				"optional":  true,
 			}
 		}
 
@@ -1077,111 +971,6 @@ func (dm *documentsModule) collectExternalToolMetrics() map[string]interface{} {
 
 	toolStatus["last_check"] = time.Now()
 	return toolStatus
-}
-
-// ValidateConfiguration validates the module configuration
-func (dm *documentsModule) ValidateConfiguration(ctx context.Context) error {
-	config := dm.deps.Config
-
-	// Validate core configuration
-	if config.MaxWorkers < 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "max_workers must be non-negative")
-	}
-
-	if config.ProcessingTimeout <= 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "processing_timeout_seconds must be positive")
-	}
-
-	if config.BatchSize <= 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "batch_size must be positive")
-	}
-
-	if config.RetryAttempts < 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "retry_attempts must be non-negative")
-	}
-
-	if config.RetryDelay < 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "retry_delay_seconds must be non-negative")
-	}
-
-	// Validate chunking configuration
-	if err := dm.validateChunkingConfig(config.ChunkingConfig); err != nil {
-		return err
-	}
-
-	// Validate search configuration
-	if err := dm.validateSearchConfig(config.SearchConfig); err != nil {
-		return err
-	}
-
-	// Validate cache configuration
-	if config.CacheEnabled {
-		if config.CacheTTL <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "cache_ttl_seconds must be positive when cache is enabled")
-		}
-		if config.CacheMaxSize <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "cache_max_size must be positive when cache is enabled")
-		}
-	}
-
-	// Validate file watcher configuration
-	if config.FileWatcherEnabled {
-		if len(config.WatchPaths) == 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "watch_paths must not be empty when file_watcher_enabled is true")
-		}
-		// Validate watch paths exist and are accessible
-		for _, path := range config.WatchPaths {
-			if path == "" {
-				return models.NewDocumentError(models.ErrInvalidConfig, "watch paths cannot be empty")
-			}
-			// Check path security
-			cleanPath := filepath.Clean(path)
-			absPath, err := filepath.Abs(cleanPath)
-			if err != nil {
-				return models.NewDocumentErrorWithCause(models.ErrInvalidConfig, fmt.Sprintf("invalid watch path: %s", path), err)
-			}
-			// Basic path validation (not using isRestrictedPath as watch paths might be more permissive)
-			if strings.Contains(cleanPath, "..") {
-				return models.NewDocumentError(models.ErrInvalidConfig, fmt.Sprintf("invalid watch path contains directory traversal: %s", path))
-			}
-			_ = absPath // Use absPath to avoid unused variable warning
-		}
-	}
-
-	// Validate health check configuration
-	if config.HealthCheckInterval <= 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "health_check_interval_seconds must be positive")
-	}
-
-	// Validate rate limiting configuration
-	if config.RateLimitEnabled {
-		if config.RateLimitRequests <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "rate_limit_requests must be positive when rate limiting is enabled")
-		}
-		if config.RateLimitDuration <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "rate_limit_duration_seconds must be positive when rate limiting is enabled")
-		}
-	}
-
-	// Validate vector store configuration
-	if config.VectorStoreConfig != nil {
-		if err := dm.validateVectorStoreConfig(config.VectorStoreConfig); err != nil {
-			return err
-		}
-	}
-
-	// Validate document store configuration
-	if config.DocumentStoreConfig != nil {
-		if err := dm.validateDocumentStoreConfig(config.DocumentStoreConfig); err != nil {
-			return err
-		}
-	}
-
-	if dm.deps.Logger != nil {
-		dm.deps.Logger.Info(ctx, "Configuration validation completed successfully")
-	}
-
-	return nil
 }
 
 // UpdateConfiguration updates the module configuration
@@ -1200,131 +989,6 @@ func (dm *documentsModule) GetConfiguration(ctx context.Context) (map[string]int
 	// TODO: Implement configuration serialization
 
 	return configMap, nil
-}
-
-// isSystemMetadataKey checks if a metadata key is system-controlled and should not be updated
-func (dm *documentsModule) isSystemMetadataKey(key string) bool {
-	systemKeys := []string{
-		"file_ext",
-		"size",
-		"modified",
-		"created_at",
-		"updated_at",
-		"hash",
-		"chunk_count",
-		"processing_version",
-		"embedding_model",
-		"content_type",
-		"file_name",
-		"file_dir",
-	}
-
-	for _, systemKey := range systemKeys {
-		if key == systemKey {
-			return true
-		}
-	}
-
-	return false
-}
-
-// validateChunkingConfig validates chunking configuration
-func (dm *documentsModule) validateChunkingConfig(config models.ChunkingConfig) error {
-	if config.MaxChunkSize <= 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "max_chunk_size must be positive")
-	}
-	if config.ChunkOverlap < 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "chunk_overlap must be non-negative")
-	}
-	if config.ChunkOverlap >= config.MaxChunkSize {
-		return models.NewDocumentError(models.ErrInvalidConfig, "chunk_overlap must be less than max_chunk_size")
-	}
-	return nil
-}
-
-// validateSearchConfig validates search configuration
-func (dm *documentsModule) validateSearchConfig(config models.SearchConfig) error {
-	if config.MaxDocumentSize <= 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "max_document_size must be positive")
-	}
-	if config.MaxHighlights < 0 {
-		return models.NewDocumentError(models.ErrInvalidConfig, "max_highlights must be non-negative")
-	}
-	return nil
-}
-
-// validateVectorStoreConfig validates vector store configuration
-func (dm *documentsModule) validateVectorStoreConfig(config map[string]interface{}) error {
-	if storeType, ok := config["type"].(string); ok {
-		validTypes := []string{"memory", "qdrant"}
-		isValid := false
-		for _, validType := range validTypes {
-			if storeType == validType {
-				isValid = true
-				break
-			}
-		}
-		if !isValid {
-			return models.NewDocumentError(models.ErrInvalidConfig, fmt.Sprintf("unsupported vector store type: %s", storeType))
-		}
-	}
-
-	if dimension, ok := config["dimension"].(int); ok {
-		if dimension <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "vector dimension must be positive")
-		}
-	}
-
-	if batchSize, ok := config["batch_size"].(int); ok {
-		if batchSize <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "vector store batch_size must be positive")
-		}
-	}
-
-	if timeout, ok := config["timeout"].(int); ok {
-		if timeout <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "vector store timeout must be positive")
-		}
-	}
-
-	return nil
-}
-
-// validateDocumentStoreConfig validates document store configuration
-func (dm *documentsModule) validateDocumentStoreConfig(config map[string]interface{}) error {
-	if storeType, ok := config["type"].(string); ok {
-		validTypes := []string{"memory", "sql"}
-		isValid := false
-		for _, validType := range validTypes {
-			if storeType == validType {
-				isValid = true
-				break
-			}
-		}
-		if !isValid {
-			return models.NewDocumentError(models.ErrInvalidConfig, fmt.Sprintf("unsupported document store type: %s", storeType))
-		}
-	}
-
-	if tableName, ok := config["table_name"].(string); ok {
-		if tableName == "" {
-			return models.NewDocumentError(models.ErrInvalidConfig, "document store table_name cannot be empty")
-		}
-	}
-
-	if batchSize, ok := config["batch_size"].(int); ok {
-		if batchSize <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "document store batch_size must be positive")
-		}
-	}
-
-	if timeout, ok := config["timeout"].(int); ok {
-		if timeout <= 0 {
-			return models.NewDocumentError(models.ErrInvalidConfig, "document store timeout must be positive")
-		}
-	}
-
-	return nil
 }
 
 // validatePluginSystemHealth performs health checks on the plugin system
@@ -1548,29 +1212,29 @@ func (dm *documentsModule) applyProcessorConfig(processor base.DocumentProcessor
 // DefaultDocumentsConfig returns a default configuration
 func DefaultDocumentsConfig() DocumentsConfig {
 	return DocumentsConfig{
-		ChunkingConfig:         models.DefaultChunkingConfig(),
+		ChunkingConfig:        models.DefaultChunkingConfig(),
 		SearchConfig:          models.DefaultSearchConfig(),
 		ProcessingConfig:      config.GetDefaultProcessingConfig(),
 		MaxWorkers:            DefaultMaxWorkers,
 		ProcessingTimeout:     DefaultTimeout,
 		BatchSize:             100,
-		RetryAttempts:        3,
-		RetryDelay:           5,
-		VectorStoreConfig:    make(map[string]interface{}),
-		DocumentStoreConfig:  make(map[string]interface{}),
-		CacheEnabled:         true,
-		CacheTTL:             3600,
-		CacheMaxSize:         10000,
-		FileWatcherEnabled:   false,
-		WatchPaths:           []string{},
-		IgnorePatterns:       []string{".git", ".DS_Store", "*.tmp"},
-		MetricsEnabled:       true,
-		HealthCheckInterval:  30,
-		RateLimitEnabled:     false,
-		RateLimitRequests:    1000,
-		RateLimitDuration:    3600,
-		EnableAdvancedSearch: true,
+		RetryAttempts:         3,
+		RetryDelay:            5,
+		VectorStoreConfig:     make(map[string]interface{}),
+		DocumentStoreConfig:   make(map[string]interface{}),
+		CacheEnabled:          true,
+		CacheTTL:              3600,
+		CacheMaxSize:          10000,
+		FileWatcherEnabled:    false,
+		WatchPaths:            []string{},
+		IgnorePatterns:        []string{".git", ".DS_Store", "*.tmp"},
+		MetricsEnabled:        true,
+		HealthCheckInterval:   30,
+		RateLimitEnabled:      false,
+		RateLimitRequests:     1000,
+		RateLimitDuration:     3600,
+		EnableAdvancedSearch:  true,
 		EnableContentAnalysis: false,
-		EnableEventBus:       false,
+		EnableEventBus:        false,
 	}
 }

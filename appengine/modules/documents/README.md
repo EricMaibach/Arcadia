@@ -1015,7 +1015,6 @@ type DocumentsModule interface {
     SearchDocumentsEnhanced(ctx context.Context, query string, topK int, config models.SearchConfig) ([]*models.EnhancedDocumentSearchResult, error)
 
     // Batch operations
-    ProcessBatch(ctx context.Context, paths []string) ([]models.ProcessResult, error)
     DeleteBatch(ctx context.Context, docIDs []string) error
 
     // Document management
@@ -1171,8 +1170,8 @@ config := documents.DefaultDocumentsConfig()
 config.MaxWorkers = 8 // Increase workers for concurrent processing
 config.BatchSize = 50 // Process in larger batches
 
-// Process with batch operation
-results, err := module.ProcessBatch(ctx, filePaths)
+// Process multiple files
+results, err := module.ProcessFiles(ctx, filePaths)
 if err != nil {
     log.Printf("Batch processing failed: %v", err)
     return

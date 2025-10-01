@@ -339,8 +339,8 @@ func (dp *DocumentProcessor) ProcessDocument(ctx context.Context, doc *models.Do
 	return nil
 }
 
-// ProcessBatch processes multiple files in batch
-func (dp *DocumentProcessor) ProcessBatch(ctx context.Context, filePaths []string) ([]models.ProcessResult, error) {
+// ProcessFiles processes multiple files
+func (dp *DocumentProcessor) ProcessFiles(ctx context.Context, filePaths []string) ([]models.ProcessResult, error) {
 	results := make([]models.ProcessResult, len(filePaths))
 
 	for i, path := range filePaths {
@@ -683,7 +683,7 @@ func (fp *FileProcessor) ProcessDirectory(ctx context.Context, dirPath string, r
 		fp.logger.Info(ctx, "Processing directory", "path", dirPath, "files", len(filePaths), "recursive", recursive)
 	}
 
-	return fp.processor.ProcessBatch(ctx, filePaths)
+	return fp.processor.ProcessFiles(ctx, filePaths)
 }
 
 // isSupportedFile checks if a file is supported for processing
