@@ -84,19 +84,21 @@ modules/ai/
 ### Basic Usage
 
 ```go
-import "arcadia/modules/ai"
+import (
+    "context"
+    "arcadia/modules/ai"
+)
 
-// Initialize the global AI service
-err := ai.InitializeGlobalServiceFromConfig()
+// Initialize the AI module from environment variables
+ctx := context.Background()
+aiModule, err := ai.NewAIModuleFromEnv(ctx)
 if err != nil {
-    log.Fatal("Failed to initialize AI service:", err)
+    log.Fatal("Failed to initialize AI module:", err)
 }
-
-// Get the AI service
-aiService := ai.GetGlobalService()
+defer aiModule.Stop(ctx)
 
 // Send a simple message
-response, err := aiService.SendMessage(ctx, "Hello, AI!")
+response, err := aiModule.SendMessage(ctx, "Hello, AI!")
 if err != nil {
     log.Error("AI request failed:", err)
     return
@@ -109,16 +111,16 @@ fmt.Println("AI Response:", response)
 ```go
 // Create a conversation context
 contextID := "user-session-123"
-err := aiService.CreateConversation(ctx, contextID)
+err := aiModule.CreateConversation(ctx, contextID)
 if err != nil {
     log.Error("Failed to create conversation:", err)
     return
 }
 
 // Send messages with context
-response, err := aiService.SendMessageWithContext(ctx, "What is the weather?", contextID)
+response, err := aiModule.SendMessageWithContext(ctx, "What is the weather?", contextID)
 // Follow-up message will remember the conversation
-response2, err := aiService.SendMessageWithContext(ctx, "What about tomorrow?", contextID)
+response2, err := aiModule.SendMessageWithContext(ctx, "What about tomorrow?", contextID)
 ```
 
 ## Configuration

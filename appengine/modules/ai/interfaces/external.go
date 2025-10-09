@@ -165,15 +165,6 @@ type FileWatcher interface {
 // FileChangeHandler function type for handling file changes
 type FileChangeHandler func(ctx context.Context, change *models.FileChange) error
 
-// ConfigManager interface for managing configuration
-type ConfigManager interface {
-	Get(ctx context.Context, key string) (interface{}, error)
-	Set(ctx context.Context, key string, value interface{}) error
-	GetAll(ctx context.Context) (map[string]interface{}, error)
-	Watch(ctx context.Context, key string, handler ConfigChangeHandler) error
-	Validate(ctx context.Context) error
-}
-
 // Note: ConfigChangeHandler is defined in core.go to avoid duplicate declarations
 
 // HealthChecker interface for health checking external dependencies
@@ -236,7 +227,6 @@ type Dependencies struct {
 	EmbeddingSearch     EmbeddingSearch
 	SchedulerService    SchedulerService
 	FileWatcher         FileWatcher
-	ConfigManager       ConfigManager
 	HealthChecker       HealthChecker
 	RateLimiter         RateLimiter
 	Tracer              Tracer
@@ -259,8 +249,8 @@ func (d *Dependencies) Validate() error {
 
 // Common dependency errors
 var (
-	ErrMissingLogger    = &models.AIError{Type: "dependency_error", Message: "logger is required", Provider: "module"}
-	ErrMissingMetrics   = &models.AIError{Type: "dependency_error", Message: "metrics is required", Provider: "module"}
-	ErrMissingDatabase  = &models.AIError{Type: "dependency_error", Message: "database is required", Provider: "module"}
+	ErrMissingLogger     = &models.AIError{Type: "dependency_error", Message: "logger is required", Provider: "module"}
+	ErrMissingMetrics    = &models.AIError{Type: "dependency_error", Message: "metrics is required", Provider: "module"}
+	ErrMissingDatabase   = &models.AIError{Type: "dependency_error", Message: "database is required", Provider: "module"}
 	ErrInvalidDependency = &models.AIError{Type: "dependency_error", Message: "invalid dependency configuration", Provider: "module"}
 )

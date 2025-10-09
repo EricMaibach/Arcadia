@@ -21,7 +21,6 @@ type ContextManager struct {
 	cache         interfaces.Cache
 	metrics       interfaces.Metrics
 	eventBus      interfaces.EventBus
-	persistence   interfaces.PersistenceManager
 	cleanupTicker *time.Ticker
 	stopCleanup   chan bool
 }
@@ -36,7 +35,6 @@ func NewContextManager(config *models.Config, deps *interfaces.Dependencies) *Co
 		cache:       deps.Cache,
 		metrics:     deps.Metrics,
 		eventBus:    deps.EventBus,
-		persistence: nil, // TODO: Implement PersistenceManager interface
 		stopCleanup: make(chan bool),
 	}
 
@@ -60,9 +58,9 @@ func (cm *ContextManager) CreateContext(ctx context.Context, contextID string) e
 
 	now := time.Now()
 	conversationContext := &models.ConversationContext{
-		ID:           contextID,
-		Messages:     []models.Message{},
-		Stats:        models.ContextStats{
+		ID:       contextID,
+		Messages: []models.Message{},
+		Stats: models.ContextStats{
 			Messages:    0,
 			Tokens:      0,
 			LastUpdated: now,
@@ -91,15 +89,6 @@ func (cm *ContextManager) CreateContext(ctx context.Context, contextID string) e
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextCreated, models.EventSourceContext).WithData(event))
 	}
 
-	// Save to persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.SaveContext(ctx, contextID, conversationContext); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to persist context", "context_id", contextID, "error", err)
-			}
-		}
-	}
-
 	if cm.logger != nil {
 		cm.logger.Info("Created conversation context", "context_id", contextID)
 	}
@@ -112,20 +101,6 @@ func (cm *ContextManager) GetContext(ctx context.Context, contextID string) (*mo
 	cm.mutex.RLock()
 	conversationContext, exists := cm.contexts[contextID]
 	cm.mutex.RUnlock()
-
-	if !exists {
-		// Try to load from persistence
-		if cm.persistence != nil && cm.config.EnablePersistence {
-			loaded, err := cm.persistence.LoadContext(ctx, contextID)
-			if err == nil && loaded != nil {
-				cm.mutex.Lock()
-				cm.contexts[contextID] = loaded
-				cm.mutex.Unlock()
-				conversationContext = loaded
-				exists = true
-			}
-		}
-	}
 
 	if !exists {
 		return nil, models.NewContextError(contextID, "get", "context not found")
@@ -175,15 +150,6 @@ func (cm *ContextManager) DeleteContext(ctx context.Context, contextID string) e
 		event.MessageCount = len(conversationContext.Messages)
 		event.TokenCount = conversationContext.Stats.Tokens
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextDeleted, models.EventSourceContext).WithData(event))
-	}
-
-	// Remove from persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.DeletePersistedContext(ctx, contextID); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to delete persisted context", "context_id", contextID, "error", err)
-			}
-		}
 	}
 
 	if cm.logger != nil {
@@ -248,15 +214,6 @@ func (cm *ContextManager) AddMessage(ctx context.Context, contextID string, mess
 		event.TokenCount = conversationContext.Stats.Tokens
 		event.Operation = "add_message"
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextUpdated, models.EventSourceContext).WithData(event))
-	}
-
-	// Save to persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.SaveContext(ctx, contextID, conversationContext); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to persist context after adding message", "context_id", contextID, "error", err)
-			}
-		}
 	}
 
 	return nil
@@ -324,15 +281,6 @@ func (cm *ContextManager) ClearContext(ctx context.Context, contextID string) er
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextUpdated, models.EventSourceContext).WithData(event))
 	}
 
-	// Save to persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.SaveContext(ctx, contextID, conversationContext); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to persist context after clearing", "context_id", contextID, "error", err)
-			}
-		}
-	}
-
 	if cm.logger != nil {
 		cm.logger.Info("Cleared conversation context", "context_id", contextID, "messages_removed", messageCount)
 	}
@@ -374,15 +322,6 @@ func (cm *ContextManager) CompactContext(ctx context.Context, contextID string) 
 		event.AddMetadata("original_message_count", originalMessageCount)
 		event.AddMetadata("compacted_message_count", compactedMessageCount)
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextUpdated, models.EventSourceContext).WithData(event))
-	}
-
-	// Save to persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.SaveContext(ctx, contextID, conversationContext); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to persist context after compaction", "context_id", contextID, "error", err)
-			}
-		}
 	}
 
 	if cm.logger != nil {
@@ -429,15 +368,6 @@ func (cm *ContextManager) TrimContext(ctx context.Context, contextID string, max
 		cm.publishEvent(ctx, models.NewEvent(models.EventTypeContextUpdated, models.EventSourceContext).WithData(event))
 	}
 
-	// Save to persistence if enabled
-	if cm.persistence != nil && cm.config.EnablePersistence {
-		if err := cm.persistence.SaveContext(ctx, contextID, conversationContext); err != nil {
-			if cm.logger != nil {
-				cm.logger.Error("Failed to persist context after trimming", "context_id", contextID, "error", err)
-			}
-		}
-	}
-
 	if cm.logger != nil {
 		cm.logger.Info("Trimmed conversation context", "context_id", contextID,
 			"original_messages", originalMessageCount, "trimmed_messages", trimmedMessageCount)
@@ -477,46 +407,6 @@ func (cm *ContextManager) UpdateTokenCount(ctx context.Context, contextID string
 		cm.metrics.RecordValue("tokens_used", float64(additionalTokens), map[string]string{
 			"context_id": contextID,
 		})
-	}
-
-	return nil
-}
-
-// SaveContext saves a context to persistence
-func (cm *ContextManager) SaveContext(ctx context.Context, contextID string) error {
-	if cm.persistence == nil || !cm.config.EnablePersistence {
-		return models.NewConfigurationError("persistence", "persistence not enabled or configured", nil, nil)
-	}
-
-	conversationContext, err := cm.GetContext(ctx, contextID)
-	if err != nil {
-		return err
-	}
-
-	return cm.persistence.SaveContext(ctx, contextID, conversationContext)
-}
-
-// LoadContext loads a context from persistence
-func (cm *ContextManager) LoadContext(ctx context.Context, contextID string) error {
-	if cm.persistence == nil || !cm.config.EnablePersistence {
-		return models.NewConfigurationError("persistence", "persistence not enabled or configured", nil, nil)
-	}
-
-	conversationContext, err := cm.persistence.LoadContext(ctx, contextID)
-	if err != nil {
-		return err
-	}
-
-	if conversationContext == nil {
-		return models.NewContextError(contextID, "load", "context not found in persistence")
-	}
-
-	cm.mutex.Lock()
-	cm.contexts[contextID] = conversationContext
-	cm.mutex.Unlock()
-
-	if cm.logger != nil {
-		cm.logger.Info("Loaded conversation context from persistence", "context_id", contextID)
 	}
 
 	return nil
@@ -590,11 +480,11 @@ func (cm *ContextManager) ImportContext(ctx context.Context, contextID string, e
 func (cm *ContextManager) CleanupExpiredContexts(ctx context.Context) (*models.CleanupResult, error) {
 	if cm.config.ContextTTL <= 0 {
 		return &models.CleanupResult{
-			Operation:      "cleanup_expired_contexts",
-			StartTime:      time.Now(),
-			EndTime:        time.Now(),
-			Success:        true,
-			Message:        "Context TTL not configured, no cleanup performed",
+			Operation: "cleanup_expired_contexts",
+			StartTime: time.Now(),
+			EndTime:   time.Now(),
+			Success:   true,
+			Message:   "Context TTL not configured, no cleanup performed",
 		}, nil
 	}
 
@@ -614,15 +504,6 @@ func (cm *ContextManager) CleanupExpiredContexts(ctx context.Context) (*models.C
 	// Remove expired contexts
 	for _, contextID := range expiredContexts {
 		delete(cm.contexts, contextID)
-
-		// Remove from persistence if enabled
-		if cm.persistence != nil && cm.config.EnablePersistence {
-			if err := cm.persistence.DeletePersistedContext(ctx, contextID); err != nil {
-				if cm.logger != nil {
-					cm.logger.Error("Failed to delete expired context from persistence", "context_id", contextID, "error", err)
-				}
-			}
-		}
 
 		// Publish event
 		if cm.eventBus != nil {

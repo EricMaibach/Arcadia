@@ -28,7 +28,7 @@ async def load_model():
     """Load model and processor on startup"""
     global model, processor, device
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = "cuda" if torch.cuda.is_available() else "cpu"P
     logger.info(f"Using device: {device}")
 
     logger.info("Loading BLIP-2 processor...")

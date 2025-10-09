@@ -91,12 +91,12 @@ type OpenAIUsage struct {
 }
 
 type OpenAIResponse struct {
-	ID      string        `json:"id"`
-	Object  string        `json:"object"`
-	Created int64         `json:"created"`
-	Model   string        `json:"model"`
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
 	Choices []OpenAIChoice `json:"choices"`
-	Usage   OpenAIUsage   `json:"usage"`
+	Usage   OpenAIUsage    `json:"usage"`
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
@@ -559,15 +559,6 @@ func (p *OpenAIProvider) processOpenAIResponse(ctx context.Context, response *Op
 		if err := p.contextManager.AddMessage(ctx, contextID, assistantMessage); err != nil {
 			if p.logger != nil {
 				p.logger.Error("Failed to add assistant message to context", "error", err)
-			}
-		}
-
-		// Update token count
-		if response.Usage.TotalTokens > 0 {
-			if err := p.contextManager.UpdateTokenCount(ctx, contextID, response.Usage.TotalTokens); err != nil {
-				if p.logger != nil {
-					p.logger.Error("Failed to update token count", "error", err)
-				}
 			}
 		}
 	}

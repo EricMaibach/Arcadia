@@ -35,6 +35,7 @@ var (
 
 	// Module components
 	documentsModule documents.DocumentsModule
+	aiModule        ai.AIModule
 	queueProcessor  *QueueProcessor
 )
 
@@ -601,13 +602,10 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 
 
 // setupAIRoutes sets up the new AI API routes
-func setupAIRoutes() {
-	// Get the global AI service
-	service := ai.GetGlobalService()
-
-	if service != nil {
+func setupAIRoutes(aiMod ai.AIModule) {
+	if aiMod != nil {
 		// Set up dependency injection for AI handlers
-		handlers.SetAIDependencies(service)
+		handlers.SetAIDependencies(aiMod)
 
 		// New provider-agnostic endpoints
 		http.HandleFunc("/api/ai/v2/chat", handlers.CorsHandler(handlers.HandleAIAPI))
@@ -651,8 +649,7 @@ func main() {
 		log.Fatalf("Failed to load registry: %v", err)
 	}
 
-	// Initialize WASM runtime
-	wasmRuntime = services.NewWasmRuntime(registryManager, dm)
+	// Initialize WASM runtime (will be initialized after AI module)
 
 	// Initialize file watcher service
 	fileWatcherConfig := services.DefaultFileWatcherConfig()
@@ -711,18 +708,19 @@ func main() {
 			queueService != nil, documentsModule != nil)
 	}
 
-	// Initialize AI service with auto-configuration
-	log.Printf("Initializing AI service...")
-	if err := ai.InitializeGlobalServiceFromConfig(); err != nil {
-		log.Printf("Warning: Failed to initialize AI service: %v", err)
+	// Initialize AI module with auto-configuration
+	log.Printf("Initializing AI module...")
+	ctx := context.Background()
+	aiModule, err = ai.NewAIModuleFromEnv(ctx)
+	if err != nil {
+		log.Printf("Warning: Failed to initialize AI module: %v", err)
 		log.Printf("AI endpoints will not be available")
 	} else {
-		log.Printf("AI service initialized successfully")
+		log.Printf("AI module initialized successfully")
 	}
 
-
-	// Set up dependency injection for the new AI service now that all components are available
-	if ai.IsGlobalServiceInitialized() {
+	// Set up dependency injection for the AI module now that all components are available
+	if aiModule != nil {
 		var embeddingAdapter aiInterfaces.EmbeddingSearch
 		if documentsModule != nil {
 			log.Printf("Creating embedding search adapter with documents module...")
@@ -732,22 +730,27 @@ func main() {
 			log.Printf("WARNING: Documents module is nil, skipping embedding adapter creation")
 		}
 
-		if err := ai.SetupGlobalDependencies(
+		if err := ai.SetupModuleDependencies(
+			aiModule,
 			registryManager.GetRegistryAccess(),
 			registryManager.GetAppRunner(),
 			registryManager.GetAppCreator(),
 			embeddingAdapter,
 		); err != nil {
-			log.Printf("Warning: Failed to setup AI dependencies: %v", err)
+			log.Printf("Warning: Failed to setup AI module dependencies: %v", err)
 		} else {
 			embeddingStatus := "disabled"
 			if embeddingAdapter != nil {
 				embeddingStatus = "enabled"
 			}
-			log.Printf("AI service dependencies configured successfully (embedding search: %s)", embeddingStatus)
+			log.Printf("AI module dependencies configured successfully (embedding search: %s)", embeddingStatus)
 		}
 	}
 
+	// Initialize WASM runtime with AI module
+	log.Printf("Initializing WASM runtime...")
+	wasmRuntime = services.NewWasmRuntime(registryManager, dm, aiModule)
+	log.Printf("WASM runtime initialized successfully")
 
 	// Start the scheduler (now properly initialized)
 	if err := services.StartScheduler(); err != nil {
@@ -784,7 +787,7 @@ func main() {
 	http.HandleFunc("/list_scheduled_runs", handlers.CorsHandler(handlers.ListScheduledRunsHandler))
 
 	// AI Integration endpoints - use new system
-	setupAIRoutes()
+	setupAIRoutes(aiModule)
 
 
 	// Set up graceful shutdown
@@ -838,6 +841,16 @@ func main() {
 			log.Printf("Error stopping documents module: %v", err)
 		} else {
 			log.Printf("Documents module stopped successfully")
+		}
+	}
+
+	// Stop AI module
+	if aiModule != nil {
+		log.Printf("Stopping AI module...")
+		if err := aiModule.Stop(ctx); err != nil {
+			log.Printf("Error stopping AI module: %v", err)
+		} else {
+			log.Printf("AI module stopped successfully")
 		}
 	}
 

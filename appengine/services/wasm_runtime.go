@@ -17,14 +17,16 @@ type WasmRuntime struct {
 	engine          *wasmtime.Engine
 	registryManager *RegistryManager
 	databaseManager *DatabaseManager
+	aiModule        ai.AIModule
 }
 
 // NewWasmRuntime creates a new WASM runtime instance
-func NewWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager) *WasmRuntime {
+func NewWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule) *WasmRuntime {
 	return &WasmRuntime{
 		engine:          wasmtime.NewEngine(),
 		registryManager: registryMgr,
 		databaseManager: dbMgr,
+		aiModule:        aiMod,
 	}
 }
 
@@ -45,16 +47,15 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 
 	log.Printf("[WASM AI] aiQuery called from app %s with message: %s", appID, message)
 
-	// Check if AI service is available
-	aiService := ai.GetGlobalService()
-	if aiService == nil {
-		log.Printf("[WASM AI] AI service not initialized")
-		return -1 // AI service not initialized
+	// Check if AI module is available
+	if wr.aiModule == nil {
+		log.Printf("[WASM AI] AI module not initialized")
+		return -1 // AI module not initialized
 	}
 
-	// Send message to AI service WITHOUT context (keep WASM apps stateless)
+	// Send message to AI module WITHOUT context (keep WASM apps stateless)
 	ctx := context.Background()
-	response, err := aiService.SendMessage(ctx, message)
+	response, err := wr.aiModule.SendMessage(ctx, message)
 	if err != nil {
 		log.Printf("[WASM AI] AI service error: %v", err)
 		return -2 // AI service error
@@ -483,8 +484,8 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 var globalRuntime *WasmRuntime
 
 // InitializeWasmRuntime initializes the global WASM runtime
-func InitializeWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager) {
-	globalRuntime = NewWasmRuntime(registryMgr, dbMgr)
+func InitializeWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule) {
+	globalRuntime = NewWasmRuntime(registryMgr, dbMgr, aiMod)
 }
 
 // GetGlobalWasmRuntime returns the global WASM runtime instance

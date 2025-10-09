@@ -26,9 +26,9 @@ type Module struct {
 	toolManager    interfaces.ToolManager
 
 	// Provider management
-	providers       map[string]interfaces.AIProvider
-	activeProvider  interfaces.AIProvider
-	providerMutex   sync.RWMutex
+	providers      map[string]interfaces.AIProvider
+	activeProvider interfaces.AIProvider
+	providerMutex  sync.RWMutex
 
 	// State management
 	state      *models.ModuleState
@@ -61,10 +61,10 @@ func NewModule(ctx context.Context, config *Config, deps *interfaces.Dependencie
 
 	// Create module
 	module := &Module{
-		config:         config,
-		deps:           deps,
-		providers:      make(map[string]interfaces.AIProvider),
-		state:          &models.ModuleState{
+		config:    config,
+		deps:      deps,
+		providers: make(map[string]interfaces.AIProvider),
+		state: &models.ModuleState{
 			Status:        models.ModuleStatusStarting,
 			StartTime:     time.Now(),
 			LastUpdate:    time.Now(),
@@ -396,15 +396,15 @@ func (m *Module) DeleteConversation(ctx context.Context, contextID string) error
 // Health and diagnostics
 func (m *Module) HealthCheck(ctx context.Context) (*models.HealthStatus, error) {
 	status := &models.HealthStatus{
-		Status:     models.HealthStatusHealthy,
-		Component:  "ai_module",
-		Message:    "Module is operational",
-		Timestamp:  time.Now(),
-		Duration:   0,
-		Checks:     make(map[string]interface{}),
+		Status:       models.HealthStatusHealthy,
+		Component:    "ai_module",
+		Message:      "Module is operational",
+		Timestamp:    time.Now(),
+		Duration:     0,
+		Checks:       make(map[string]interface{}),
 		Dependencies: make(map[string]*models.HealthStatus),
-		Metadata:   make(map[string]interface{}),
-		Uptime:     time.Since(m.startTime).Seconds(),
+		Metadata:     make(map[string]interface{}),
+		Uptime:       time.Since(m.startTime).Seconds(),
 	}
 
 	// Check module state
@@ -461,14 +461,14 @@ func (m *Module) HealthCheck(ctx context.Context) (*models.HealthStatus, error) 
 
 func (m *Module) GetMetrics(ctx context.Context) (*models.ModuleMetrics, error) {
 	metrics := &models.ModuleMetrics{
-		ModuleName:        ModuleName,
-		Version:           Version(),
-		Timestamp:         time.Now(),
-		Uptime:            time.Since(m.startTime).Seconds(),
-		ActiveContexts:    0,
-		ProviderMetrics:   make(map[string]*models.ProviderMetrics),
-		ToolMetrics:       make(map[string]*models.ToolMetrics),
-		CustomMetrics:     make(map[string]interface{}),
+		ModuleName:      ModuleName,
+		Version:         Version(),
+		Timestamp:       time.Now(),
+		Uptime:          time.Since(m.startTime).Seconds(),
+		ActiveContexts:  0,
+		ProviderMetrics: make(map[string]*models.ProviderMetrics),
+		ToolMetrics:     make(map[string]*models.ToolMetrics),
+		CustomMetrics:   make(map[string]interface{}),
 	}
 
 	// Get context count
@@ -598,9 +598,8 @@ func (m *Module) Restart(ctx context.Context) error {
 
 // Configuration management
 func (m *Module) UpdateConfiguration(ctx context.Context, updates map[string]interface{}) error {
-	// This would implement configuration updates
-	// For now, return not implemented
-	return fmt.Errorf("configuration updates not implemented")
+	// Configuration updates require module restart
+	return fmt.Errorf("configuration updates require module restart - create a new module instance with updated config")
 }
 
 func (m *Module) GetConfiguration(ctx context.Context) (map[string]interface{}, error) {
@@ -828,9 +827,6 @@ func (m *Module) updateState(status string) {
 	if m.config.EnableMetrics {
 		features = append(features, "metrics")
 	}
-	if m.config.EnableCaching {
-		features = append(features, "caching")
-	}
 	if m.config.EnableEventBus {
 		features = append(features, "events")
 	}
@@ -883,76 +879,16 @@ func (m *Module) publishEvent(ctx context.Context, event *models.Event) {
 
 func (m *Module) getConfigInfo() map[string]interface{} {
 	return map[string]interface{}{
-		"provider":              m.config.Provider,
-		"max_tokens":            m.config.DefaultMaxTokens,
-		"timeout":               m.config.DefaultTimeout,
-		"max_context_messages":  m.config.MaxContextMessages,
-		"context_compaction":    m.config.ContextCompaction,
-		"context_ttl":           m.config.ContextTTL,
-		"enable_mcp":            m.config.EnableMCP,
-		"enable_persistence":    m.config.EnablePersistence,
-		"enable_metrics":        m.config.EnableMetrics,
-		"enable_caching":        m.config.EnableCaching,
-		"enable_event_bus":      m.config.EnableEventBus,
+		"provider":                m.config.Provider,
+		"max_tokens":              m.config.DefaultMaxTokens,
+		"timeout":                 m.config.DefaultTimeout,
+		"max_context_messages":    m.config.MaxContextMessages,
+		"context_compaction":      m.config.ContextCompaction,
+		"context_ttl":             m.config.ContextTTL,
+		"enable_mcp":              m.config.EnableMCP,
+		"enable_persistence":      m.config.EnablePersistence,
+		"enable_metrics":          m.config.EnableMetrics,
+		"enable_event_bus":        m.config.EnableEventBus,
 		"max_concurrent_requests": m.config.MaxConcurrentRequests,
 	}
-}
-
-// Factory function to create a new AI module
-func NewAIModule(ctx context.Context, config map[string]interface{}) (AIModule, error) {
-	// Parse configuration
-	aiConfig := DefaultConfig()
-
-	// Apply configuration overrides
-	if provider, ok := config["provider"].(string); ok {
-		aiConfig.Provider = provider
-	}
-
-	if maxTokens, ok := config["max_tokens"]; ok {
-		switch v := maxTokens.(type) {
-		case int:
-			aiConfig.DefaultMaxTokens = v
-		case float64:
-			aiConfig.DefaultMaxTokens = int(v)
-		}
-	}
-
-	if timeout, ok := config["timeout"]; ok {
-		switch v := timeout.(type) {
-		case int:
-			aiConfig.DefaultTimeout = time.Duration(v) * time.Second
-		case float64:
-			aiConfig.DefaultTimeout = time.Duration(v) * time.Second
-		case string:
-			if d, err := time.ParseDuration(v); err == nil {
-				aiConfig.DefaultTimeout = d
-			}
-		}
-	}
-
-	if enableMCP, ok := config["enable_mcp"].(bool); ok {
-		aiConfig.EnableMCP = enableMCP
-	}
-
-	if enablePersistence, ok := config["enable_persistence"].(bool); ok {
-		aiConfig.EnablePersistence = enablePersistence
-	}
-
-	if enableMetrics, ok := config["enable_metrics"].(bool); ok {
-		aiConfig.EnableMetrics = enableMetrics
-	}
-
-	if providers, ok := config["providers"].(map[string]interface{}); ok {
-		aiConfig.Providers = providers
-	}
-
-	// Create minimal dependencies (would normally be injected)
-	deps := &interfaces.Dependencies{
-		Logger: nil, // Would be injected
-		Metrics: nil, // Would be injected
-		Database: nil, // Would be injected
-		// ... other dependencies
-	}
-
-	return NewModule(ctx, aiConfig, deps)
 }

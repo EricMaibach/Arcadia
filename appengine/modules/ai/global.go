@@ -4,33 +4,11 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
 )
-
-// Global service management
-var (
-	globalAIModule AIModule
-	globalMutex    sync.RWMutex
-	initialized    bool
-)
-
-// GetGlobalService returns the global AI service instance
-func GetGlobalService() AIModule {
-	globalMutex.RLock()
-	defer globalMutex.RUnlock()
-	return globalAIModule
-}
-
-// IsGlobalServiceInitialized checks if the global AI service is initialized
-func IsGlobalServiceInitialized() bool {
-	globalMutex.RLock()
-	defer globalMutex.RUnlock()
-	return initialized && globalAIModule != nil
-}
 
 // SimpleAILogger implements the AI module's Logger interface
 type SimpleAILogger struct{}
@@ -56,65 +34,75 @@ func (sl *SimpleAILogger) Error(msg string, fields ...interface{}) {
 }
 
 func (sl *SimpleAILogger) WithFields(fields map[string]interface{}) interfaces.Logger {
-	// For simplicity, return self since we're just printing
 	return sl
 }
 
 func (sl *SimpleAILogger) WithContext(ctx context.Context) interfaces.Logger {
-	// For simplicity, return self since we're just printing
 	return sl
 }
 
-// InitializeGlobalServiceFromConfig initializes the global AI service from configuration
-func InitializeGlobalServiceFromConfig() error {
-	// Create logger first for logging environment variable issues
+// NewAIModuleFromEnv creates a new AI module instance from environment variables
+// This replaces the global service pattern with explicit dependency injection
+func NewAIModuleFromEnv(ctx context.Context) (AIModule, error) {
 	logger := NewSimpleAILogger()
 
 	// Read environment variables
 	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
 	aiModel := os.Getenv("AI_MODEL")
 	if aiModel == "" {
-		aiModel = "gpt-4" // default
+		aiModel = "gpt-4"
 	}
 	aiProvider := os.Getenv("AI_PROVIDER")
 	if aiProvider == "" {
-		aiProvider = "openai" // default
+		aiProvider = "openai"
 	}
 
-	// Log warning if OPENAI_API_KEY is empty (but never log the actual key value)
+	// Log warning if OPENAI_API_KEY is empty
 	if openaiAPIKey == "" {
 		logger.Warn("OPENAI_API_KEY environment variable is not set - API calls will fail without a valid API key")
 	}
 
-	// Load default configuration
-	config := map[string]interface{}{
-		"provider":           aiProvider,
-		"enable_mcp":         true,
-		"enable_persistence": true,
-		"enable_metrics":     true,
-		"max_tokens":         4096,
-		"timeout":            120,
-	}
-
-	// Create dependencies struct with required logger
+	// Create dependencies
 	deps := &interfaces.Dependencies{
 		Logger: logger,
-		// Other dependencies are optional and can be nil
 	}
 
-	// Parse configuration into proper Config struct
+	// Create configuration
 	aiConfig := DefaultConfig()
-
-	// Set provider from environment variable
 	aiConfig.Provider = aiProvider
-
-	// Create provider configuration map for OpenAI
 	aiConfig.Providers["openai"] = map[string]interface{}{
 		"api_key": openaiAPIKey,
 		"model":   aiModel,
 	}
 
-	// Apply configuration overrides
+	// Create and start the module
+	module, err := NewModule(ctx, aiConfig, deps)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create AI module: %w", err)
+	}
+
+	if err := module.Start(ctx); err != nil {
+		return nil, fmt.Errorf("failed to start AI module: %w", err)
+	}
+
+	return module, nil
+}
+
+// NewAIModuleWithConfig creates a new AI module instance with custom configuration
+func NewAIModuleWithConfig(ctx context.Context, config map[string]interface{}, deps *interfaces.Dependencies) (AIModule, error) {
+	// Ensure logger is available
+	if deps == nil {
+		deps = &interfaces.Dependencies{
+			Logger: NewSimpleAILogger(),
+		}
+	}
+	if deps.Logger == nil {
+		deps.Logger = NewSimpleAILogger()
+	}
+
+	// Parse configuration
+	aiConfig := DefaultConfig()
+
 	if provider, ok := config["provider"].(string); ok {
 		aiConfig.Provider = provider
 	}
@@ -153,89 +141,52 @@ func InitializeGlobalServiceFromConfig() error {
 		aiConfig.EnableMetrics = enableMetrics
 	}
 
-	// Create the AI module with proper dependencies
-	ctx := context.Background()
+	if providers, ok := config["providers"].(map[string]interface{}); ok {
+		aiConfig.Providers = providers
+	}
+
+	// Create and start the module
 	module, err := NewModule(ctx, aiConfig, deps)
 	if err != nil {
-		return fmt.Errorf("failed to create AI module: %w", err)
+		return nil, fmt.Errorf("failed to create AI module: %w", err)
 	}
 
-	// Store globally
-	globalMutex.Lock()
-	globalAIModule = module
-	initialized = true
-	globalMutex.Unlock()
-
-	// Start the module
 	if err := module.Start(ctx); err != nil {
-		return fmt.Errorf("failed to start AI module: %w", err)
+		return nil, fmt.Errorf("failed to start AI module: %w", err)
 	}
 
-	return nil
+	return module, nil
 }
 
-// SetGlobalService sets the global AI service instance
-func SetGlobalService(module AIModule) {
-	globalMutex.Lock()
-	defer globalMutex.Unlock()
-	globalAIModule = module
-	initialized = module != nil
-}
-
-// SetupGlobalDependencies configures the global AI service with external dependencies
-func SetupGlobalDependencies(registryAccess interfaces.RegistryAccess, appRunner interfaces.AppRunner, appCreator interfaces.AppCreator, embeddingSearch interfaces.EmbeddingSearch) error {
-	globalMutex.Lock()
-	defer globalMutex.Unlock()
-
-	if globalAIModule == nil {
-		return fmt.Errorf("global AI service not initialized")
-	}
-
+// SetupModuleDependencies configures an AI module with external dependencies
+// This should be called after creating the module if you need to inject additional dependencies
+func SetupModuleDependencies(module AIModule, registryAccess interfaces.RegistryAccess, appRunner interfaces.AppRunner, appCreator interfaces.AppCreator, embeddingSearch interfaces.EmbeddingSearch) error {
 	// Get the underlying module to access internals
-	if module, ok := globalAIModule.(*Module); ok {
+	if m, ok := module.(*Module); ok {
 		// Update dependencies
-		module.deps.RegistryAccess = registryAccess
-		module.deps.AppRunner = appRunner
-		module.deps.AppCreator = appCreator
-		module.deps.EmbeddingSearch = embeddingSearch
+		m.deps.RegistryAccess = registryAccess
+		m.deps.AppRunner = appRunner
+		m.deps.AppCreator = appCreator
+		m.deps.EmbeddingSearch = embeddingSearch
 
 		// Update tool manager dependencies if tool manager is available
-		if module.toolManager != nil {
+		if m.toolManager != nil {
 			ctx := context.Background()
-			if err := module.toolManager.UpdateDependencies(ctx, module.deps); err != nil {
-				// Log warning but don't fail
-				if module.deps.Logger != nil {
-					module.deps.Logger.Warn("Failed to update tool manager dependencies", "error", err)
+			if err := m.toolManager.UpdateDependencies(ctx, m.deps); err != nil {
+				if m.deps.Logger != nil {
+					m.deps.Logger.Warn("Failed to update tool manager dependencies", "error", err)
 				}
 			}
 
 			// Refresh tools after updating dependencies
-			if err := module.toolManager.RefreshTools(ctx); err != nil {
-				// Log warning but don't fail
-				if module.deps.Logger != nil {
-					module.deps.Logger.Warn("Failed to refresh tools after dependency setup", "error", err)
+			if err := m.toolManager.RefreshTools(ctx); err != nil {
+				if m.deps.Logger != nil {
+					m.deps.Logger.Warn("Failed to refresh tools after dependency setup", "error", err)
 				}
 			}
 		}
 	}
 
-	return nil
-}
-
-// StopGlobalService stops and cleans up the global AI service
-func StopGlobalService() error {
-	globalMutex.Lock()
-	defer globalMutex.Unlock()
-
-	if globalAIModule != nil && initialized {
-		ctx := context.Background()
-		if err := globalAIModule.Stop(ctx); err != nil {
-			return fmt.Errorf("failed to stop global AI service: %w", err)
-		}
-	}
-
-	globalAIModule = nil
-	initialized = false
 	return nil
 }
 
@@ -246,33 +197,3 @@ type EnhancedDocumentSearchResult = models.EnhancedDocumentSearchResult
 type ChunkResult = models.ChunkResult
 type SearchConfig = models.SearchConfig
 type EmbeddingSearch = interfaces.EmbeddingSearch
-
-// Service interface for backward compatibility
-type Service interface {
-	SendMessage(message string) (string, error)
-	SendMessageWithContext(message string, contextID string) (string, error)
-}
-
-// serviceAdapter adapts AIModule to the legacy Service interface
-type serviceAdapter struct {
-	module AIModule
-}
-
-func (s *serviceAdapter) SendMessage(message string) (string, error) {
-	ctx := context.Background()
-	return s.module.SendMessage(ctx, message)
-}
-
-func (s *serviceAdapter) SendMessageWithContext(message string, contextID string) (string, error) {
-	ctx := context.Background()
-	return s.module.SendMessageWithContext(ctx, message, contextID)
-}
-
-// GetService returns a Service interface for backward compatibility
-func GetService() Service {
-	module := GetGlobalService()
-	if module == nil {
-		return nil
-	}
-	return &serviceAdapter{module: module}
-}
