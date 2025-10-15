@@ -25,12 +25,14 @@ services:
       - "8080:8080"
       - "3000:3000"
     command: sleep infinity
-  blip2:
+  whisper:
     build:
       context: .
-      dockerfile: Dockerfile.blip2
+      dockerfile: Dockerfile.whisper
     ports:
-      - "8001:8001"
+      - "8002:8002"
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
     deploy:
       resources:
         reservations:
@@ -38,6 +40,19 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+  # blip2:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.blip2
+  #   ports:
+  #     - "8001:8001"
+  #   deploy:
+  #     resources:
+  #       reservations:
+  #         devices:
+  #           - driver: nvidia
+  #             count: 1
+  #             capabilities: [gpu]
   tika:
     image: apache/tika:latest
     ports:
