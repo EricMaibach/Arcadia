@@ -1,6 +1,7 @@
 package config
 
 import (
+	"arcadia/modules/documents/processors/audio"
 	"arcadia/modules/documents/processors/base"
 )
 
@@ -17,6 +18,9 @@ type ProcessingConfig struct {
 
 	// Markdown contains configuration for Markdown processing
 	Markdown base.MarkdownConfig `yaml:"markdown" json:"markdown"`
+
+	// Audio contains configuration for audio processing
+	Audio audio.AudioConfig `yaml:"audio" json:"audio"`
 }
 
 // GetDefaultProcessingConfig returns default configuration for document processing
@@ -26,5 +30,6 @@ func GetDefaultProcessingConfig() ProcessingConfig {
 		PDF:            base.GetDefaultPDFConfig(),
 		Text:           base.GetDefaultTextConfig(),
 		Markdown:       base.GetDefaultMarkdownConfig(),
+		Audio:          audio.DefaultAudioConfig(),
 	}
 }

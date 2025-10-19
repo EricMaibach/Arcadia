@@ -214,5 +214,13 @@ func getDefaultExtensionMapping() map[string]base.ProcessorType {
 		"pub": base.ProcessorTypeTika,
 		"vsd": base.ProcessorTypeTika,
 		"msg": base.ProcessorTypeTika,
+
+		// Audio formats
+		"mp3":  base.ProcessorTypeAudio,
+		"wav":  base.ProcessorTypeAudio,
+		"m4a":  base.ProcessorTypeAudio,
+		"flac": base.ProcessorTypeAudio,
+		"ogg":  base.ProcessorTypeAudio,
+		"aac":  base.ProcessorTypeAudio,
 	}
 }

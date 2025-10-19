@@ -5,6 +5,7 @@ A comprehensive document management system for the Arcadia application that prov
 ## Table of Contents
 
 - [Apache Tika Integration](#apache-tika-integration)
+- [Audio Processing with Whisper AI](#audio-processing-with-whisper-ai)
 - [Quick Start](#quick-start)
 - [Overview](#overview)
 - [Architecture](#architecture)
@@ -171,6 +172,290 @@ For detailed configuration, deployment, and troubleshooting information, see:
 - **[MIGRATION_TO_TIKA.md](MIGRATION_TO_TIKA.md)**: Migration guide for existing deployments
 - **[PERFORMANCE_TUNING.md](PERFORMANCE_TUNING.md)**: Performance optimization guide
 
+## Audio Processing with Whisper AI
+
+The documents module now supports audio file transcription using [OpenAI's Whisper](https://github.com/openai/whisper) AI model. Audio files are automatically transcribed to text, making their content searchable in your RAG (Retrieval-Augmented Generation) system.
+
+### Supported Audio Formats
+
+The audio processor supports the following formats:
+- **MP3** (.mp3) - MPEG Audio Layer 3
+- **WAV** (.wav) - Waveform Audio File Format
+- **M4A** (.m4a) - MPEG-4 Audio
+- **FLAC** (.flac) - Free Lossless Audio Codec
+- **OGG** (.ogg) - Ogg Vorbis
+- **AAC** (.aac) - Advanced Audio Coding
+
+### Whisper Service Setup
+
+The audio processor requires a Whisper transcription service running in a Docker container.
+
+#### Quick Start with Docker
+
+```bash
+# Start the Whisper service (included in dev container)
+docker-compose up whisper
+
+# Or manually run Whisper container
+docker run -p 8002:8002 whisper-service:latest
+```
+
+The Whisper service runs on `http://whisper:8002` by default.
+
+### Audio Processor Configuration
+
+Configure audio processing in your module config:
+
+```go
+config := DocumentsConfig{
+    ProcessingConfig: config.ProcessingConfig{
+        Audio: audio.AudioConfig{
+            // Whisper Service
+            WhisperURL:     "http://whisper:8002",
+            WhisperTimeout: 300, // 5 minutes for long audio files
+
+            // File Limits
+            MaxAudioFileSize: 500 * 1024 * 1024, // 500MB
+            MaxAudioDuration: 3600,               // 1 hour
+
+            // Retry & Circuit Breaker
+            MaxRetries:                     3,
+            RetryDelay:                     2,  // seconds
+            CircuitBreakerFailureThreshold: 5,
+            CircuitBreakerResetTimeout:     60, // seconds
+
+            // Processing
+            ConcurrentWorkers: 2,
+            EnableCaching:     true,
+            CacheTTL:          3600, // 1 hour
+
+            // Graceful Degradation
+            EnableGracefulDegradation: true,
+            FallbackLanguage:         "en",
+
+            // Supported Formats
+            SupportedFormats: []string{".mp3", ".wav", ".m4a", ".flac", ".ogg", ".aac"},
+        },
+    },
+}
+```
+
+### Usage Example
+
+```go
+// Initialize the documents module
+module, err := documents.NewDocumentsModule(config, deps)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Process an audio file
+result, err := module.ProcessFile(ctx, "/path/to/audio.mp3")
+if err != nil {
+    log.Fatal(err)
+}
+
+// Transcribed text is now searchable
+fmt.Println("Transcribed:", result.Content)
+fmt.Println("Language:", result.Language)
+fmt.Println("Word Count:", result.Metadata["word_count"])
+
+// Search for content from audio files
+searchResults, err := module.SearchDocuments(ctx, "meeting notes", 5)
+// Results include transcriptions from audio files!
+```
+
+### Features
+
+#### 1. Automatic Transcription
+Audio files are automatically detected and sent to the Whisper service for transcription. The resulting text becomes searchable content.
+
+#### 2. Graceful Degradation
+If the Whisper service is unavailable, the processor can create fallback results with file metadata:
+
+```go
+// With EnableGracefulDegradation: true
+// Returns: "[Audio file: meeting.mp3, Format: .mp3, Size: 1048576 bytes.
+//           Transcription unavailable: whisper service unavailable]"
+```
+
+This ensures processing continues even when the transcription service is down.
+
+#### 3. Circuit Breaker Protection
+The audio processor includes a circuit breaker to prevent cascade failures:
+- **Closed**: Normal operation
+- **Open**: Too many failures, requests fail fast
+- **Half-Open**: Testing if service recovered
+
+#### 4. Retry with Exponential Backoff
+Transient failures are automatically retried:
+- Attempt 1: Wait 2 seconds
+- Attempt 2: Wait 4 seconds
+- Attempt 3: Wait 8 seconds
+- Maximum delay: 30 seconds
+
+#### 5. Comprehensive Metadata
+Transcription results include rich metadata:
+- Original file information (format, size, path)
+- Transcription details (language, duration, word count)
+- Processing information (timestamp, processor version)
+- Whisper service details (URL, model)
+- Quality indicators (language confidence)
+
+### Health Check
+
+Check if the Whisper service is available:
+
+```go
+// Get the audio processor
+processor, _ := module.GetProcessor(base.ProcessorTypeAudio)
+audioProcessor := processor.(*audio.AudioProcessor)
+
+// Health check
+if err := audioProcessor.HealthCheck(ctx); err != nil {
+    log.Printf("Whisper service unavailable: %v", err)
+}
+
+// Check circuit breaker state
+state := audioProcessor.GetCircuitBreakerState()
+fmt.Printf("Circuit breaker: %s\n", state) // Closed, Open, or Half-Open
+```
+
+### Troubleshooting
+
+#### Whisper Service Not Available
+
+**Error:** `whisper service unavailable`
+
+**Solutions:**
+1. Ensure Whisper container is running: `docker ps | grep whisper`
+2. Check service health: `curl http://localhost:8002/health`
+3. Verify network connectivity from app to Whisper container
+4. Enable graceful degradation to continue processing without transcription
+
+#### Transcription Timeout
+
+**Error:** `whisper transcription timeout`
+
+**Solutions:**
+1. Increase `WhisperTimeout` for longer audio files
+2. Check if audio file is corrupted
+3. Verify Whisper service is responding: `docker logs whisper`
+
+#### Circuit Breaker Open
+
+**Error:** `circuit breaker is open`
+
+**Solutions:**
+1. Check Whisper service health
+2. Wait for reset timeout (default 60 seconds)
+3. Manually reset: `audioProcessor.ResetCircuitBreaker()`
+4. Investigate why failures are occurring (check logs)
+
+#### File Size Exceeded
+
+**Error:** `audio file exceeds size limit`
+
+**Solutions:**
+1. Increase `MaxAudioFileSize` in config
+2. Compress or split large audio files
+3. Maximum recommended: 500MB
+
+### Performance Considerations
+
+#### File Size vs Processing Time
+- Small files (< 1MB): ~1-2 seconds
+- Medium files (1-10MB): ~5-30 seconds
+- Large files (10-100MB): ~1-5 minutes
+- Very large files (100-500MB): ~5-15 minutes
+
+#### Concurrent Processing
+The `ConcurrentWorkers` setting controls how many audio files can be processed simultaneously:
+- Default: 2 workers
+- Recommendation: 2-5 workers for typical workloads
+- Maximum: 20 workers (limited by config validation)
+
+#### Caching
+Enable caching to avoid re-transcribing the same audio files:
+```go
+EnableCaching: true,
+CacheTTL:      3600, // Cache for 1 hour
+```
+
+### Security Considerations
+
+The audio processor includes several security features:
+
+1. **Path Traversal Protection**: Blocks `..` patterns in file paths
+2. **Restricted Directory Access**: Prevents reading from `/etc`, `/sys`, `/proc`, `/dev`, `/root`
+3. **File Size Limits**: Prevents resource exhaustion attacks
+4. **Format Validation**: Validates file extensions and magic bytes
+5. **Timeout Enforcement**: Prevents indefinite hanging on malicious files
+
+### Example: Batch Audio Processing
+
+```go
+audioFiles := []string{
+    "/recordings/meeting-2024-01-15.mp3",
+    "/recordings/interview-john-doe.wav",
+    "/recordings/podcast-episode-42.m4a",
+}
+
+for _, audioFile := range audioFiles {
+    result, err := module.ProcessFile(ctx, audioFile)
+    if err != nil {
+        log.Printf("Failed to process %s: %v", audioFile, err)
+        continue
+    }
+
+    log.Printf("Transcribed %s: %d words in %s",
+        filepath.Base(audioFile),
+        result.Metadata["word_count"],
+        result.Language,
+    )
+}
+```
+
+### Advanced Configuration
+
+#### Custom Whisper Endpoint
+```go
+Audio: audio.AudioConfig{
+    WhisperURL: "https://my-whisper-service.example.com:8443",
+    // ... other settings
+}
+```
+
+#### Disable Graceful Degradation
+```go
+Audio: audio.AudioConfig{
+    EnableGracefulDegradation: false, // Fail hard if Whisper unavailable
+    // ... other settings
+}
+```
+
+#### Custom Supported Formats
+```go
+Audio: audio.AudioConfig{
+    SupportedFormats: []string{".mp3", ".wav"}, // Only MP3 and WAV
+    // ... other settings
+}
+```
+
+### Metrics and Monitoring
+
+The audio processor emits the following metrics:
+
+- `audio.transcription.duration` - Transcription time (milliseconds)
+- `audio.transcription.success` - Successful transcriptions (counter)
+- `audio.transcription.failed` - Failed transcriptions (counter)
+- `audio.processing.duration` - Total processing time (milliseconds)
+- `audio.processing.success` - Successful processing (counter)
+- `audio.processing.failed` - Failed processing with reason tags (counter)
+- `audio.processing.fallback` - Graceful degradation activations (counter)
+
+Monitor these metrics to track audio processing health and performance.
+
 ## Quick Start
 
 Get up and running with the Documents Module in 5 minutes:
@@ -223,6 +508,7 @@ The Documents Module is a core component of Arcadia that handles:
 
 - **Document Processing**: Automatic file reading, text extraction, chunking, and embedding generation
 - **Office Document Support**: Full support for Microsoft Office and OpenDocument formats via Apache Tika
+- **Audio Transcription**: Automatic audio file transcription using Whisper AI for searchable audio content
 - **Vector Search**: Semantic similarity search using embeddings
 - **Storage Management**: Dual storage system with document metadata and vector embeddings
 - **Content Analysis**: Optional content analysis and metadata extraction

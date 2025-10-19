@@ -195,5 +195,18 @@ func getDefaultMIMEMapping() map[string]base.ProcessorType {
 
 		// Generic fallbacks
 		"application/octet-stream": base.ProcessorTypeText, // Binary files default to text processor
+
+		// Audio MIME types
+		"audio/mpeg":      base.ProcessorTypeAudio, // MP3
+		"audio/wav":       base.ProcessorTypeAudio, // WAV
+		"audio/x-wav":     base.ProcessorTypeAudio, // WAV (alternate)
+		"audio/wave":      base.ProcessorTypeAudio, // WAV (alternate)
+		"audio/mp4":       base.ProcessorTypeAudio, // M4A
+		"audio/x-m4a":     base.ProcessorTypeAudio, // M4A (alternate)
+		"audio/flac":      base.ProcessorTypeAudio, // FLAC
+		"audio/x-flac":    base.ProcessorTypeAudio, // FLAC (alternate)
+		"audio/ogg":       base.ProcessorTypeAudio, // OGG
+		"audio/aac":       base.ProcessorTypeAudio, // AAC
+		"audio/aacp":      base.ProcessorTypeAudio, // AAC+ (alternate)
 	}
 }

@@ -8,6 +8,7 @@ services:
       - tika
       - qdrant
       - ollama
+      - whisper
     environment:
       - QDRANT_URL=http://qdrant:6333
       - TIKA_URL=http://tika:9998

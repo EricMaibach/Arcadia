@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"arcadia/modules/documents/processors/base"
+	"arcadia/modules/documents/processors/audio"
 	"arcadia/modules/documents/processors/text"
 	"arcadia/modules/documents/processors/pdf"
 	"arcadia/modules/documents/processors/tika"
@@ -302,6 +303,18 @@ func (r *Registry) InitializeWithDefaults() error {
 	} else {
 		if err := r.RegisterProcessor(base.ProcessorTypeTika, tikaProcessor); err != nil {
 			return fmt.Errorf("failed to register Tika processor: %w", err)
+		}
+	}
+
+	// Register audio processor
+	audioProcessor := audio.NewAudioProcessor()
+	if r.logger != nil {
+		audioProcessor = audioProcessor.WithLogger(r.logger)
+	}
+	if err := r.RegisterProcessor(base.ProcessorTypeAudio, audioProcessor); err != nil {
+		// Log warning but don't fail - audio processor is optional
+		if r.logger != nil {
+			r.logger.Warn(context.Background(), "Failed to register audio processor", "error", err)
 		}
 	}
 

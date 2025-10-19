@@ -12,6 +12,7 @@ import (
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
 	"arcadia/modules/documents/processors"
+	"arcadia/modules/documents/processors/audio"
 	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/processors/pdf"
 	"arcadia/modules/documents/processors/text"
@@ -1141,6 +1142,41 @@ func (dm *documentsModule) configurePluginRegistry() error {
 				dm.deps.Logger.Warn(context.Background(), "Failed to configure markdown processor", "error", err)
 			}
 			// Continue with default configuration
+		}
+	}
+
+	// Configure audio processor if available
+	if processor, exists := dm.pluginRegistry.GetProcessor(base.ProcessorTypeAudio); exists {
+		if _, ok := processor.(*audio.AudioProcessor); ok {
+			// Get audio config from module config
+			audioConfig := processingConfig.Audio
+
+			// Create new processor with custom config
+			configuredProcessor := audio.NewAudioProcessorWithConfig(audioConfig)
+
+			// Attach logger and metrics
+			if dm.deps.Logger != nil {
+				configuredProcessor = configuredProcessor.WithLogger(dm.deps.Logger)
+			}
+			if dm.deps.Metrics != nil {
+				configuredProcessor = configuredProcessor.WithMetrics(dm.deps.Metrics)
+			}
+
+			// Re-register with configured version
+			dm.pluginRegistry.RegisterProcessor(base.ProcessorTypeAudio, configuredProcessor)
+
+			if dm.deps.Logger != nil {
+				dm.deps.Logger.Info(context.Background(), "Audio processor configured",
+					"whisper_url", audioConfig.WhisperURL,
+					"max_file_size", audioConfig.MaxAudioFileSize,
+					"supported_formats", audioConfig.SupportedFormats,
+					"max_retries", audioConfig.MaxRetries,
+					"enable_caching", audioConfig.EnableCaching)
+			}
+		} else {
+			if dm.deps.Logger != nil {
+				dm.deps.Logger.Warn(context.Background(), "Audio processor type assertion failed")
+			}
 		}
 	}
 
