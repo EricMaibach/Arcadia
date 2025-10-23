@@ -16,6 +16,7 @@ import (
 	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/processors/pdf"
 	"arcadia/modules/documents/processors/text"
+	"arcadia/modules/documents/providers"
 	"arcadia/modules/documents/stores"
 )
 
@@ -44,6 +45,14 @@ type DocumentsConfig struct {
 	CacheTTL     int  `json:"cache_ttl_seconds"`
 	CacheMaxSize int  `json:"cache_max_size"`
 
+	// Ollama configuration
+	OllamaURL     string `json:"ollama_url"`
+	OllamaTimeout int    `json:"ollama_timeout_seconds"`
+
+	// Embedding configuration
+	EmbeddingModel     string `json:"embedding_model"`
+	EmbeddingDimension int    `json:"embedding_dimension"`
+
 	// File watching configuration
 	FileWatcherEnabled bool     `json:"file_watcher_enabled"`
 	WatchPaths         []string `json:"watch_paths"`
@@ -67,9 +76,8 @@ type DocumentsConfig struct {
 // Dependencies contains all external dependencies for the documents module
 type Dependencies struct {
 	// Required dependencies
-	DB                interfaces.DatabaseProvider  `json:"-"`
-	EmbeddingProvider interfaces.EmbeddingProvider `json:"-"`
-	Logger            interfaces.Logger            `json:"-"`
+	DB     interfaces.DatabaseProvider `json:"-"`
+	Logger interfaces.Logger           `json:"-"`
 
 	// Optional dependencies with defaults
 	Queue          interfaces.QueueService     `json:"-"`
@@ -98,6 +106,7 @@ type documentsModule struct {
 	pluginRegistry *processors.Registry
 	workerPool     interfaces.WorkerPool
 	fileWatcher    interfaces.FileWatcher
+	ollamaProvider *providers.OllamaProvider
 	eventListeners []EventListener
 
 	// State management
@@ -157,9 +166,6 @@ func NewDocumentsModule(deps Dependencies) (DocumentsModule, error) {
 func validateDependencies(deps Dependencies) error {
 	if deps.DB == nil {
 		return models.NewDocumentError(models.ErrDependencyMissing, "database provider is required")
-	}
-	if deps.EmbeddingProvider == nil {
-		return models.NewDocumentError(models.ErrDependencyMissing, "embedding provider is required")
 	}
 	if deps.Logger == nil {
 		return models.NewDocumentError(models.ErrDependencyMissing, "logger is required")
@@ -327,12 +333,48 @@ func (dm *documentsModule) initializeCoreComponents() error {
 	// Initialize text chunker
 	dm.chunker = core.NewSimpleTextChunkerWithConfig(dm.deps.Config.ChunkingConfig)
 
+	// Create Ollama provider
+	ollamaURL := dm.deps.Config.OllamaURL
+	if ollamaURL == "" {
+		ollamaURL = "http://localhost:11434" // Default Ollama URL
+	}
+	ollamaTimeout := dm.deps.Config.OllamaTimeout
+	if ollamaTimeout == 0 {
+		ollamaTimeout = 60 // Default timeout in seconds
+	}
+
+	dm.ollamaProvider = providers.NewOllamaProvider(
+		ollamaURL,
+		time.Duration(ollamaTimeout)*time.Second,
+	)
+	if dm.deps.Logger != nil {
+		dm.ollamaProvider.WithLogger(dm.deps.Logger)
+	}
+	if dm.deps.Metrics != nil {
+		dm.ollamaProvider.WithMetrics(dm.deps.Metrics)
+	}
+
+	// Initialize the Ollama provider
+	if err := dm.ollamaProvider.Initialize(dm.ctx); err != nil {
+		return fmt.Errorf("failed to initialize Ollama provider: %w", err)
+	}
+
+	// Get embedding model configuration
+	embeddingModel := dm.deps.Config.EmbeddingModel
+	if embeddingModel == "" {
+		embeddingModel = "nomic-embed-text" // Default embedding model
+	}
+	embeddingDimension := dm.deps.Config.EmbeddingDimension
+	if embeddingDimension == 0 {
+		embeddingDimension = 768 // Default dimension
+	}
+
 	// Initialize embedding engine
 	embeddingConfig := core.DefaultEmbeddingConfig()
-	embeddingConfig.ModelName = dm.deps.EmbeddingProvider.GetModelName()
-	embeddingConfig.Dimension = dm.deps.EmbeddingProvider.GetDimension()
+	embeddingConfig.ModelName = embeddingModel
+	embeddingConfig.Dimension = embeddingDimension
 
-	embeddingEngine := core.NewEmbeddingEngine(dm.deps.EmbeddingProvider, embeddingConfig)
+	embeddingEngine := core.NewEmbeddingEngine(dm.ollamaProvider, embeddingModel, embeddingDimension, embeddingConfig)
 	if dm.deps.Cache != nil {
 		embeddingEngine.WithCache(dm.deps.Cache)
 	}
@@ -470,10 +512,8 @@ func (dm *documentsModule) Start(ctx context.Context) error {
 		return models.NewDocumentError(models.ErrModuleNotInitialized, "module already started")
 	}
 
-	// Initialize embedding provider
-	if err := dm.deps.EmbeddingProvider.Initialize(ctx); err != nil {
-		return models.NewDocumentErrorWithCause(models.ErrDependencyMissing, "failed to initialize embedding provider", err)
-	}
+	// Ollama provider is initialized in initializeCoreComponents
+	// No additional initialization needed here
 
 	// Start worker pool if configured
 	if dm.workerPool != nil {
@@ -531,8 +571,8 @@ func (dm *documentsModule) Stop(ctx context.Context) error {
 		dm.workerPool.Stop(ctx)
 	}
 
-	if dm.deps.EmbeddingProvider != nil {
-		dm.deps.EmbeddingProvider.Close()
+	if dm.ollamaProvider != nil {
+		dm.ollamaProvider.Close()
 	}
 
 	dm.cancel()
@@ -814,16 +854,16 @@ func (dm *documentsModule) HealthCheck(ctx context.Context) (*models.HealthStatu
 	// Check component health
 	components := make(map[string]interface{})
 
-	// Check embedding provider
-	if dm.deps.EmbeddingProvider != nil {
-		if err := dm.deps.EmbeddingProvider.HealthCheck(ctx); err != nil {
-			components["embedding_provider"] = map[string]interface{}{
+	// Check Ollama provider
+	if dm.ollamaProvider != nil {
+		if err := dm.ollamaProvider.HealthCheck(ctx); err != nil {
+			components["ollama_provider"] = map[string]interface{}{
 				"status": "unhealthy",
 				"error":  err.Error(),
 			}
 			status.Status = "degraded"
 		} else {
-			components["embedding_provider"] = map[string]interface{}{"status": "healthy"}
+			components["ollama_provider"] = map[string]interface{}{"status": "healthy"}
 		}
 	}
 

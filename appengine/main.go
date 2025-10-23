@@ -19,7 +19,6 @@ import (
 	"arcadia/modules/documents"
 	docInterfaces "arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
-	"arcadia/modules/documents/providers"
 	"arcadia/services"
 	"arcadia/modules/ai"
 	aiInterfaces "arcadia/modules/ai/interfaces"
@@ -551,9 +550,6 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	// Create database adapter
 	dbAdapter := NewDatabaseAdapter(systemDB)
 
-	// Create embedding provider for documents module
-	embeddingProvider := providers.NewOllamaEmbeddingProvider("http://ollama:11434", "") // Use ollama container, default model: embeddinggemma
-
 	// Create logger adapter
 	logger := NewSimpleLogger()
 
@@ -562,12 +558,21 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	documentsConfig.ChunkingConfig.MaxChunkSize = 500
 	documentsConfig.ChunkingConfig.ChunkOverlap = 50
 	documentsConfig.SearchConfig.MaxDocumentSize = 10000
+
+	// Ollama configuration
+	documentsConfig.OllamaURL = "http://ollama:11434"
+	documentsConfig.OllamaTimeout = 60
+
+	// Embedding configuration
+	documentsConfig.EmbeddingModel = "embeddinggemma" // Use the same model as before
+	documentsConfig.EmbeddingDimension = 768
+
 	documentsConfig.VectorStoreConfig = map[string]interface{}{
 		"type":       "qdrant", // Use QDrant for persistent vector storage
 		"host":       "qdrant",
 		"port":       6334, // Use gRPC port for QDrant Go client
 		"collection": "arcadia_vectors", // Use existing collection
-		"dimension":  embeddingProvider.GetDimension(),
+		"dimension":  768, // Use same dimension as embedding model
 	}
 	documentsConfig.DocumentStoreConfig = map[string]interface{}{
 		"type":       "sql",
@@ -576,16 +581,15 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 
 	// Create dependencies for documents module
 	deps := documents.Dependencies{
-		DB:                dbAdapter,
-		EmbeddingProvider: embeddingProvider,
-		Logger:            logger,
-		Queue:             nil, // No queue adapter for now
-		Metrics:           nil, // No metrics adapter for now
-		Cache:             nil, // No cache adapter for now
-		RateLimiter:       nil, // No rate limiter for now
-		ConfigProvider:    nil, // No config provider for now
-		EventBus:          nil, // No event bus for now
-		Config:            documentsConfig,
+		DB:             dbAdapter,
+		Logger:         logger,
+		Queue:          nil, // No queue adapter for now
+		Metrics:        nil, // No metrics adapter for now
+		Cache:          nil, // No cache adapter for now
+		RateLimiter:    nil, // No rate limiter for now
+		ConfigProvider: nil, // No config provider for now
+		EventBus:       nil, // No event bus for now
+		Config:         documentsConfig,
 	}
 
 	// Create documents module

@@ -6,18 +6,22 @@ import (
 	"math"
 	"sort"
 	"sync"
+	"time"
 
 	"arcadia/modules/documents/interfaces"
 	"arcadia/modules/documents/models"
+	"arcadia/modules/documents/providers"
 )
 
 // EmbeddingEngine handles embedding generation and similarity calculations
 type EmbeddingEngine struct {
-	provider interfaces.EmbeddingProvider
-	cache    interfaces.CacheService
-	logger   interfaces.Logger
-	config   EmbeddingConfig
-	metrics  interfaces.MetricsCollector
+	ollama    *providers.OllamaProvider  // Generic Ollama provider
+	modelName string                      // Embedding model name
+	dimension int                         // Expected embedding dimension
+	cache     interfaces.CacheService
+	logger    interfaces.Logger
+	config    EmbeddingConfig
+	metrics   interfaces.MetricsCollector
 
 	// Caching
 	cacheEnabled bool
@@ -40,9 +44,18 @@ type EmbeddingConfig struct {
 }
 
 // NewEmbeddingEngine creates a new embedding engine
-func NewEmbeddingEngine(provider interfaces.EmbeddingProvider, config EmbeddingConfig) *EmbeddingEngine {
+func NewEmbeddingEngine(ollama *providers.OllamaProvider, modelName string, dimension int, config EmbeddingConfig) *EmbeddingEngine {
+	if modelName == "" {
+		modelName = "embeddinggemma"
+	}
+	if dimension == 0 {
+		dimension = 768
+	}
+
 	return &EmbeddingEngine{
-		provider:     provider,
+		ollama:       ollama,
+		modelName:    modelName,
+		dimension:    dimension,
 		config:       config,
 		cacheEnabled: config.CacheEnabled,
 		cacheTTL:     config.CacheTTL,
@@ -73,23 +86,56 @@ func (ee *EmbeddingEngine) GenerateEmbedding(ctx context.Context, text string) (
 		return nil, models.NewDocumentError(models.ErrEmbeddingFailed, "text cannot be empty")
 	}
 
+	startTime := time.Now()
+	defer func() {
+		if ee.metrics != nil {
+			duration := time.Since(startTime).Seconds() * 1000
+			ee.metrics.RecordTimer("embedding.engine.generate.duration", duration, nil)
+		}
+	}()
+
 	// Check cache first
 	if ee.cacheEnabled && ee.cache != nil {
 		if cached, err := ee.getCachedEmbedding(ctx, text); err == nil && cached != nil {
 			if ee.metrics != nil {
 				ee.metrics.IncrementCounter("embedding.cache.hit", nil)
 			}
+			if ee.logger != nil {
+				ee.logger.Debug(ctx, "Cache hit for embedding", "text_length", len(text))
+			}
 			return cached, nil
 		}
 	}
 
-	// Generate embedding using provider
-	embedding, err := ee.provider.GenerateEmbedding(ctx, text)
+	// Call Ollama provider with our model
+	embedding64, err := ee.ollama.CallEmbeddings(ctx, ee.modelName, text)
 	if err != nil {
 		if ee.metrics != nil {
 			ee.metrics.IncrementCounter("embedding.generate.error", nil)
 		}
 		return nil, models.NewDocumentErrorWithCause(models.ErrEmbeddingFailed, "failed to generate embedding", err)
+	}
+
+	// Validate dimension
+	if len(embedding64) != ee.dimension {
+		if ee.logger != nil {
+			ee.logger.Warn(ctx, "Embedding dimension mismatch",
+				"expected", ee.dimension,
+				"got", len(embedding64))
+		}
+		// Update dimension if it's different
+		ee.dimension = len(embedding64)
+	}
+
+	// Convert float64 to float32 (embedding-specific logic)
+	embedding := make([]float32, len(embedding64))
+	for i, v := range embedding64 {
+		embedding[i] = float32(v)
+	}
+
+	// Validate embedding
+	if err := ee.ValidateEmbedding(embedding); err != nil {
+		return nil, err
 	}
 
 	// Cache the result
@@ -101,6 +147,13 @@ func (ee *EmbeddingEngine) GenerateEmbedding(ctx context.Context, text string) (
 		ee.metrics.IncrementCounter("embedding.generate.success", nil)
 	}
 
+	if ee.logger != nil {
+		ee.logger.Debug(ctx, "Generated embedding",
+			"text_length", len(text),
+			"dimension", len(embedding),
+			"model", ee.modelName)
+	}
+
 	return embedding, nil
 }
 
@@ -110,14 +163,6 @@ func (ee *EmbeddingEngine) GenerateEmbeddings(ctx context.Context, texts []strin
 		return [][]float32{}, nil
 	}
 
-	// Check if provider supports batch generation
-	if batchProvider, ok := ee.provider.(interface {
-		GenerateEmbeddings(ctx context.Context, texts []string) ([][]float32, error)
-	}); ok {
-		return batchProvider.GenerateEmbeddings(ctx, texts)
-	}
-
-	// Fall back to individual generation
 	embeddings := make([][]float32, len(texts))
 	var wg sync.WaitGroup
 	errChan := make(chan error, len(texts))
@@ -228,10 +273,9 @@ func (ee *EmbeddingEngine) ValidateEmbedding(embedding []float32) error {
 	}
 
 	// Check dimension
-	expectedDim := ee.provider.GetDimension()
-	if expectedDim > 0 && len(embedding) != expectedDim {
+	if ee.dimension > 0 && len(embedding) != ee.dimension {
 		return models.NewDocumentError(models.ErrEmbeddingFailed,
-			fmt.Sprintf("embedding dimension mismatch: expected %d, got %d", expectedDim, len(embedding)))
+			fmt.Sprintf("embedding dimension mismatch: expected %d, got %d", ee.dimension, len(embedding)))
 	}
 
 	return nil
@@ -294,11 +338,21 @@ func (ee *EmbeddingEngine) generateCacheKey(text string) string {
 	return fmt.Sprintf("embedding:%s:%x", ee.config.ModelName, simpleHash(text))
 }
 
+// GetModelName returns the model name being used
+func (ee *EmbeddingEngine) GetModelName() string {
+	return ee.modelName
+}
+
+// GetDimension returns the expected embedding dimension
+func (ee *EmbeddingEngine) GetDimension() int {
+	return ee.dimension
+}
+
 // GetProviderInfo returns information about the embedding provider
 func (ee *EmbeddingEngine) GetProviderInfo() ProviderInfo {
 	return ProviderInfo{
-		Name:      ee.provider.GetModelName(),
-		Dimension: ee.provider.GetDimension(),
+		Name:      ee.modelName,
+		Dimension: ee.dimension,
 		Config:    ee.config,
 	}
 }

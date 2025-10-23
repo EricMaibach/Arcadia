@@ -5,17 +5,6 @@ import (
 	"database/sql"
 )
 
-// EmbeddingProvider defines the interface for generating embeddings
-type EmbeddingProvider interface {
-	GenerateEmbedding(ctx context.Context, text string) ([]float32, error)
-	GenerateEmbeddings(ctx context.Context, texts []string) ([][]float32, error)
-	GetDimension() int
-	GetModelName() string
-	Initialize(ctx context.Context) error
-	Close() error
-	HealthCheck(ctx context.Context) error
-}
-
 // DatabaseProvider defines the interface for database operations
 type DatabaseProvider interface {
 	// Basic operations
