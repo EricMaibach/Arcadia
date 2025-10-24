@@ -53,6 +53,14 @@ type DocumentsConfig struct {
 	EmbeddingModel     string `json:"embedding_model"`
 	EmbeddingDimension int    `json:"embedding_dimension"`
 
+	// Extraction configuration
+	ExtractionEnabled bool   `json:"extraction_enabled"`
+	ExtractionModel   string `json:"extraction_model"`
+
+	// Graph database configuration
+	GraphEnabled bool                   `json:"graph_enabled"`
+	GraphConfig  map[string]interface{} `json:"graph_config"`
+
 	// File watching configuration
 	FileWatcherEnabled bool     `json:"file_watcher_enabled"`
 	WatchPaths         []string `json:"watch_paths"`
@@ -104,10 +112,13 @@ type documentsModule struct {
 	searchEngine   interfaces.SearchEngine
 	chunker        interfaces.TextChunkerInterface
 	pluginRegistry *processors.Registry
-	workerPool     interfaces.WorkerPool
-	fileWatcher    interfaces.FileWatcher
-	ollamaProvider *providers.OllamaProvider
-	eventListeners []EventListener
+	workerPool       interfaces.WorkerPool
+	fileWatcher      interfaces.FileWatcher
+	ollamaProvider   *providers.OllamaProvider
+	extractionEngine *core.ExtractionEngine
+	graphStore       interfaces.GraphStoreInterface
+	graphEngine      *core.GraphEngine
+	eventListeners   []EventListener
 
 	// State management
 	ctx          context.Context
@@ -325,6 +336,57 @@ func (dm *documentsModule) initializeStores() error {
 		}
 	}
 
+	// Initialize graph store if enabled
+	if dm.deps.Config.GraphEnabled {
+		graphStoreConfig := stores.GraphStoreConfig{
+			Type:    "cayley",
+			Backend: "bolt",
+			Path:    "./data/cayley.db",
+			Options: make(map[string]interface{}),
+		}
+
+		// Override with custom config if provided
+		if dm.deps.Config.GraphConfig != nil {
+			if storeType, ok := dm.deps.Config.GraphConfig["type"].(string); ok {
+				graphStoreConfig.Type = storeType
+			}
+			if backend, ok := dm.deps.Config.GraphConfig["backend"].(string); ok {
+				graphStoreConfig.Backend = backend
+			}
+			if path, ok := dm.deps.Config.GraphConfig["path"].(string); ok {
+				graphStoreConfig.Path = path
+			}
+			if options, ok := dm.deps.Config.GraphConfig["options"].(map[string]interface{}); ok {
+				graphStoreConfig.Options = options
+			}
+		}
+
+		graphStoreFactory := stores.NewGraphStoreFactory()
+		if dm.deps.Logger != nil {
+			graphStoreFactory.WithLogger(dm.deps.Logger)
+		}
+		if dm.deps.Metrics != nil {
+			graphStoreFactory.WithMetrics(dm.deps.Metrics)
+		}
+
+		dm.graphStore, err = graphStoreFactory.CreateGraphStore(graphStoreConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create graph store: %w", err)
+		}
+
+		// Initialize graph store
+		if err := dm.graphStore.Initialize(dm.ctx); err != nil {
+			return fmt.Errorf("failed to initialize graph store: %w", err)
+		}
+
+		if dm.deps.Logger != nil {
+			dm.deps.Logger.Info(dm.ctx, "Graph store initialized",
+				"type", graphStoreConfig.Type,
+				"backend", graphStoreConfig.Backend,
+				"path", graphStoreConfig.Path)
+		}
+	}
+
 	return nil
 }
 
@@ -385,6 +447,45 @@ func (dm *documentsModule) initializeCoreComponents() error {
 		embeddingEngine.WithMetrics(dm.deps.Metrics)
 	}
 
+	// Initialize extraction engine if enabled
+	if dm.deps.Config.ExtractionEnabled {
+		extractionModel := dm.deps.Config.ExtractionModel
+		if extractionModel == "" {
+			extractionModel = "llama3:8b" // Default extraction model
+		}
+
+		extractionConfig := core.DefaultExtractionConfig()
+		extractionConfig.ModelName = extractionModel
+
+		dm.extractionEngine = core.NewExtractionEngine(dm.ollamaProvider, extractionModel, extractionConfig)
+		if dm.deps.Logger != nil {
+			dm.extractionEngine.WithLogger(dm.deps.Logger)
+		}
+		if dm.deps.Metrics != nil {
+			dm.extractionEngine.WithMetrics(dm.deps.Metrics)
+		}
+
+		if dm.deps.Logger != nil {
+			dm.deps.Logger.Info(dm.ctx, "Entity extraction engine initialized",
+				"model", extractionModel)
+		}
+	}
+
+	// Initialize graph engine if graph store is available
+	if dm.graphStore != nil {
+		dm.graphEngine = core.NewGraphEngine(dm.graphStore)
+		if dm.deps.Logger != nil {
+			dm.graphEngine.WithLogger(dm.deps.Logger)
+		}
+		if dm.deps.Metrics != nil {
+			dm.graphEngine.WithMetrics(dm.deps.Metrics)
+		}
+
+		if dm.deps.Logger != nil {
+			dm.deps.Logger.Info(dm.ctx, "Graph engine initialized")
+		}
+	}
+
 	// Initialize plugin system with configuration
 	detector := detection.NewMultiStageDetector()
 
@@ -434,6 +535,12 @@ func (dm *documentsModule) initializeCoreComponents() error {
 		}
 		if dm.deps.Metrics != nil {
 			concreteProcessor.WithMetrics(dm.deps.Metrics)
+		}
+		if dm.extractionEngine != nil {
+			concreteProcessor.WithExtractionEngine(dm.extractionEngine)
+		}
+		if dm.graphEngine != nil {
+			concreteProcessor.WithGraphEngine(dm.graphEngine)
 		}
 	}
 
@@ -573,6 +680,15 @@ func (dm *documentsModule) Stop(ctx context.Context) error {
 
 	if dm.ollamaProvider != nil {
 		dm.ollamaProvider.Close()
+	}
+
+	// Close graph store if available
+	if dm.graphStore != nil {
+		if err := dm.graphStore.Close(); err != nil {
+			if dm.deps.Logger != nil {
+				dm.deps.Logger.Warn(ctx, "Failed to close graph store", "error", err)
+			}
+		}
 	}
 
 	dm.cancel()
@@ -775,6 +891,16 @@ func (dm *documentsModule) DeleteDocument(ctx context.Context, docID string) err
 		// Continue with document store deletion even if vector store fails
 	}
 
+	// Delete from graph store if available
+	if dm.graphEngine != nil {
+		if err := dm.graphEngine.DeleteDocument(ctx, docID); err != nil {
+			if dm.deps.Logger != nil {
+				dm.deps.Logger.Warn(ctx, "Failed to delete document from graph store", "docID", docID, "error", err)
+			}
+			// Continue with document store deletion even if graph store fails
+		}
+	}
+
 	// Delete from document store
 	if err := dm.documentStore.DeleteDocument(ctx, docID); err != nil {
 		if dm.deps.Logger != nil {
@@ -906,6 +1032,36 @@ func (dm *documentsModule) HealthCheck(ctx context.Context) (*models.HealthStatu
 		}
 		if status.Status == "healthy" {
 			status.Status = "degraded"
+		}
+	}
+
+	// Check graph store health
+	if dm.graphStore != nil {
+		if err := dm.graphStore.HealthCheck(ctx); err != nil {
+			components["graph_store"] = map[string]interface{}{
+				"status": "unhealthy",
+				"error":  err.Error(),
+			}
+			if status.Status == "healthy" {
+				status.Status = "degraded"
+			}
+		} else {
+			// Get graph statistics
+			stats, err := dm.graphStore.GetStats(ctx)
+			if err != nil {
+				components["graph_store"] = map[string]interface{}{
+					"status": "healthy",
+					"error":  "failed to get stats: " + err.Error(),
+				}
+			} else {
+				components["graph_store"] = map[string]interface{}{
+					"status":             "healthy",
+					"entity_count":       stats.EntityCount,
+					"relationship_count": stats.RelationshipCount,
+					"document_count":     stats.DocumentCount,
+					"quad_count":         stats.QuadCount,
+				}
+			}
 		}
 	}
 

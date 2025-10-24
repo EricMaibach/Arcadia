@@ -22,13 +22,15 @@ import (
 
 // DocumentProcessor handles document processing operations
 type DocumentProcessor struct {
-	chunker         interfaces.TextChunkerInterface
-	embeddingEngine *EmbeddingEngine
-	vectorStore     interfaces.VectorStoreInterface
-	documentStore   interfaces.DocumentStoreInterface
-	pluginRegistry  *processors.Registry
-	logger          interfaces.Logger
-	metrics         interfaces.MetricsCollector
+	chunker          interfaces.TextChunkerInterface
+	embeddingEngine  *EmbeddingEngine
+	extractionEngine *ExtractionEngine
+	graphEngine      *GraphEngine
+	vectorStore      interfaces.VectorStoreInterface
+	documentStore    interfaces.DocumentStoreInterface
+	pluginRegistry   *processors.Registry
+	logger           interfaces.Logger
+	metrics          interfaces.MetricsCollector
 
 	config ProcessorConfig
 }
@@ -78,6 +80,18 @@ func (dp *DocumentProcessor) WithLogger(logger interfaces.Logger) *DocumentProce
 // WithMetrics adds metrics collection capabilities
 func (dp *DocumentProcessor) WithMetrics(metrics interfaces.MetricsCollector) *DocumentProcessor {
 	dp.metrics = metrics
+	return dp
+}
+
+// WithExtractionEngine adds entity extraction capabilities
+func (dp *DocumentProcessor) WithExtractionEngine(extractionEngine *ExtractionEngine) *DocumentProcessor {
+	dp.extractionEngine = extractionEngine
+	return dp
+}
+
+// WithGraphEngine adds graph database capabilities
+func (dp *DocumentProcessor) WithGraphEngine(graphEngine *GraphEngine) *DocumentProcessor {
+	dp.graphEngine = graphEngine
 	return dp
 }
 
@@ -275,6 +289,79 @@ func (dp *DocumentProcessor) ProcessFile(ctx context.Context, filePath string) (
 
 // ProcessDocument processes a document and generates embeddings
 func (dp *DocumentProcessor) ProcessDocument(ctx context.Context, doc *models.Document, content string) error {
+	// Extract entities and relationships if extraction engine is available
+	if dp.extractionEngine != nil {
+		extractionResult, err := dp.extractionEngine.ExtractEntities(ctx, content)
+		if err != nil {
+			// Log error but don't fail the whole process
+			if dp.logger != nil {
+				dp.logger.Warn(ctx, "Failed to extract entities from document",
+					"error", err,
+					"document_id", doc.ID,
+					"file_path", doc.FilePath)
+			}
+			if dp.metrics != nil {
+				dp.metrics.IncrementCounter("document.extraction.error", map[string]string{
+					"document_id": doc.ID,
+				})
+			}
+		} else {
+			// Store extraction results in document metadata
+			if doc.Metadata == nil {
+				doc.Metadata = make(map[string]interface{})
+			}
+			doc.Metadata["extraction"] = map[string]interface{}{
+				"entity_count":       extractionResult.EntityCount(),
+				"relationship_count": extractionResult.RelationshipCount(),
+				"entities":           extractionResult.Entities,
+				"relationships":      extractionResult.Relationships,
+			}
+
+			// Store extraction results in graph database if available
+			if dp.graphEngine != nil {
+				if err := dp.graphEngine.StoreExtractionResult(ctx, doc.ID, extractionResult); err != nil {
+					// Log error but don't fail the whole process
+					if dp.logger != nil {
+						dp.logger.Warn(ctx, "Failed to store extraction results in graph database",
+							"error", err,
+							"document_id", doc.ID,
+							"file_path", doc.FilePath)
+					}
+					if dp.metrics != nil {
+						dp.metrics.IncrementCounter("document.graph.store.error", map[string]string{
+							"document_id": doc.ID,
+						})
+					}
+				} else {
+					if dp.logger != nil {
+						dp.logger.Debug(ctx, "Stored extraction results in graph database",
+							"document_id", doc.ID,
+							"entity_count", extractionResult.EntityCount(),
+							"relationship_count", extractionResult.RelationshipCount())
+					}
+					if dp.metrics != nil {
+						dp.metrics.IncrementCounter("document.graph.store.success", map[string]string{
+							"document_id": doc.ID,
+						})
+					}
+				}
+			}
+
+			if dp.logger != nil {
+				dp.logger.Info(ctx, "Extracted entities and relationships from document",
+					"document_id", doc.ID,
+					"file_path", doc.FilePath,
+					"entity_count", extractionResult.EntityCount(),
+					"relationship_count", extractionResult.RelationshipCount())
+			}
+			if dp.metrics != nil {
+				dp.metrics.IncrementCounter("document.extraction.success", map[string]string{
+					"document_id": doc.ID,
+				})
+			}
+		}
+	}
+
 	// Chunk the text
 	chunks := dp.chunker.ChunkText(content, dp.config.ChunkingConfig)
 	doc.ChunkCount = len(chunks)

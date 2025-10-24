@@ -41,6 +41,31 @@ type DocumentStoreInterface interface {
 	GetDocumentStats(ctx context.Context) (*models.DocumentStats, error)
 }
 
+// GraphStoreInterface defines the interface for graph database operations
+type GraphStoreInterface interface {
+	// Initialization and lifecycle
+	Initialize(ctx context.Context) error
+	Close() error
+	HealthCheck(ctx context.Context) error
+
+	// Basic quad operations
+	AddQuad(ctx context.Context, quad models.Quad) error
+	AddQuads(ctx context.Context, quads []models.Quad) error
+	DeleteQuad(ctx context.Context, quad models.Quad) error
+	DeleteQuads(ctx context.Context, quads []models.Quad) error
+
+	// Query operations
+	Query(ctx context.Context, query string) ([]map[string]interface{}, error)
+	GetNode(ctx context.Context, nodeID string) (*models.GraphNode, error)
+	GetEdges(ctx context.Context, nodeID string) ([]models.GraphEdge, error)
+
+	// Document operations
+	DeleteDocumentData(ctx context.Context, documentID string) error
+
+	// Statistics
+	GetStats(ctx context.Context) (*models.GraphStats, error)
+}
+
 // TextChunkerInterface defines the interface for text chunking
 type TextChunkerInterface interface {
 	ChunkText(content string, config models.ChunkingConfig) []models.TextChunk

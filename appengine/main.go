@@ -567,6 +567,18 @@ func initializeDocumentsModule(dm *services.DatabaseManager) error {
 	documentsConfig.EmbeddingModel = "embeddinggemma" // Use the same model as before
 	documentsConfig.EmbeddingDimension = 768
 
+	// Extraction configuration
+	documentsConfig.ExtractionEnabled = true
+	documentsConfig.ExtractionModel = "llama3:8b"
+
+	// Graph database configuration
+	documentsConfig.GraphEnabled = true
+	documentsConfig.GraphConfig = map[string]interface{}{
+		"type":    "cayley",
+		"backend": "bolt",
+		"path":    "./data/cayley.db",
+	}
+
 	documentsConfig.VectorStoreConfig = map[string]interface{}{
 		"type":       "qdrant", // Use QDrant for persistent vector storage
 		"host":       "qdrant",
