@@ -11,6 +11,7 @@ import (
 	"arcadia/modules/ai/models"
 	"arcadia/modules/ai/providers"
 	"arcadia/modules/ai/tools"
+	"arcadia/pkg/logging"
 )
 
 // Module implements the AIModule interface
@@ -50,6 +51,9 @@ type Module struct {
 
 	// Health monitoring
 	healthStatus *models.HealthStatus
+
+	// API payload logging
+	apiLogger logging.Logger
 }
 
 // NewModule creates a new AI module instance
@@ -96,6 +100,42 @@ func NewModule(ctx context.Context, config *Config, deps *interfaces.Dependencie
 	// Initialize providers
 	if err := module.initializeProviders(ctx); err != nil {
 		return nil, fmt.Errorf("failed to initialize providers: %w", err)
+	}
+
+	// Initialize API payload logger if enabled
+	if config.EnableAPILogging {
+		apiLoggerConfig := logging.Config{
+			Level:       logging.LevelInfo,  // Always log at INFO
+			Format:      logging.FormatJSON,
+			OutputPaths: []string{config.APILogPath},
+			AddSource:   false,  // Don't need source location for payloads
+			ModuleName:  "ai_api",
+		}
+
+		apiLogger, err := logging.NewLogger(apiLoggerConfig)
+		if err != nil {
+			// Non-fatal - log warning and continue without API logging
+			if deps.Logger != nil {
+				deps.Logger.Warn(ctx, "Failed to create API payload logger",
+					"error", err,
+					"path", config.APILogPath)
+			}
+		} else {
+			module.apiLogger = apiLogger
+
+			// Set API logger on all providers
+			for _, provider := range module.providers {
+				if setter, ok := provider.(interface{ SetAPILogger(logging.Logger) }); ok {
+					setter.SetAPILogger(apiLogger)
+				}
+			}
+
+			if deps.Logger != nil {
+				deps.Logger.Info(ctx, "API payload logging enabled",
+					"log_path", config.APILogPath,
+					"max_size_mb", config.APILogMaxSizeMB)
+			}
+		}
 	}
 
 	// Update state

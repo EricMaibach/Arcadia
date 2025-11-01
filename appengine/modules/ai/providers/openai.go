@@ -18,6 +18,7 @@ import (
 type OpenAIProvider struct {
 	config         *OpenAIConfig
 	logger         logging.Logger
+	apiLogger      logging.Logger
 	metrics        interfaces.Metrics
 	httpClient     *http.Client
 	tools          []models.Tool
@@ -401,6 +402,10 @@ func (p *OpenAIProvider) SetContextManager(cm interfaces.ContextManager) {
 	p.contextManager = cm
 }
 
+func (p *OpenAIProvider) SetAPILogger(logger logging.Logger) {
+	p.apiLogger = logger
+}
+
 // Internal implementation methods
 
 func (p *OpenAIProvider) callOpenAIWithContext(ctx context.Context, contextID string, conversationContext *models.ConversationContext) (string, error) {
@@ -463,6 +468,19 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, request OpenAIRequest)
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
+	// Log full API request payload
+	if p.apiLogger != nil {
+		p.apiLogger.Info(ctx, "OpenAI API Request",
+			"direction", "outbound",
+			"model", request.Model,
+			"message_count", len(request.Messages),
+			"tools_count", len(request.Tools),
+			"max_tokens", request.MaxTokens,
+			"temperature", request.Temperature,
+			"payload_size_bytes", len(requestBody),
+			"payload", string(requestBody))
+	}
+
 	// Create HTTP request
 	url := p.config.BaseURL + "/v1/chat/completions"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(requestBody))
@@ -495,6 +513,14 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, request OpenAIRequest)
 
 	// Handle error responses
 	if resp.StatusCode != http.StatusOK {
+		// Log failed API request
+		if p.apiLogger != nil {
+			p.apiLogger.Error(ctx, "OpenAI API Error Response",
+				"direction", "inbound",
+				"status_code", resp.StatusCode,
+				"payload_size_bytes", len(responseBody),
+				"error_payload", string(responseBody))
+		}
 		return nil, p.handleErrorResponse(resp.StatusCode, responseBody)
 	}
 
@@ -502,6 +528,19 @@ func (p *OpenAIProvider) makeAPICall(ctx context.Context, request OpenAIRequest)
 	var openaiResp OpenAIResponse
 	if err := json.Unmarshal(responseBody, &openaiResp); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	// Log full API response payload
+	if p.apiLogger != nil {
+		p.apiLogger.Info(ctx, "OpenAI API Response",
+			"direction", "inbound",
+			"model", openaiResp.Model,
+			"finish_reason", getFinishReason(openaiResp),
+			"prompt_tokens", openaiResp.Usage.PromptTokens,
+			"completion_tokens", openaiResp.Usage.CompletionTokens,
+			"total_tokens", openaiResp.Usage.TotalTokens,
+			"payload_size_bytes", len(responseBody),
+			"payload", string(responseBody))
 	}
 
 	return &openaiResp, nil
@@ -645,35 +684,20 @@ func (p *OpenAIProvider) convertToOpenAIToolCalls(toolCalls []models.ToolCall) [
 
 func (p *OpenAIProvider) buildSystemMessage() string {
 	now := time.Now()
-	return fmt.Sprintf(`Current date and time: %s (UTC: %s).
+	return fmt.Sprintf(`Current date and time: %s (UTC: %s)
 
-You are Arcadia, an AI-powered digital ecosystem where applications grow and flourish together.
+You are Arcadia, an AI assistant for a WASM-based application platform where apps can interact, share data, and leverage AI capabilities.
 
-ABOUT ARCADIA:
-Arcadia is a digital ecosystem where applications grow and flourish together. It's a WASM-based application platform that allows developers to create and deploy applications that can interact with each other, access shared databases, and leverage AI capabilities.
+CORE CAPABILITIES:
+• Search documents - Use search_documents when users ask about existing files, code, or documentation
+• List applications - Use list_apps to show registered applications and their tools
+• Execute app tools - Use appId_toolName format to run application functionality
+• Schedule tasks - Use schedule_app_run to schedule application executions
 
-IMPORTANT INSTRUCTIONS:
-1. When users ask you to create, build, develop, or implement applications, use the appropriate tools to accomplish their goals
-2. You have access to an application registry that contains all registered applications and their available tools
-3. You can search through documents that may contain relevant information to help users - ALWAYS use the search_documents tool when users ask questions about existing code, files, or documentation
-4. Always be helpful and provide accurate information about the Arcadia platform and its capabilities
-5. When working with WASM applications, ensure proper tool definitions and input formats
+TOOL USAGE:
+When users ask questions that might be answered by existing documentation or code, always try search_documents first. For app-related tasks, check available apps with list_apps before attempting to use their tools.
 
-TOOL USAGE GUIDELINES:
-- ALWAYS use search_documents when users ask about existing content, files, documentation, or code
-- Use list_apps to show available applications
-- Use appropriate app tools (appId_toolName format) to execute application functionality
-- Use schedule_app_run to schedule tasks
-
-AVAILABLE CAPABILITIES:
-- List registered applications and their tools (use list_apps)
-- Execute tools from registered applications (use appId_toolName format)
-- Search and retrieve document content (use search_documents)
-- Schedule application executions (use schedule_app_run)
-
-Your goal is to help users maximize the potential of the Arcadia platform by providing guidance, executing tools, and facilitating application development and interaction.
-
-REMEMBER: When users ask questions that might be answered by existing documentation or code, ALWAYS use the search_documents tool first.`,
+Your goal is to help users work effectively with the Arcadia platform by providing information, searching documents, and executing available tools.`,
 		now.Format("Monday, January 2, 2006 at 3:04 PM MST"),
 		now.UTC().Format("2006-01-02 15:04:05 UTC"))
 }
@@ -823,4 +847,12 @@ func parseOpenAIConfig(config map[string]interface{}) (*OpenAIConfig, error) {
 	}
 
 	return openaiConfig, nil
+}
+
+// getFinishReason extracts finish reason from response
+func getFinishReason(resp OpenAIResponse) string {
+	if len(resp.Choices) > 0 {
+		return resp.Choices[0].FinishReason
+	}
+	return ""
 }

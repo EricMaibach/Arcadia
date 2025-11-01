@@ -45,6 +45,11 @@ type Config struct {
 	AutoSearchMaxContextSize int    `json:"auto_search_max_context_size" yaml:"auto_search_max_context_size"`
 	AutoSearchIncludeMetadata bool  `json:"auto_search_include_metadata" yaml:"auto_search_include_metadata"`
 	AutoSearchTimeout      int     `json:"auto_search_timeout" yaml:"auto_search_timeout"`
+
+	// API logging settings
+	EnableAPILogging bool   `json:"enable_api_logging" yaml:"enable_api_logging"`
+	APILogPath       string `json:"api_log_path" yaml:"api_log_path"`
+	APILogMaxSizeMB  int    `json:"api_log_max_size_mb" yaml:"api_log_max_size_mb"`
 }
 
 // OpenAIConfig holds configuration specific to OpenAI
@@ -84,6 +89,10 @@ func DefaultConfig() *Config {
 		AutoSearchMaxContextSize:  4000,
 		AutoSearchIncludeMetadata: true,
 		AutoSearchTimeout:         5,
+		// API logging defaults
+		EnableAPILogging:          true,
+		APILogPath:                "logs/ai_api_payloads.log",
+		APILogMaxSizeMB:           100,
 	}
 }
 
@@ -150,6 +159,14 @@ func (c *Config) Validate() error {
 	}
 	if c.AutoSearchTimeout <= 0 {
 		c.AutoSearchTimeout = 5
+	}
+
+	// API logging validation and defaults
+	if c.APILogPath == "" {
+		c.APILogPath = "logs/ai_api_payloads.log"
+	}
+	if c.APILogMaxSizeMB <= 0 {
+		c.APILogMaxSizeMB = 100
 	}
 
 	return nil
