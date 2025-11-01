@@ -2,18 +2,20 @@ package handlers
 
 import (
 	"encoding/json"
-	"log"
 	"net/http"
 	"sync"
 
 	"arcadia/modules/ai"
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
 
 // Dependencies that will be injected
 var (
-	aiService ai.AIModule
+	aiService   ai.AIModule
 	aiServiceMu sync.RWMutex
+	logger      logging.Logger
+	loggerMu    sync.RWMutex
 )
 
 // SetAIDependencies configures the AI service dependency for the AI handlers
@@ -21,6 +23,20 @@ func SetAIDependencies(service ai.AIModule) {
 	aiServiceMu.Lock()
 	defer aiServiceMu.Unlock()
 	aiService = service
+}
+
+// SetLogger configures the logger for the handlers
+func SetLogger(l logging.Logger) {
+	loggerMu.Lock()
+	defer loggerMu.Unlock()
+	logger = l
+}
+
+// getLogger safely returns the logger with proper locking
+func getLogger() logging.Logger {
+	loggerMu.RLock()
+	defer loggerMu.RUnlock()
+	return logger
 }
 
 // getAIService safely returns the AI service with proper locking
@@ -74,7 +90,9 @@ func HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 
 	response, err := service.SendMessageWithContext(r.Context(), request.Message, contextID)
 	if err != nil {
-		log.Printf("AI API error: %v", err)
+		if log := getLogger(); log != nil {
+			log.Error(r.Context(), "AI API error", "error", err, "context_id", contextID, "message_length", len(request.Message))
+		}
 
 		// Check if it's an AIError for better error reporting
 		if aiErr, ok := err.(*models.AIError); ok {

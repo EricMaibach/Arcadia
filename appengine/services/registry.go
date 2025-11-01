@@ -1,14 +1,15 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"time"
 
 	"arcadia/modules/ai/interfaces"
+	"arcadia/pkg/logging"
 )
 
 const registryFilePath = "app_registry.json"
@@ -27,14 +28,16 @@ type App struct {
 
 // Registry manages application registration and storage
 type Registry struct {
-	apps  map[string]*App
-	mutex sync.RWMutex
+	apps   map[string]*App
+	mutex  sync.RWMutex
+	logger logging.Logger
 }
 
 // NewRegistry creates a new registry instance
-func NewRegistry() *Registry {
+func NewRegistry(logger logging.Logger) *Registry {
 	return &Registry{
-		apps: make(map[string]*App),
+		apps:   make(map[string]*App),
+		logger: logger,
 	}
 }
 
@@ -47,7 +50,10 @@ func (r *Registry) Load() error {
 	if _, err := os.Stat(registryFilePath); os.IsNotExist(err) {
 		// File doesn't exist, start with empty registry
 		r.apps = make(map[string]*App)
-		log.Printf("Registry file %s not found, starting with empty registry", registryFilePath)
+		ctx := context.Background()
+		if r.logger != nil {
+			r.logger.Info(ctx, "Registry file not found, starting with empty registry", "file_path", registryFilePath)
+		}
 		return nil
 	}
 
@@ -62,7 +68,10 @@ func (r *Registry) Load() error {
 		return fmt.Errorf("failed to parse registry JSON: %v", err)
 	}
 
-	log.Printf("Loaded %d apps from registry file", len(r.apps))
+	ctx := context.Background()
+	if r.logger != nil {
+		r.logger.Info(ctx, "Loaded apps from registry file", "app_count", len(r.apps))
+	}
 	return nil
 }
 
@@ -271,27 +280,30 @@ type RegistryManager struct {
 }
 
 // NewRegistryManager creates a new registry manager
-func NewRegistryManager(executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)) *RegistryManager {
-	registry := NewRegistry()
-	
+func NewRegistryManager(executeAppTool func(appID, toolName string, input json.RawMessage) (string, error), logger logging.Logger) *RegistryManager {
+	registry := NewRegistry(logger)
+
 	rm := &RegistryManager{
 		registry:       registry,
 		registryAccess: &registryAccessImpl{registry: registry},
 		appRunner:      &appRunnerImpl{executeAppTool: executeAppTool, registry: registry},
 	}
-	
+
 	// Create app creation service with logging function
 	logFunc := func(format string, args ...interface{}) {
-		log.Printf(format, args...)
+		ctx := context.Background()
+		if logger != nil {
+			logger.Info(ctx, fmt.Sprintf(format, args...))
+		}
 	}
 	appCreationService := NewAppCreationService(rm, logFunc)
-	
+
 	// Initialize app creator with dependencies
 	rm.appCreator = &appCreatorImpl{
 		registryManager:    rm,
 		appCreationService: appCreationService,
 	}
-	
+
 	return rm
 }
 
@@ -329,8 +341,8 @@ func (rm *RegistryManager) Save() error {
 var globalRegistryManager *RegistryManager
 
 // InitializeRegistry initializes the global registry manager
-func InitializeRegistry(executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)) {
-	globalRegistryManager = NewRegistryManager(executeAppTool)
+func InitializeRegistry(executeAppTool func(appID, toolName string, input json.RawMessage) (string, error), logger logging.Logger) {
+	globalRegistryManager = NewRegistryManager(executeAppTool, logger)
 }
 
 // GetGlobalRegistry returns the global registry instance

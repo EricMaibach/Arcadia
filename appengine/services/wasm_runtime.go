@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/bytecodealliance/wasmtime-go"
 
 	"arcadia/modules/ai"
+	"arcadia/pkg/logging"
 )
 
 // WasmRuntime handles WASM execution and host function management
@@ -18,15 +18,17 @@ type WasmRuntime struct {
 	registryManager *RegistryManager
 	databaseManager *DatabaseManager
 	aiModule        ai.AIModule
+	logger          logging.Logger
 }
 
 // NewWasmRuntime creates a new WASM runtime instance
-func NewWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule) *WasmRuntime {
+func NewWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule, logger logging.Logger) *WasmRuntime {
 	return &WasmRuntime{
 		engine:          wasmtime.NewEngine(),
 		registryManager: registryMgr,
 		databaseManager: dbMgr,
 		aiModule:        aiMod,
+		logger:          logger,
 	}
 }
 
@@ -45,19 +47,25 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 	messageBytes := data[messagePtr : messagePtr+messageLen]
 	message := string(messageBytes)
 
-	log.Printf("[WASM AI] aiQuery called from app %s with message: %s", appID, message)
+	ctx := context.Background()
+	if wr.logger != nil {
+		wr.logger.Info(ctx, "WASM AI query called", "app_id", appID, "message", message)
+	}
 
 	// Check if AI module is available
 	if wr.aiModule == nil {
-		log.Printf("[WASM AI] AI module not initialized")
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM AI module not initialized")
+		}
 		return -1 // AI module not initialized
 	}
 
 	// Send message to AI module WITHOUT context (keep WASM apps stateless)
-	ctx := context.Background()
 	response, err := wr.aiModule.SendMessage(ctx, message)
 	if err != nil {
-		log.Printf("[WASM AI] AI service error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM AI service error", "error", err)
+		}
 		return -2 // AI service error
 	}
 
@@ -70,7 +78,9 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 	// Marshal response to JSON
 	jsonBytes, err := json.Marshal(responseObj)
 	if err != nil {
-		log.Printf("[WASM AI] JSON marshal error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM AI JSON marshal error", "error", err)
+		}
 		return -3 // JSON marshal error
 	}
 
@@ -78,7 +88,9 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 	allocateFunc := caller.GetExport("allocate").Func()
 	resultLenResult, err := allocateFunc.Call(caller, len(jsonBytes))
 	if err != nil {
-		log.Printf("[WASM AI] Memory allocation error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM AI memory allocation error", "error", err)
+		}
 		return -4 // Allocation error
 	}
 	resultPtr := resultLenResult.(int32)
@@ -93,12 +105,15 @@ func (wr *WasmRuntime) aiQueryWithAppID(caller *wasmtime.Caller, messagePtr, mes
 	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
 	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
 
-	log.Printf("[WASM AI] AI query completed successfully")
+	if wr.logger != nil {
+		wr.logger.Info(ctx, "WASM AI query completed successfully")
+	}
 	return int32(len(jsonBytes))
 }
 
 // dbQuery executes a database query for WASM apps
 func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resultPtrPtr int32) int32 {
+	ctx := context.Background()
 	// Get memory instance
 	memory := caller.GetExport("memory").Memory()
 	data := memory.UnsafeData(caller)
@@ -107,17 +122,23 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 	queryBytes := data[queryPtr : queryPtr+queryLen]
 	query := string(queryBytes)
 
-	log.Printf("[WASM DB] dbQuery called with query: %s", query)
+	if wr.logger != nil {
+		wr.logger.Info(ctx, "WASM DB query called", "query", query)
+	}
 
 	if wr.databaseManager == nil {
-		log.Printf("[WASM DB] Database manager not initialized")
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB database manager not initialized")
+		}
 		return -1 // Database not initialized
 	}
 
 	// Execute query using app database
 	rows, err := wr.databaseManager.GetAppDB().Query(query)
 	if err != nil {
-		log.Printf("[WASM DB] Database query error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB database query error", "error", err)
+		}
 		return -2 // Query error
 	}
 	defer rows.Close()
@@ -125,14 +146,17 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 	// Get column names
 	columns, err := rows.Columns()
 	if err != nil {
-		log.Printf("[WASM DB] Column error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB column error", "error", err)
+		}
 		return -3 // Column error
 	}
-	log.Printf("[WASM DB] Query columns: %v", columns)
+	if wr.logger != nil {
+		wr.logger.Debug(ctx, "WASM DB query columns", "columns", columns)
+	}
 
 	// Collect results
 	results := []map[string]interface{}{}
-	log.Printf("[WASM DB] Query returned %+v rows", results)
 	rowCount := 0
 	for rows.Next() {
 		rowCount++
@@ -144,7 +168,9 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 		}
 
 		if err := rows.Scan(valuePtrs...); err != nil {
-			log.Printf("[WASM DB] Row scan error: %v", err)
+			if wr.logger != nil {
+				wr.logger.Error(ctx, "WASM DB row scan error", "error", err)
+			}
 			return -4 // Scan error
 		}
 
@@ -161,30 +187,42 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 			row[col] = val
 		}
 		results = append(results, row)
-		log.Printf("[WASM DB] Row %d: %+v", rowCount, row)
+		if wr.logger != nil {
+			wr.logger.Debug(ctx, "WASM DB row processed", "row_number", rowCount, "row", row)
+		}
 	}
 
-	log.Printf("[WASM DB] Total rows returned: %d", rowCount)
+	if wr.logger != nil {
+		wr.logger.Info(ctx, "WASM DB total rows returned", "count", rowCount)
+	}
 
 	// Convert results to JSON
 	jsonBytes, err := json.Marshal(results)
 	if err != nil {
-		log.Printf("[WASM DB] JSON marshal error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB JSON marshal error", "error", err)
+		}
 		return -5 // JSON error
 	}
 
-	log.Printf("[WASM DB] JSON result: %s", string(jsonBytes))
+	if wr.logger != nil {
+		wr.logger.Debug(ctx, "WASM DB JSON result", "json", string(jsonBytes))
+	}
 
 	// Allocate memory in WASM for result
 	allocateFunc := caller.GetExport("allocate").Func()
 	if allocateFunc == nil {
-		log.Printf("[WASM DB] allocate function not found")
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB allocate function not found")
+		}
 		return -6 // Allocate function not found
 	}
 
 	resultPtrResult, err := allocateFunc.Call(caller, len(jsonBytes))
 	if err != nil {
-		log.Printf("[WASM DB] Failed to allocate memory: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB failed to allocate memory", "error", err)
+		}
 		return -7 // Memory allocation error
 	}
 	resultPtr := resultPtrResult.(int32)
@@ -199,12 +237,15 @@ func (wr *WasmRuntime) dbQuery(caller *wasmtime.Caller, queryPtr, queryLen, resu
 	resultPtrPtrBytes[2] = byte(resultPtr >> 16)
 	resultPtrPtrBytes[3] = byte(resultPtr >> 24)
 
-	log.Printf("[WASM DB] Query completed successfully")
+	if wr.logger != nil {
+		wr.logger.Info(ctx, "WASM DB query completed successfully")
+	}
 	return int32(len(jsonBytes))
 }
 
 // dbExec executes a database statement for WASM apps
 func (wr *WasmRuntime) dbExec(caller *wasmtime.Caller, stmtPtr, stmtLen int32) int32 {
+	ctx := context.Background()
 	// Get memory instance
 	memory := caller.GetExport("memory").Memory()
 	data := memory.UnsafeData(caller)
@@ -220,7 +261,9 @@ func (wr *WasmRuntime) dbExec(caller *wasmtime.Caller, stmtPtr, stmtLen int32) i
 	// Execute statement using app database
 	result, err := wr.databaseManager.GetAppDB().Exec(stmt)
 	if err != nil {
-		log.Printf("Database exec error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB exec error", "error", err)
+		}
 		return -2 // Execution error
 	}
 
@@ -256,10 +299,13 @@ func (wr *WasmRuntime) dbPreparedQuery(caller *wasmtime.Caller, stmtPtr, stmtLen
 		return -2 // Database not initialized
 	}
 
+	ctx := context.Background()
 	// Execute prepared statement using app database
 	rows, err := wr.databaseManager.GetAppDB().Query(stmt, params...)
 	if err != nil {
-		log.Printf("Database prepared query error: %v", err)
+		if wr.logger != nil {
+			wr.logger.Error(ctx, "WASM DB prepared query error", "error", err)
+		}
 		return -3 // Query error
 	}
 	defer rows.Close()
@@ -350,6 +396,7 @@ func (wr *WasmRuntime) setupHostFunctions(linker *wasmtime.Linker, store *wasmti
 
 // ExecuteAppTool executes a tool from an app using WASM runtime
 func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMessage) (string, error) {
+	ctx := context.Background()
 	// Get app from registry
 	registry := wr.registryManager.GetRegistry()
 	app, ok := registry.GetApp(appID)
@@ -392,10 +439,14 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 	}
 	err = linker.Define("env", "memory", memory)
 	if err != nil {
-		log.Printf("[WASM Memory] Warning: failed to define custom memory, module may use its own: %v", err)
+		if wr.logger != nil {
+			wr.logger.Warn(ctx, "WASM Memory failed to define custom memory, module may use its own", "error", err)
+		}
 		// Don't return error, let module use its own memory
 	} else {
-		log.Printf("[WASM Memory] Successfully defined custom memory with 512 pages (32MB)")
+		if wr.logger != nil {
+			wr.logger.Info(ctx, "WASM Memory successfully defined custom memory with 512 pages (32MB)")
+		}
 	}
 
 	// Setup all host functions with app ID for context isolation
@@ -457,8 +508,10 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 
 	// Check memory bounds and log details
 	memorySize := moduleMemory.DataSize(store)
-	log.Printf("[WASM Memory] Result pointer: %d, length: %d, memory size: %d", resultPtr, resultLen, memorySize)
-	
+	if wr.logger != nil {
+		wr.logger.Debug(ctx, "WASM Memory result pointer details", "result_ptr", resultPtr, "length", resultLen, "memory_size", memorySize)
+	}
+
 	if uint64(resultPtr) >= uint64(memorySize) || uint64(resultPtr+resultLen) > uint64(memorySize) {
 		deallocateFunc.Call(store, inputPtr, inputLen)
 		return "", fmt.Errorf("result pointer out of bounds: ptr=%d, len=%d, memory size=%d", resultPtr, resultLen, memorySize)
@@ -484,8 +537,8 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 var globalRuntime *WasmRuntime
 
 // InitializeWasmRuntime initializes the global WASM runtime
-func InitializeWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule) {
-	globalRuntime = NewWasmRuntime(registryMgr, dbMgr, aiMod)
+func InitializeWasmRuntime(registryMgr *RegistryManager, dbMgr *DatabaseManager, aiMod ai.AIModule, logger logging.Logger) {
+	globalRuntime = NewWasmRuntime(registryMgr, dbMgr, aiMod, logger)
 }
 
 // GetGlobalWasmRuntime returns the global WASM runtime instance

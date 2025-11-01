@@ -56,6 +56,14 @@ func (m *MockLogger) WithContext(ctx context.Context) interfaces.Logger {
 	return m
 }
 
+func (m *MockLogger) WithModule(module string) interfaces.Logger {
+	return m
+}
+
+func (m *MockLogger) WithComponent(component string) interfaces.Logger {
+	return m
+}
+
 func (m *MockLogger) addLog(level, msg string, keysAndValues ...interface{}) {
 	fields := make(map[string]interface{})
 	for i := 0; i < len(keysAndValues); i += 2 {

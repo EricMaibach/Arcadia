@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 	"time"
+
+	"arcadia/pkg/logging"
 )
 
 // Schedule-related type definitions
@@ -69,18 +70,20 @@ type ScheduleRepositoryInterface interface {
 // Scheduler manages scheduled app executions
 type Scheduler struct {
 	repository      ScheduleRepositoryInterface
-	schedules      map[string]*AppSchedule
-	schedulesMutex sync.RWMutex
-	schedulerCtx   context.Context
+	schedules       map[string]*AppSchedule
+	schedulesMutex  sync.RWMutex
+	schedulerCtx    context.Context
 	schedulerCancel context.CancelFunc
-	executeAppTool func(appID, toolName string, input json.RawMessage) (string, error)
+	executeAppTool  func(appID, toolName string, input json.RawMessage) (string, error)
+	logger          logging.Logger
 }
 
 // NewScheduler creates a new scheduler with the given repository
-func NewScheduler(repository ScheduleRepositoryInterface) *Scheduler {
+func NewScheduler(repository ScheduleRepositoryInterface, logger logging.Logger) *Scheduler {
 	return &Scheduler{
 		repository: repository,
 		schedules:  make(map[string]*AppSchedule),
+		logger:     logger,
 	}
 }
 
@@ -275,6 +278,7 @@ func findNextWeeklyOccurrence(baseTime time.Time, recurrence *RecurrenceRule) ti
 
 // Start starts the scheduler service
 func (s *Scheduler) Start() error {
+	ctx := context.Background()
 	s.schedulerCtx, s.schedulerCancel = context.WithCancel(context.Background())
 
 	// Load schedules from repository
@@ -288,7 +292,9 @@ func (s *Scheduler) Start() error {
 
 	// Start scheduler goroutine
 	go s.schedulerLoop()
-	log.Println("Scheduler started")
+	if s.logger != nil {
+		s.logger.Info(ctx, "Scheduler started")
+	}
 	return nil
 }
 
@@ -302,9 +308,12 @@ func StartScheduler() error {
 
 // Stop stops the scheduler service
 func (s *Scheduler) Stop() {
+	ctx := context.Background()
 	if s.schedulerCancel != nil {
 		s.schedulerCancel()
-		log.Println("Scheduler stopped")
+		if s.logger != nil {
+			s.logger.Info(ctx, "Scheduler stopped")
+		}
 	}
 }
 
@@ -316,15 +325,20 @@ func StopScheduler() {
 }
 
 func (s *Scheduler) schedulerLoop() {
+	ctx := context.Background()
 	ticker := time.NewTicker(30 * time.Second) // Check every 30 seconds
 	defer ticker.Stop()
 
-	log.Println("Scheduler loop started")
+	if s.logger != nil {
+		s.logger.Info(ctx, "Scheduler loop started")
+	}
 
 	for {
 		select {
 		case <-s.schedulerCtx.Done():
-			log.Println("Scheduler loop terminating")
+			if s.logger != nil {
+				s.logger.Info(ctx, "Scheduler loop terminating")
+			}
 			return
 		case <-ticker.C:
 			s.CheckAndExecuteSchedules()
@@ -334,6 +348,7 @@ func (s *Scheduler) schedulerLoop() {
 
 // CheckAndExecuteSchedules checks for schedules that are ready to run and executes them
 func (s *Scheduler) CheckAndExecuteSchedules() {
+	ctx := context.Background()
 	now := time.Now()
 	s.schedulesMutex.RLock()
 	var schedulesToRun []*AppSchedule
@@ -346,7 +361,9 @@ func (s *Scheduler) CheckAndExecuteSchedules() {
 	s.schedulesMutex.RUnlock()
 
 	if len(schedulesToRun) > 0 {
-		log.Printf("Found %d schedules ready to run", len(schedulesToRun))
+		if s.logger != nil {
+			s.logger.Info(ctx, "Found schedules ready to run", "count", len(schedulesToRun))
+		}
 	}
 
 	for _, schedule := range schedulesToRun {
@@ -363,14 +380,19 @@ func CheckAndExecuteSchedules() {
 
 // ExecuteScheduledRun executes a scheduled run
 func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
+	ctx := context.Background()
 	runID, err := GenerateID()
 	if err != nil {
-		log.Printf("Failed to generate run ID for schedule %s: %v", schedule.ID, err)
+		if s.logger != nil {
+			s.logger.Error(ctx, "Failed to generate run ID for schedule", "error", err, "schedule_id", schedule.ID)
+		}
 		return
 	}
 
 	startTime := time.Now()
-	log.Printf("Starting scheduled run %s for schedule %s (app: %s, tool: %s)", runID, schedule.ID, schedule.AppID, schedule.ToolName)
+	if s.logger != nil {
+		s.logger.Info(ctx, "Starting scheduled run", "run_id", runID, "schedule_id", schedule.ID, "app_id", schedule.AppID, "tool_name", schedule.ToolName)
+	}
 
 	// Create scheduled run record
 	run := &ScheduledRun{
@@ -385,7 +407,9 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 
 	// Save run record to repository
 	if err := s.repository.SaveScheduledRun(run); err != nil {
-		log.Printf("Failed to save scheduled run record: %v", err)
+		if s.logger != nil {
+			s.logger.Error(ctx, "Failed to save scheduled run record", "error", err)
+		}
 		return
 	}
 
@@ -403,16 +427,22 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 	if err != nil {
 		run.Status = "failed"
 		run.Error = err.Error()
-		log.Printf("Scheduled run %s failed: %v", runID, err)
+		if s.logger != nil {
+			s.logger.Error(ctx, "Scheduled run failed", "run_id", runID, "error", err)
+		}
 	} else {
 		run.Status = "completed"
 		run.Output = output
-		log.Printf("Scheduled run %s completed successfully in %v", runID, completedAt.Sub(startTime))
+		if s.logger != nil {
+			s.logger.Info(ctx, "Scheduled run completed successfully", "run_id", runID, "duration", completedAt.Sub(startTime))
+		}
 	}
 
 	// Update run record in repository
 	if err := s.repository.UpdateScheduledRun(run); err != nil {
-		log.Printf("Failed to update scheduled run record: %v", err)
+		if s.logger != nil {
+			s.logger.Error(ctx, "Failed to update scheduled run record", "error", err)
+		}
 	}
 
 	// Update schedule's last run and calculate next run
@@ -424,10 +454,14 @@ func (s *Scheduler) ExecuteScheduledRun(schedule *AppSchedule) {
 
 	// Update schedule in repository
 	if err := s.repository.UpdateSchedule(schedule); err != nil {
-		log.Printf("Failed to update schedule in database: %v", err)
+		if s.logger != nil {
+			s.logger.Error(ctx, "Failed to update schedule in database", "error", err)
+		}
 	}
 
-	log.Printf("Scheduled run %s processing complete. Next run: %v", runID, schedule.NextRun)
+	if s.logger != nil {
+		s.logger.Info(ctx, "Scheduled run processing complete", "run_id", runID, "next_run", schedule.NextRun)
+	}
 }
 
 // SetExecuteAppTool sets the app tool execution function for this scheduler
@@ -610,8 +644,8 @@ func (s *Scheduler) UpdateSchedule(scheduleID string, updateReq UpdateScheduleRe
 // Backward compatibility functions - delegate to default scheduler
 
 // InitDefaultScheduler initializes the default scheduler with the given repository
-func InitDefaultScheduler(repository ScheduleRepositoryInterface) {
-	defaultScheduler = NewScheduler(repository)
+func InitDefaultScheduler(repository ScheduleRepositoryInterface, logger logging.Logger) {
+	defaultScheduler = NewScheduler(repository, logger)
 }
 
 // CreateSchedule creates and stores a new schedule (backward compatibility)

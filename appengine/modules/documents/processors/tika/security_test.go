@@ -43,6 +43,14 @@ func (m *MockLogger) WithContext(ctx context.Context) interfaces.Logger {
 	return m
 }
 
+func (m *MockLogger) WithModule(module string) interfaces.Logger {
+	return m
+}
+
+func (m *MockLogger) WithComponent(component string) interfaces.Logger {
+	return m
+}
+
 func TestSecurityValidation(t *testing.T) {
 	logger := &MockLogger{}
 	config := DefaultTikaConfig()

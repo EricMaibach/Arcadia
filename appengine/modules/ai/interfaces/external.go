@@ -6,19 +6,10 @@ import (
 	"sync"
 
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
 
 // External dependencies that the AI module requires from the outside system
-
-// Logger interface for structured logging
-type Logger interface {
-	Debug(msg string, fields ...interface{})
-	Info(msg string, fields ...interface{})
-	Warn(msg string, fields ...interface{})
-	Error(msg string, fields ...interface{})
-	WithFields(fields map[string]interface{}) Logger
-	WithContext(ctx context.Context) Logger
-}
 
 // Metrics interface for collecting and reporting metrics
 type Metrics interface {
@@ -216,7 +207,7 @@ type NotificationService interface {
 
 // Dependencies holds all external dependencies for the AI module
 type Dependencies struct {
-	Logger              Logger
+	Logger              logging.Logger
 	Metrics             Metrics
 	Database            Database
 	Cache               Cache

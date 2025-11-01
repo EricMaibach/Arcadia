@@ -1,23 +1,27 @@
 package services
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	"arcadia/pkg/logging"
 )
 
 // QueueRepository handles persistence of queue items
 type QueueRepository struct {
-	db    Database
-	mutex sync.RWMutex
+	db     Database
+	mutex  sync.RWMutex
+	logger logging.Logger
 }
 
 // NewQueueRepository creates a new queue repository
-func NewQueueRepository(db Database) *QueueRepository {
+func NewQueueRepository(db Database, logger logging.Logger) *QueueRepository {
 	repo := &QueueRepository{
-		db: db,
+		db:     db,
+		logger: logger,
 	}
 	// Initialize tables
 	repo.initializeTables()
@@ -26,6 +30,7 @@ func NewQueueRepository(db Database) *QueueRepository {
 
 // initializeTables creates the necessary tables if they don't exist
 func (r *QueueRepository) initializeTables() {
+	ctx := context.Background()
 	if r.db == nil {
 		return // Skip table creation if database is nil
 	}
@@ -43,16 +48,20 @@ func (r *QueueRepository) initializeTables() {
 	);`
 
 	if _, err := r.db.Exec(query); err != nil {
-		log.Printf("Warning: failed to create queue_items table: %v", err)
+		if r.logger != nil {
+			r.logger.Warn(ctx, "Failed to create queue_items table", "error", err)
+		}
 	}
 
 	// Create index for efficient priority-based dequeue operations
-	indexQuery := `CREATE INDEX IF NOT EXISTS idx_queue_priority_created 
-		ON queue_items(status, priority DESC, created_at ASC) 
+	indexQuery := `CREATE INDEX IF NOT EXISTS idx_queue_priority_created
+		ON queue_items(status, priority DESC, created_at ASC)
 		WHERE status = 'pending';`
 
 	if _, err := r.db.Exec(indexQuery); err != nil {
-		log.Printf("Warning: failed to create queue priority index: %v", err)
+		if r.logger != nil {
+			r.logger.Warn(ctx, "Failed to create queue priority index", "error", err)
+		}
 	}
 }
 
@@ -376,8 +385,8 @@ func (r *QueueRepository) scanQueueItems(rows *sql.Rows) ([]*QueueItem, error) {
 var defaultQueueRepository *QueueRepository
 
 // InitQueueRepository initializes the default queue repository
-func InitQueueRepository(db Database) {
-	defaultQueueRepository = NewQueueRepository(db)
+func InitQueueRepository(db Database, logger logging.Logger) {
+	defaultQueueRepository = NewQueueRepository(db, logger)
 }
 
 // GetQueueRepository returns the default queue repository

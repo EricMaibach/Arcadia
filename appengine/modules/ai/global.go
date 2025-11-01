@@ -6,45 +6,18 @@ import (
 	"os"
 	"time"
 
+	"arcadia/modules/ai/core"
 	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
-
-// SimpleAILogger implements the AI module's Logger interface
-type SimpleAILogger struct{}
-
-func NewSimpleAILogger() *SimpleAILogger {
-	return &SimpleAILogger{}
-}
-
-func (sl *SimpleAILogger) Debug(msg string, fields ...interface{}) {
-	fmt.Printf("[DEBUG] %s %v\n", msg, fields)
-}
-
-func (sl *SimpleAILogger) Info(msg string, fields ...interface{}) {
-	fmt.Printf("[INFO] %s %v\n", msg, fields)
-}
-
-func (sl *SimpleAILogger) Warn(msg string, fields ...interface{}) {
-	fmt.Printf("[WARN] %s %v\n", msg, fields)
-}
-
-func (sl *SimpleAILogger) Error(msg string, fields ...interface{}) {
-	fmt.Printf("[ERROR] %s %v\n", msg, fields)
-}
-
-func (sl *SimpleAILogger) WithFields(fields map[string]interface{}) interfaces.Logger {
-	return sl
-}
-
-func (sl *SimpleAILogger) WithContext(ctx context.Context) interfaces.Logger {
-	return sl
-}
 
 // NewAIModuleFromEnv creates a new AI module instance from environment variables
 // This replaces the global service pattern with explicit dependency injection
-func NewAIModuleFromEnv(ctx context.Context) (AIModule, error) {
-	logger := NewSimpleAILogger()
+func NewAIModuleFromEnv(ctx context.Context, logger logging.Logger) (AIModule, error) {
+	if logger == nil {
+		return nil, fmt.Errorf("logger is required")
+	}
 
 	// Read environment variables
 	openaiAPIKey := os.Getenv("OPENAI_API_KEY")
@@ -59,7 +32,7 @@ func NewAIModuleFromEnv(ctx context.Context) (AIModule, error) {
 
 	// Log warning if OPENAI_API_KEY is empty
 	if openaiAPIKey == "" {
-		logger.Warn("OPENAI_API_KEY environment variable is not set - API calls will fail without a valid API key")
+		logger.Warn(ctx, "OPENAI_API_KEY environment variable is not set - API calls will fail without a valid API key")
 	}
 
 	// Create dependencies
@@ -91,13 +64,8 @@ func NewAIModuleFromEnv(ctx context.Context) (AIModule, error) {
 // NewAIModuleWithConfig creates a new AI module instance with custom configuration
 func NewAIModuleWithConfig(ctx context.Context, config map[string]interface{}, deps *interfaces.Dependencies) (AIModule, error) {
 	// Ensure logger is available
-	if deps == nil {
-		deps = &interfaces.Dependencies{
-			Logger: NewSimpleAILogger(),
-		}
-	}
-	if deps.Logger == nil {
-		deps.Logger = NewSimpleAILogger()
+	if deps == nil || deps.Logger == nil {
+		return nil, fmt.Errorf("logger is required in dependencies")
 	}
 
 	// Parse configuration
@@ -169,19 +137,43 @@ func SetupModuleDependencies(module AIModule, registryAccess interfaces.Registry
 		m.deps.AppCreator = appCreator
 		m.deps.EmbeddingSearch = embeddingSearch
 
+		// Initialize auto-search components if enabled and embedding search is now available
+		if m.config.AutoSearchEnabled && embeddingSearch != nil {
+			m.queryAnalyzer = core.NewQueryAnalyzer(m.deps.Logger, m.deps.Metrics)
+
+			autoSearchConfig := m.config.GetAutoSearchConfig()
+			m.autoSearchExecutor = core.NewAutoSearchExecutor(
+				embeddingSearch,
+				autoSearchConfig,
+				m.deps.Logger,
+				m.deps.Metrics,
+			)
+
+			m.contextBuilder = core.NewContextBuilder(m.deps.Logger)
+
+			// Create context for logging
+			ctx := context.Background()
+			if m.deps.Logger != nil {
+				m.deps.Logger.Info(ctx, "Auto-search components initialized after dependency setup",
+					"max_results", autoSearchConfig.MaxResults,
+					"min_confidence", autoSearchConfig.MinConfidence,
+					"max_context_size", autoSearchConfig.MaxContextSize)
+			}
+		}
+
 		// Update tool manager dependencies if tool manager is available
 		if m.toolManager != nil {
 			ctx := context.Background()
 			if err := m.toolManager.UpdateDependencies(ctx, m.deps); err != nil {
 				if m.deps.Logger != nil {
-					m.deps.Logger.Warn("Failed to update tool manager dependencies", "error", err)
+					m.deps.Logger.Warn(ctx, "Failed to update tool manager dependencies", "error", err)
 				}
 			}
 
 			// Refresh tools after updating dependencies
 			if err := m.toolManager.RefreshTools(ctx); err != nil {
 				if m.deps.Logger != nil {
-					m.deps.Logger.Warn("Failed to refresh tools after dependency setup", "error", err)
+					m.deps.Logger.Warn(ctx, "Failed to refresh tools after dependency setup", "error", err)
 				}
 			}
 		}

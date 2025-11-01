@@ -11,12 +11,13 @@ import (
 
 	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
 
 // OpenAIProvider implements the AI provider interface for OpenAI
 type OpenAIProvider struct {
 	config         *OpenAIConfig
-	logger         interfaces.Logger
+	logger         logging.Logger
 	metrics        interfaces.Metrics
 	httpClient     *http.Client
 	tools          []models.Tool
@@ -143,7 +144,7 @@ func (p *OpenAIProvider) SendMessage(ctx context.Context, message string) (strin
 
 func (p *OpenAIProvider) SendMessageWithContext(ctx context.Context, message string, contextID string) (string, error) {
 	if p.logger != nil {
-		p.logger.Info("Sending message with context", "context_id", contextID, "message_length", len(message))
+		p.logger.Info(ctx, "Sending message with context", "context_id", contextID, "message_length", len(message))
 	}
 
 	// Get or create context
@@ -263,7 +264,7 @@ func (p *OpenAIProvider) GetContextStats(ctx context.Context, contextID string) 
 func (p *OpenAIProvider) SetTools(ctx context.Context, tools []models.Tool) error {
 	p.tools = tools
 	if p.logger != nil {
-		p.logger.Info("Tools updated", "tool_count", len(tools))
+		p.logger.Info(ctx, "Tools updated", "tool_count", len(tools))
 	}
 	return nil
 }
@@ -367,7 +368,7 @@ func (p *OpenAIProvider) GetMetrics(ctx context.Context) (*models.ProviderMetric
 func (p *OpenAIProvider) Start(ctx context.Context) error {
 	p.status = "running"
 	if p.logger != nil {
-		p.logger.Info("OpenAI provider started")
+		p.logger.Info(ctx, "OpenAI provider started")
 	}
 	return nil
 }
@@ -375,7 +376,7 @@ func (p *OpenAIProvider) Start(ctx context.Context) error {
 func (p *OpenAIProvider) Stop(ctx context.Context) error {
 	p.status = "stopped"
 	if p.logger != nil {
-		p.logger.Info("OpenAI provider stopped")
+		p.logger.Info(ctx, "OpenAI provider stopped")
 	}
 	return nil
 }
@@ -388,7 +389,7 @@ func (p *OpenAIProvider) Restart(ctx context.Context) error {
 }
 
 // Set dependencies
-func (p *OpenAIProvider) SetLogger(logger interfaces.Logger) {
+func (p *OpenAIProvider) SetLogger(logger logging.Logger) {
 	p.logger = logger
 }
 
@@ -404,7 +405,7 @@ func (p *OpenAIProvider) SetContextManager(cm interfaces.ContextManager) {
 
 func (p *OpenAIProvider) callOpenAIWithContext(ctx context.Context, contextID string, conversationContext *models.ConversationContext) (string, error) {
 	if p.logger != nil {
-		p.logger.Debug("Calling OpenAI API", "context_id", contextID, "message_count", len(conversationContext.Messages))
+		p.logger.Debug(ctx, "Calling OpenAI API", "context_id", contextID, "message_count", len(conversationContext.Messages))
 	}
 
 	// Convert messages to OpenAI format
@@ -528,7 +529,7 @@ func (p *OpenAIProvider) processOpenAIResponse(ctx context.Context, response *Op
 			var input any
 			if err := json.Unmarshal([]byte(tc.Function.Arguments), &input); err != nil {
 				if p.logger != nil {
-					p.logger.Warn("Failed to unmarshal tool arguments", "tool", tc.Function.Name, "error", err)
+					p.logger.Warn(ctx, "Failed to unmarshal tool arguments", "tool", tc.Function.Name, "error", err)
 				}
 			}
 
@@ -545,7 +546,7 @@ func (p *OpenAIProvider) processOpenAIResponse(ctx context.Context, response *Op
 		if p.contextManager != nil {
 			if err := p.contextManager.AddMessage(ctx, contextID, assistantMessage); err != nil {
 				if p.logger != nil {
-					p.logger.Error("Failed to add assistant message to context", "error", err)
+					p.logger.Error(ctx, "Failed to add assistant message to context", "error", err)
 				}
 			}
 		}
@@ -558,7 +559,7 @@ func (p *OpenAIProvider) processOpenAIResponse(ctx context.Context, response *Op
 	if p.contextManager != nil {
 		if err := p.contextManager.AddMessage(ctx, contextID, assistantMessage); err != nil {
 			if p.logger != nil {
-				p.logger.Error("Failed to add assistant message to context", "error", err)
+				p.logger.Error(ctx, "Failed to add assistant message to context", "error", err)
 			}
 		}
 	}

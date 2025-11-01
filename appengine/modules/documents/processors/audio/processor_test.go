@@ -63,6 +63,14 @@ func (m *mockProcessorLogger) WithContext(ctx context.Context) interfaces.Logger
 	return m
 }
 
+func (m *mockProcessorLogger) WithModule(module string) interfaces.Logger {
+	return m
+}
+
+func (m *mockProcessorLogger) WithComponent(component string) interfaces.Logger {
+	return m
+}
+
 // Mock metrics collector for testing
 type mockProcessorMetrics struct {
 	counters   map[string]int

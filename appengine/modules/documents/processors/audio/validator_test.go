@@ -48,6 +48,14 @@ func (m *mockLogger) WithContext(ctx context.Context) interfaces.Logger {
 	return m
 }
 
+func (m *mockLogger) WithModule(module string) interfaces.Logger {
+	return m
+}
+
+func (m *mockLogger) WithComponent(component string) interfaces.Logger {
+	return m
+}
+
 // TestNewAudioValidator tests validator construction
 func TestNewAudioValidator(t *testing.T) {
 	config := DefaultAudioConfig()

@@ -3,6 +3,8 @@ package interfaces
 import (
 	"context"
 	"database/sql"
+
+	"arcadia/pkg/logging"
 )
 
 // DatabaseProvider defines the interface for database operations
@@ -69,18 +71,8 @@ type QueueStats struct {
 	AverageLatency   float64 `json:"average_latency_ms"`
 }
 
-// Logger defines the interface for logging
-type Logger interface {
-	Debug(ctx context.Context, msg string, fields ...interface{})
-	Info(ctx context.Context, msg string, fields ...interface{})
-	Warn(ctx context.Context, msg string, fields ...interface{})
-	Error(ctx context.Context, msg string, fields ...interface{})
-	Fatal(ctx context.Context, msg string, fields ...interface{})
-
-	// Structured logging
-	WithFields(fields map[string]interface{}) Logger
-	WithContext(ctx context.Context) Logger
-}
+// Logger type alias for backward compatibility - use pkg/logging.Logger
+type Logger = logging.Logger
 
 // MetricsCollector defines the interface for collecting metrics
 type MetricsCollector interface {

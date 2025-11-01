@@ -1,11 +1,13 @@
 package services
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"sync"
+
+	"arcadia/pkg/logging"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -20,12 +22,15 @@ type Database interface {
 
 // SQLiteDatabase implements the Database interface for SQLite
 type SQLiteDatabase struct {
-	db    *sql.DB
-	mutex sync.RWMutex
+	db     *sql.DB
+	mutex  sync.RWMutex
+	logger logging.Logger
 }
 
 // NewSQLiteDatabase creates a new SQLite database instance
-func NewSQLiteDatabase(filepath string) (*SQLiteDatabase, error) {
+func NewSQLiteDatabase(filepath string, logger logging.Logger) (*SQLiteDatabase, error) {
+	ctx := context.Background()
+
 	db, err := sql.Open("sqlite3", filepath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %v", err)
@@ -38,16 +43,21 @@ func NewSQLiteDatabase(filepath string) (*SQLiteDatabase, error) {
 
 	// Enable WAL mode for better concurrency
 	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		log.Printf("Warning: failed to enable WAL mode: %v", err)
+		if logger != nil {
+			logger.Warn(ctx, "Failed to enable WAL mode", "error", err, "filepath", filepath)
+		}
 	}
 
 	// Enable foreign keys
 	if _, err := db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
-		log.Printf("Warning: failed to enable foreign keys: %v", err)
+		if logger != nil {
+			logger.Warn(ctx, "Failed to enable foreign keys", "error", err, "filepath", filepath)
+		}
 	}
 
 	return &SQLiteDatabase{
-		db: db,
+		db:     db,
+		logger: logger,
 	}, nil
 }
 
@@ -88,11 +98,14 @@ func (s *SQLiteDatabase) Close() error {
 type DatabaseManager struct {
 	appDB    Database
 	systemDB Database
+	logger   logging.Logger
 }
 
 // NewDatabaseManager creates a new database manager
-func NewDatabaseManager() *DatabaseManager {
-	return &DatabaseManager{}
+func NewDatabaseManager(logger logging.Logger) *DatabaseManager {
+	return &DatabaseManager{
+		logger: logger,
+	}
 }
 
 // GetAppDB returns the app database instance
@@ -107,6 +120,8 @@ func (dm *DatabaseManager) GetSystemDB() Database {
 
 // Initialize initializes both app and system databases
 func (dm *DatabaseManager) Initialize() error {
+	ctx := context.Background()
+
 	// Create data directory if it doesn't exist
 	if err := os.MkdirAll("data", 0755); err != nil {
 		return fmt.Errorf("failed to create data directory: %v", err)
@@ -122,13 +137,16 @@ func (dm *DatabaseManager) Initialize() error {
 		return fmt.Errorf("failed to initialize system database: %v", err)
 	}
 
-	log.Println("Databases initialized successfully")
+	if dm.logger != nil {
+		dm.logger.Info(ctx, "Databases initialized successfully")
+	}
 	return nil
 }
 
 func (dm *DatabaseManager) initAppDatabase() error {
+	ctx := context.Background()
 	var err error
-	dm.appDB, err = NewSQLiteDatabase("data/app_data.db")
+	dm.appDB, err = NewSQLiteDatabase("data/app_data.db", dm.logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize app database: %v", err)
 	}
@@ -138,13 +156,16 @@ func (dm *DatabaseManager) initAppDatabase() error {
 		return fmt.Errorf("failed to create app tables: %v", err)
 	}
 
-	log.Println("App database initialized successfully")
+	if dm.logger != nil {
+		dm.logger.Info(ctx, "App database initialized successfully", "db_path", "data/app_data.db")
+	}
 	return nil
 }
 
 func (dm *DatabaseManager) initSystemDatabase() error {
+	ctx := context.Background()
 	var err error
-	dm.systemDB, err = NewSQLiteDatabase("data/system.db")
+	dm.systemDB, err = NewSQLiteDatabase("data/system.db", dm.logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize system database: %v", err)
 	}
@@ -154,7 +175,9 @@ func (dm *DatabaseManager) initSystemDatabase() error {
 		return fmt.Errorf("failed to create system tables: %v", err)
 	}
 
-	log.Println("System database initialized successfully")
+	if dm.logger != nil {
+		dm.logger.Info(ctx, "System database initialized successfully", "db_path", "data/system.db")
+	}
 	return nil
 }
 
@@ -183,22 +206,22 @@ func (dm *DatabaseManager) Close() {
 }
 
 // InitDatabasesWithManager initializes databases using the new DatabaseManager
-func InitDatabasesWithManager() (*DatabaseManager, error) {
-	dm := NewDatabaseManager()
+func InitDatabasesWithManager(logger logging.Logger) (*DatabaseManager, error) {
+	dm := NewDatabaseManager(logger)
 	if err := dm.Initialize(); err != nil {
 		return nil, err
 	}
 
 	// Initialize the schedule repository with the system database
-	InitScheduleRepository(dm.GetSystemDB())
+	InitScheduleRepository(dm.GetSystemDB(), logger)
 
 	// Initialize the default scheduler with the schedule repository
 	if repo := GetScheduleRepository(); repo != nil {
-		InitDefaultScheduler(repo)
+		InitDefaultScheduler(repo, logger)
 	}
 
 	// Initialize the queue repository with the system database
-	InitQueueRepository(dm.GetSystemDB())
+	InitQueueRepository(dm.GetSystemDB(), logger)
 
 	// Initialize the default queue with the queue repository
 	if queueRepo := GetQueueRepository(); queueRepo != nil {

@@ -11,12 +11,13 @@ import (
 
 	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
 
 // Manager implements the tool management functionality
 type Manager struct {
 	config          *models.Config
-	logger          interfaces.Logger
+	logger          logging.Logger
 	metrics         interfaces.Metrics
 	eventBus        interfaces.EventBus
 	registryAccess  interfaces.RegistryAccess
@@ -34,7 +35,7 @@ type Manager struct {
 type ToolRegistry struct {
 	tools    map[string]*models.Tool
 	mutex    sync.RWMutex
-	logger   interfaces.Logger
+	logger   logging.Logger
 	metrics  interfaces.Metrics
 }
 
@@ -126,7 +127,7 @@ func (tm *Manager) RegisterTool(ctx context.Context, tool models.Tool) error {
 	}
 
 	if tm.logger != nil {
-		tm.logger.Info("Registered tool", "tool_name", tool.Name, "category", tool.Category)
+		tm.logger.Info(ctx, "Registered tool", "tool_name", tool.Name, "category", tool.Category)
 	}
 
 	return nil
@@ -162,7 +163,7 @@ func (tm *Manager) UnregisterTool(ctx context.Context, toolName string) error {
 	}
 
 	if tm.logger != nil {
-		tm.logger.Info("Unregistered tool", "tool_name", toolName)
+		tm.logger.Info(ctx, "Unregistered tool", "tool_name", toolName)
 	}
 
 	return nil
@@ -211,7 +212,7 @@ func (tm *Manager) ExecuteTool(ctx context.Context, toolName string, input any) 
 	}
 
 	if tm.logger != nil {
-		tm.logger.Debug("Executing tool", "tool_name", toolName, "input", input)
+		tm.logger.Debug(ctx, "Executing tool", "tool_name", toolName, "input", input)
 	}
 
 	var result string
@@ -275,9 +276,9 @@ func (tm *Manager) ExecuteTool(ctx context.Context, toolName string, input any) 
 
 	if tm.logger != nil {
 		if success {
-			tm.logger.Info("Tool execution completed", "tool_name", toolName, "duration_ms", duration)
+			tm.logger.Info(ctx, "Tool execution completed", "tool_name", toolName, "duration_ms", duration)
 		} else {
-			tm.logger.Error("Tool execution failed", "tool_name", toolName, "duration_ms", duration, "error", execErr)
+			tm.logger.Error(ctx, "Tool execution failed", "tool_name", toolName, "duration_ms", duration, "error", execErr)
 		}
 	}
 
@@ -324,7 +325,7 @@ func (tm *Manager) GetToolSchema(ctx context.Context, toolName string) (json.Raw
 // RefreshTools refreshes all tools
 func (tm *Manager) RefreshTools(ctx context.Context) error {
 	if tm.logger != nil {
-		tm.logger.Info("Refreshing tools")
+		tm.logger.Info(ctx, "Refreshing tools")
 	}
 
 	var refreshErr error
@@ -333,7 +334,7 @@ func (tm *Manager) RefreshTools(ctx context.Context) error {
 	if tm.config.EnableMCP {
 		if err := tm.LoadMCPTools(ctx); err != nil {
 			if tm.logger != nil {
-				tm.logger.Error("Failed to load MCP tools", "error", err)
+				tm.logger.Error(ctx, "Failed to load MCP tools", "error", err)
 			}
 			refreshErr = err
 		}
@@ -342,7 +343,7 @@ func (tm *Manager) RefreshTools(ctx context.Context) error {
 	// Refresh dynamic app tools
 	if err := tm.LoadDynamicTools(ctx); err != nil {
 		if tm.logger != nil {
-			tm.logger.Error("Failed to load dynamic tools", "error", err)
+			tm.logger.Error(ctx, "Failed to load dynamic tools", "error", err)
 		}
 		if refreshErr == nil {
 			refreshErr = err
@@ -358,9 +359,9 @@ func (tm *Manager) RefreshTools(ctx context.Context) error {
 
 	if tm.logger != nil {
 		if refreshErr == nil {
-			tm.logger.Info("Tools refreshed successfully", "tool_count", len(tm.tools))
+			tm.logger.Info(ctx, "Tools refreshed successfully", "tool_count", len(tm.tools))
 		} else {
-			tm.logger.Error("Tool refresh completed with errors", "error", refreshErr)
+			tm.logger.Error(ctx, "Tool refresh completed with errors", "error", refreshErr)
 		}
 	}
 
@@ -370,7 +371,7 @@ func (tm *Manager) RefreshTools(ctx context.Context) error {
 // LoadMCPTools loads static MCP tools
 func (tm *Manager) LoadMCPTools(ctx context.Context) error {
 	if tm.logger != nil {
-		tm.logger.Debug("Loading MCP tools")
+		tm.logger.Debug(ctx, "Loading MCP tools")
 	}
 
 	// Static system tools
@@ -501,7 +502,7 @@ func (tm *Manager) LoadMCPTools(ctx context.Context) error {
 func (tm *Manager) LoadDynamicTools(ctx context.Context) error {
 	if tm.registryAccess == nil {
 		if tm.logger != nil {
-			tm.logger.Warn("Registry access not configured, skipping dynamic tool loading")
+			tm.logger.Warn(ctx, "Registry access not configured, skipping dynamic tool loading")
 		}
 		return nil
 	}
@@ -513,7 +514,7 @@ func (tm *Manager) LoadDynamicTools(ctx context.Context) error {
 	defer mutex.RUnlock()
 
 	if tm.logger != nil {
-		tm.logger.Debug("Loading dynamic tools from registry", "app_count", len(registry))
+		tm.logger.Debug(ctx, "Loading dynamic tools from registry", "app_count", len(registry))
 	}
 
 	toolsLoaded := 0
@@ -552,14 +553,14 @@ func (tm *Manager) LoadDynamicTools(ctx context.Context) error {
 
 				toolsLoaded++
 				if tm.logger != nil {
-					tm.logger.Debug("Loaded dynamic tool", "tool_name", toolName, "app_id", appID)
+					tm.logger.Debug(ctx, "Loaded dynamic tool", "tool_name", toolName, "app_id", appID)
 				}
 			}
 		}
 	}
 
 	if tm.logger != nil {
-		tm.logger.Info("Loaded dynamic tools", "tools_loaded", toolsLoaded)
+		tm.logger.Info(ctx, "Loaded dynamic tools", "tools_loaded", toolsLoaded)
 	}
 
 	return nil
@@ -744,7 +745,7 @@ func (tm *Manager) UpdateDependencies(ctx context.Context, deps *interfaces.Depe
 	}
 
 	if tm.logger != nil {
-		tm.logger.Info("Tool manager dependencies updated", "embedding_search_available", tm.embeddingSearch != nil)
+		tm.logger.Info(ctx, "Tool manager dependencies updated", "embedding_search_available", tm.embeddingSearch != nil)
 	}
 
 	return nil
@@ -1193,7 +1194,7 @@ func (tm *Manager) publishEvent(ctx context.Context, event *models.Event) {
 	if tm.eventBus != nil {
 		if err := tm.eventBus.PublishAsync(ctx, event); err != nil {
 			if tm.logger != nil {
-				tm.logger.Error("Failed to publish tool event", "event_type", event.Type, "error", err)
+				tm.logger.Error(ctx, "Failed to publish tool event", "event_type", event.Type, "error", err)
 			}
 		}
 	}

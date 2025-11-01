@@ -81,6 +81,7 @@ services:
       "ollama serve &
       sleep 5 &&
       ollama pull embeddinggemma &&
+      ollama pull llama3:8b &&
       wait"
 volumes:
   ollama_data:

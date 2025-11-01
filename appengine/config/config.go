@@ -1,10 +1,12 @@
 package config
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
+
+	"arcadia/pkg/logging"
 )
 
 // ServerConfig represents server configuration
@@ -21,11 +23,14 @@ type Config struct {
 // Manager handles configuration loading and management
 type Manager struct {
 	config Config
+	logger logging.Logger
 }
 
 // NewManager creates a new configuration manager
-func NewManager() *Manager {
-	return &Manager{}
+func NewManager(logger logging.Logger) *Manager {
+	return &Manager{
+		logger: logger,
+	}
 }
 
 // Load loads the configuration from file and initializes services
@@ -51,7 +56,10 @@ func (m *Manager) Load() error {
 		return fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	log.Printf("Configuration loaded successfully")
+	ctx := context.Background()
+	if m.logger != nil {
+		m.logger.Info(ctx, "Configuration loaded successfully", "config_file", configFile, "port", m.config.Server.Port)
+	}
 	return nil
 }
 

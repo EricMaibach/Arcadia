@@ -512,6 +512,14 @@ func (ml *MockLogger) WithContext(ctx context.Context) interfaces.Logger {
 	return ml
 }
 
+func (ml *MockLogger) WithModule(module string) interfaces.Logger {
+	return ml
+}
+
+func (ml *MockLogger) WithComponent(component string) interfaces.Logger {
+	return ml
+}
+
 // BenchmarkCircuitBreakerClosed benchmarks performance in closed state
 func BenchmarkCircuitBreakerClosed(b *testing.B) {
 	config := DefaultAudioConfig()

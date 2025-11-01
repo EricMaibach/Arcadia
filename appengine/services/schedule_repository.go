@@ -1,24 +1,28 @@
 package services
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	"arcadia/pkg/logging"
 )
 
 // ScheduleRepository handles persistence of schedules
 type ScheduleRepository struct {
-	db    Database
-	mutex sync.RWMutex
+	db     Database
+	mutex  sync.RWMutex
+	logger logging.Logger
 }
 
 // NewScheduleRepository creates a new schedule repository
-func NewScheduleRepository(db Database) *ScheduleRepository {
+func NewScheduleRepository(db Database, logger logging.Logger) *ScheduleRepository {
 	repo := &ScheduleRepository{
-		db: db,
+		db:     db,
+		logger: logger,
 	}
 	// Initialize tables
 	repo.initializeTables()
@@ -27,10 +31,11 @@ func NewScheduleRepository(db Database) *ScheduleRepository {
 
 // initializeTables creates the necessary tables if they don't exist
 func (r *ScheduleRepository) initializeTables() {
+	ctx := context.Background()
 	if r.db == nil {
 		return // Skip table creation if database is nil
 	}
-	
+
 	queries := []string{
 		// App schedules table
 		`CREATE TABLE IF NOT EXISTS app_schedules (
@@ -64,7 +69,9 @@ func (r *ScheduleRepository) initializeTables() {
 
 	for _, query := range queries {
 		if _, err := r.db.Exec(query); err != nil {
-			log.Printf("Warning: failed to create schedule table: %v", err)
+			if r.logger != nil {
+				r.logger.Warn(ctx, "Failed to create schedule table", "error", err)
+			}
 		}
 	}
 }
@@ -111,6 +118,7 @@ func (r *ScheduleRepository) SaveSchedule(schedule *AppSchedule) error {
 
 // LoadSchedules loads all active schedules from the database
 func (r *ScheduleRepository) LoadSchedules() (map[string]*AppSchedule, error) {
+	ctx := context.Background()
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
 
@@ -118,7 +126,7 @@ func (r *ScheduleRepository) LoadSchedules() (map[string]*AppSchedule, error) {
 		return nil, fmt.Errorf("database not initialized")
 	}
 
-	query := `SELECT id, app_id, tool_name, input_data, schedule_type, scheduled_time, 
+	query := `SELECT id, app_id, tool_name, input_data, schedule_type, scheduled_time,
 		recurrence_rule, is_active FROM app_schedules WHERE is_active = 1`
 
 	rows, err := r.db.Query(query)
@@ -156,7 +164,9 @@ func (r *ScheduleRepository) LoadSchedules() (map[string]*AppSchedule, error) {
 				}
 			}
 			if parseErr != nil {
-				log.Printf("Warning: failed to parse scheduled time '%s' for schedule %s: %v", scheduledTimeStr, schedule.ID, err)
+				if r.logger != nil {
+					r.logger.Warn(ctx, "Failed to parse scheduled time, skipping schedule", "scheduled_time", scheduledTimeStr, "schedule_id", schedule.ID, "error", err)
+				}
 				continue // Skip this schedule
 			}
 		}
@@ -165,7 +175,9 @@ func (r *ScheduleRepository) LoadSchedules() (map[string]*AppSchedule, error) {
 		// Unmarshal input data
 		if inputData.Valid && inputData.String != "" {
 			if err := json.Unmarshal([]byte(inputData.String), &schedule.Input); err != nil {
-				log.Printf("Warning: failed to unmarshal input data for schedule %s: %v", schedule.ID, err)
+				if r.logger != nil {
+					r.logger.Warn(ctx, "Failed to unmarshal input data for schedule", "schedule_id", schedule.ID, "error", err)
+				}
 			}
 		}
 
@@ -173,7 +185,9 @@ func (r *ScheduleRepository) LoadSchedules() (map[string]*AppSchedule, error) {
 		if recurrencePattern.Valid && recurrencePattern.String != "" {
 			var recurrence RecurrenceRule
 			if err := json.Unmarshal([]byte(recurrencePattern.String), &recurrence); err != nil {
-				log.Printf("Warning: failed to unmarshal recurrence pattern for schedule %s: %v", schedule.ID, err)
+				if r.logger != nil {
+					r.logger.Warn(ctx, "Failed to unmarshal recurrence pattern for schedule", "schedule_id", schedule.ID, "error", err)
+				}
 			} else {
 				schedule.Recurrence = &recurrence
 			}
@@ -307,8 +321,8 @@ func nullableTime(t *time.Time) interface{} {
 var defaultScheduleRepository *ScheduleRepository
 
 // InitScheduleRepository initializes the default schedule repository
-func InitScheduleRepository(db Database) {
-	defaultScheduleRepository = NewScheduleRepository(db)
+func InitScheduleRepository(db Database, logger logging.Logger) {
+	defaultScheduleRepository = NewScheduleRepository(db, logger)
 }
 
 // GetScheduleRepository returns the default schedule repository

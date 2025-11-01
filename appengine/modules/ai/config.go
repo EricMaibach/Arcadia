@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"arcadia/modules/ai/core"
 	"arcadia/modules/ai/models"
 )
 
@@ -36,6 +37,14 @@ type Config struct {
 
 	// Monitoring settings
 	LogLevel string `json:"log_level" yaml:"log_level"`
+
+	// Auto-search settings
+	AutoSearchEnabled      bool    `json:"auto_search_enabled" yaml:"auto_search_enabled"`
+	AutoSearchMaxResults   int     `json:"auto_search_max_results" yaml:"auto_search_max_results"`
+	AutoSearchMinConfidence float64 `json:"auto_search_min_confidence" yaml:"auto_search_min_confidence"`
+	AutoSearchMaxContextSize int    `json:"auto_search_max_context_size" yaml:"auto_search_max_context_size"`
+	AutoSearchIncludeMetadata bool  `json:"auto_search_include_metadata" yaml:"auto_search_include_metadata"`
+	AutoSearchTimeout      int     `json:"auto_search_timeout" yaml:"auto_search_timeout"`
 }
 
 // OpenAIConfig holds configuration specific to OpenAI
@@ -68,6 +77,13 @@ func DefaultConfig() *Config {
 		DisabledTools:         []string{},
 		MaxConcurrentRequests: 10,
 		LogLevel:              "info",
+		// Auto-search defaults
+		AutoSearchEnabled:         true,
+		AutoSearchMaxResults:      3,
+		AutoSearchMinConfidence:   0.5,  // Lower threshold to be more permissive
+		AutoSearchMaxContextSize:  4000,
+		AutoSearchIncludeMetadata: true,
+		AutoSearchTimeout:         5,
 	}
 }
 
@@ -120,6 +136,20 @@ func (c *Config) Validate() error {
 
 	if c.DisabledTools == nil {
 		c.DisabledTools = []string{}
+	}
+
+	// Auto-search validation and defaults
+	if c.AutoSearchMaxResults <= 0 {
+		c.AutoSearchMaxResults = 3
+	}
+	if c.AutoSearchMinConfidence <= 0 {
+		c.AutoSearchMinConfidence = 0.5
+	}
+	if c.AutoSearchMaxContextSize <= 0 {
+		c.AutoSearchMaxContextSize = 4000
+	}
+	if c.AutoSearchTimeout <= 0 {
+		c.AutoSearchTimeout = 5
 	}
 
 	return nil
@@ -258,5 +288,17 @@ func (c *Config) ToModelsConfig() *models.Config {
 		DisabledTools:         c.DisabledTools,
 		MaxConcurrentRequests: c.MaxConcurrentRequests,
 		LogLevel:              c.LogLevel,
+	}
+}
+
+// GetAutoSearchConfig returns the auto-search configuration
+func (c *Config) GetAutoSearchConfig() *core.AutoSearchConfig {
+	return &core.AutoSearchConfig{
+		Enabled:         c.AutoSearchEnabled,
+		MaxResults:      c.AutoSearchMaxResults,
+		MinConfidence:   c.AutoSearchMinConfidence,
+		MaxContextSize:  c.AutoSearchMaxContextSize,
+		IncludeMetadata: c.AutoSearchIncludeMetadata,
+		Timeout:         c.AutoSearchTimeout,
 	}
 }

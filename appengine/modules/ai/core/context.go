@@ -9,6 +9,7 @@ import (
 
 	"arcadia/modules/ai/interfaces"
 	"arcadia/modules/ai/models"
+	"arcadia/pkg/logging"
 )
 
 // ContextManager implements the context management functionality
@@ -16,7 +17,7 @@ type ContextManager struct {
 	contexts      map[string]*models.ConversationContext
 	mutex         sync.RWMutex
 	config        *models.Config
-	logger        interfaces.Logger
+	logger        logging.Logger
 	database      interfaces.Database
 	cache         interfaces.Cache
 	metrics       interfaces.Metrics
@@ -90,7 +91,7 @@ func (cm *ContextManager) CreateContext(ctx context.Context, contextID string) e
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Created conversation context", "context_id", contextID)
+		cm.logger.Info(ctx, "Created conversation context", "context_id", contextID)
 	}
 
 	return nil
@@ -153,7 +154,7 @@ func (cm *ContextManager) DeleteContext(ctx context.Context, contextID string) e
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Deleted conversation context", "context_id", contextID)
+		cm.logger.Info(ctx, "Deleted conversation context", "context_id", contextID)
 	}
 
 	return nil
@@ -282,7 +283,7 @@ func (cm *ContextManager) ClearContext(ctx context.Context, contextID string) er
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Cleared conversation context", "context_id", contextID, "messages_removed", messageCount)
+		cm.logger.Info(ctx, "Cleared conversation context", "context_id", contextID, "messages_removed", messageCount)
 	}
 
 	return nil
@@ -325,7 +326,7 @@ func (cm *ContextManager) CompactContext(ctx context.Context, contextID string) 
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Compacted conversation context", "context_id", contextID,
+		cm.logger.Info(ctx, "Compacted conversation context", "context_id", contextID,
 			"original_messages", originalMessageCount, "compacted_messages", compactedMessageCount)
 	}
 
@@ -369,7 +370,7 @@ func (cm *ContextManager) TrimContext(ctx context.Context, contextID string, max
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Trimmed conversation context", "context_id", contextID,
+		cm.logger.Info(ctx, "Trimmed conversation context", "context_id", contextID,
 			"original_messages", originalMessageCount, "trimmed_messages", trimmedMessageCount)
 	}
 
@@ -470,7 +471,7 @@ func (cm *ContextManager) ImportContext(ctx context.Context, contextID string, e
 	conversationContext.Stats.LastUpdated = time.Now()
 
 	if cm.logger != nil {
-		cm.logger.Info("Imported conversation context", "context_id", contextID, "messages", len(export.Messages))
+		cm.logger.Info(ctx, "Imported conversation context", "context_id", contextID, "messages", len(export.Messages))
 	}
 
 	return nil
@@ -513,7 +514,7 @@ func (cm *ContextManager) CleanupExpiredContexts(ctx context.Context) (*models.C
 		}
 
 		if cm.logger != nil {
-			cm.logger.Debug("Expired context", "context_id", contextID)
+			cm.logger.Debug(ctx, "Expired context", "context_id", contextID)
 		}
 	}
 
@@ -537,7 +538,7 @@ func (cm *ContextManager) CleanupExpiredContexts(ctx context.Context) (*models.C
 	}
 
 	if cm.logger != nil {
-		cm.logger.Info("Cleaned up expired contexts", "expired_count", len(expiredContexts), "total_contexts", len(cm.contexts))
+		cm.logger.Info(ctx, "Cleaned up expired contexts", "expired_count", len(expiredContexts), "total_contexts", len(cm.contexts))
 	}
 
 	return result, nil
@@ -603,8 +604,9 @@ func (cm *ContextManager) compactContext(conversationContext *models.Conversatio
 		return
 	}
 
+	ctx := context.Background()
 	if cm.logger != nil {
-		cm.logger.Debug("Compacting context", "context_id", conversationContext.ID,
+		cm.logger.Debug(ctx, "Compacting context", "context_id", conversationContext.ID,
 			"current_messages", len(conversationContext.Messages), "target_messages", maxMessages)
 	}
 
@@ -636,8 +638,9 @@ func (cm *ContextManager) trimContext(conversationContext *models.ConversationCo
 		return
 	}
 
+	ctx := context.Background()
 	if cm.logger != nil {
-		cm.logger.Debug("Trimming context", "context_id", conversationContext.ID,
+		cm.logger.Debug(ctx, "Trimming context", "context_id", conversationContext.ID,
 			"current_messages", len(conversationContext.Messages), "target_messages", maxMessages)
 	}
 
@@ -761,10 +764,10 @@ func (cm *ContextManager) startCleanupRoutine() {
 				ctx := context.Background()
 				if result, err := cm.CleanupExpiredContexts(ctx); err != nil {
 					if cm.logger != nil {
-						cm.logger.Error("Context cleanup failed", "error", err)
+						cm.logger.Error(ctx, "Context cleanup failed", "error", err)
 					}
 				} else if cm.logger != nil && result.ItemsRemoved > 0 {
-					cm.logger.Info("Context cleanup completed", "expired_contexts", result.ItemsRemoved)
+					cm.logger.Info(ctx, "Context cleanup completed", "expired_contexts", result.ItemsRemoved)
 				}
 			case <-cm.stopCleanup:
 				cm.cleanupTicker.Stop()
@@ -778,7 +781,7 @@ func (cm *ContextManager) publishEvent(ctx context.Context, event *models.Event)
 	if cm.eventBus != nil {
 		if err := cm.eventBus.PublishAsync(ctx, event); err != nil {
 			if cm.logger != nil {
-				cm.logger.Error("Failed to publish context event", "event_type", event.Type, "error", err)
+				cm.logger.Error(ctx, "Failed to publish context event", "event_type", event.Type, "error", err)
 			}
 		}
 	}

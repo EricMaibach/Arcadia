@@ -25,6 +25,11 @@ type Module struct {
 	contextManager interfaces.ContextManager
 	toolManager    interfaces.ToolManager
 
+	// Auto-search components
+	queryAnalyzer      *core.QueryAnalyzer
+	autoSearchExecutor *core.AutoSearchExecutor
+	contextBuilder     *core.ContextBuilder
+
 	// Provider management
 	providers      map[string]interfaces.AIProvider
 	activeProvider interfaces.AIProvider
@@ -97,7 +102,7 @@ func NewModule(ctx context.Context, config *Config, deps *interfaces.Dependencie
 	module.updateState(models.ModuleStatusRunning)
 
 	if module.deps.Logger != nil {
-		module.deps.Logger.Info("AI module created successfully", "provider_count", len(module.providers))
+		module.deps.Logger.Info(ctx, "AI module created successfully", "provider_count", len(module.providers))
 	}
 
 	return module, nil
@@ -158,13 +163,55 @@ func (m *Module) SendMessageWithContext(ctx context.Context, message string, con
 		})
 	}
 
-	// Send message through provider
-	response, err := provider.SendMessageWithContext(ctx, message, contextID)
+	// Auto-search preprocessing (if enabled)
+	finalMessage := message
+	if m.shouldExecuteAutoSearch() {
+		enrichedPrompt, autoSearchErr := m.executeAutoSearch(ctx, message)
+		if autoSearchErr != nil {
+			// Log error but continue with original message
+			if m.deps.Logger != nil {
+				m.deps.Logger.Warn(ctx, "Auto-search failed, continuing with original prompt",
+					"error", autoSearchErr)
+			}
+			if m.deps.Metrics != nil {
+				m.deps.Metrics.IncrementCounter("auto_search.errors", nil)
+			}
+		} else if enrichedPrompt != nil && enrichedPrompt.ContextAdded {
+			finalMessage = enrichedPrompt.FinalPrompt
+
+			if m.deps.Logger != nil {
+				m.deps.Logger.Info(ctx, "Auto-search enriched prompt",
+					"results_found", enrichedPrompt.SearchContext.ResultsFound,
+					"context_chars", enrichedPrompt.SearchContext.TotalChars)
+			}
+			if m.deps.Metrics != nil {
+				m.deps.Metrics.IncrementCounter("auto_search.success", map[string]string{
+					"results_found": fmt.Sprintf("%d", enrichedPrompt.SearchContext.ResultsFound),
+				})
+			}
+		}
+	}
+
+	// Send message through provider (with enriched message)
+	response, err := provider.SendMessageWithContext(ctx, finalMessage, contextID)
 
 	// If response is empty and no error, check if we need to execute tools
 	if err == nil && response == "" {
-		if toolResponse, toolErr := m.handleToolExecution(ctx, contextID, 0); toolErr == nil && toolResponse != "" {
+		toolResponse, toolErr := m.handleToolExecution(ctx, contextID, 0)
+		if toolErr != nil {
+			// Log tool execution error
+			if m.deps.Logger != nil {
+				m.deps.Logger.Error(ctx, "Tool execution failed", "error", toolErr, "context_id", contextID)
+			}
+			// Don't fail the request, but notify user
+			response = fmt.Sprintf("I attempted to search for relevant information but encountered an error: %v. Please try rephrasing your question.", toolErr)
+		} else if toolResponse != "" {
 			response = toolResponse
+		} else {
+			// Tool execution returned empty - this shouldn't happen
+			if m.deps.Logger != nil {
+				m.deps.Logger.Warn(ctx, "Tool execution returned empty response", "context_id", contextID)
+			}
 		}
 	}
 
@@ -210,14 +257,14 @@ func (m *Module) SendMessageWithContext(ctx context.Context, message string, con
 	// Log the operation
 	if m.deps.Logger != nil {
 		if success {
-			m.deps.Logger.Info("Message sent successfully",
+			m.deps.Logger.Info(ctx, "Message sent successfully",
 				"context_id", contextID,
 				"provider", provider.Name(),
 				"duration_ms", duration,
 				"message_length", len(message),
 				"response_length", len(response))
 		} else {
-			m.deps.Logger.Error("Message sending failed",
+			m.deps.Logger.Error(ctx, "Message sending failed",
 				"context_id", contextID,
 				"provider", provider.Name(),
 				"duration_ms", duration,
@@ -342,7 +389,7 @@ func (m *Module) SwitchProvider(ctx context.Context, providerName string) error 
 	}
 
 	if m.deps.Logger != nil {
-		m.deps.Logger.Info("Provider switched", "old_provider", oldProvider, "new_provider", providerName)
+		m.deps.Logger.Info(ctx, "Provider switched", "old_provider", oldProvider, "new_provider", providerName)
 	}
 
 	return nil
@@ -521,7 +568,7 @@ func (m *Module) Start(ctx context.Context) error {
 	if m.toolManager != nil {
 		if err := m.toolManager.RefreshTools(ctx); err != nil {
 			if m.deps.Logger != nil {
-				m.deps.Logger.Warn("Failed to refresh tools during start", "error", err)
+				m.deps.Logger.Warn(ctx, "Failed to refresh tools during start", "error", err)
 			}
 		}
 	}
@@ -530,7 +577,7 @@ func (m *Module) Start(ctx context.Context) error {
 	for name, provider := range m.providers {
 		if err := provider.Start(ctx); err != nil {
 			if m.deps.Logger != nil {
-				m.deps.Logger.Error("Failed to start provider", "provider", name, "error", err)
+				m.deps.Logger.Error(ctx, "Failed to start provider", "provider", name, "error", err)
 			}
 		}
 	}
@@ -546,7 +593,7 @@ func (m *Module) Start(ctx context.Context) error {
 	}
 
 	if m.deps.Logger != nil {
-		m.deps.Logger.Info("AI module started successfully")
+		m.deps.Logger.Info(ctx, "AI module started successfully")
 	}
 
 	return nil
@@ -563,7 +610,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	for name, provider := range m.providers {
 		if err := provider.Stop(ctx); err != nil {
 			if m.deps.Logger != nil {
-				m.deps.Logger.Error("Failed to stop provider", "provider", name, "error", err)
+				m.deps.Logger.Error(ctx, "Failed to stop provider", "provider", name, "error", err)
 			}
 		}
 	}
@@ -583,7 +630,7 @@ func (m *Module) Stop(ctx context.Context) error {
 	}
 
 	if m.deps.Logger != nil {
-		m.deps.Logger.Info("AI module stopped")
+		m.deps.Logger.Info(ctx, "AI module stopped")
 	}
 
 	return nil
@@ -660,7 +707,7 @@ func (m *Module) handleToolExecution(ctx context.Context, contextID string, dept
 	for i, toolCall := range assistantMessage.ToolCalls {
 		if toolCall.Result == "" && toolCall.Error == "" {
 			if m.deps.Logger != nil {
-				m.deps.Logger.Info("Executing tool", "tool", toolCall.Name, "context_id", contextID)
+				m.deps.Logger.Info(ctx, "Executing tool", "tool", toolCall.Name, "context_id", contextID)
 			}
 
 			startTime := time.Now()
@@ -690,7 +737,7 @@ func (m *Module) handleToolExecution(ctx context.Context, contextID string, dept
 			// Add tool result to context
 			if err := m.contextManager.AddMessage(ctx, contextID, toolMessage); err != nil {
 				if m.deps.Logger != nil {
-					m.deps.Logger.Error("Failed to add tool result to context", "error", err)
+					m.deps.Logger.Error(ctx, "Failed to add tool result to context", "error", err)
 				}
 			}
 		}
@@ -722,7 +769,7 @@ func (m *Module) initializeComponents(ctx context.Context) error {
 		contextManager := core.NewContextManager(m.config.ToModelsConfig(), m.deps)
 		m.contextManager = contextManager
 		if m.deps.Logger != nil {
-			m.deps.Logger.Info("Context manager initialized", "persistence", m.config.EnablePersistence, "ttl", m.config.ContextTTL)
+			m.deps.Logger.Info(ctx, "Context manager initialized", "persistence", m.config.EnablePersistence, "ttl", m.config.ContextTTL)
 		}
 	}
 
@@ -731,7 +778,29 @@ func (m *Module) initializeComponents(ctx context.Context) error {
 		toolManager := tools.NewManager(m.config.ToModelsConfig(), m.deps)
 		m.toolManager = toolManager
 		if m.deps.Logger != nil {
-			m.deps.Logger.Info("Tool manager initialized", "mcp_enabled", m.config.EnableMCP)
+			m.deps.Logger.Info(ctx, "Tool manager initialized", "mcp_enabled", m.config.EnableMCP)
+		}
+	}
+
+	// Initialize auto-search components if enabled and embedding search is available
+	if m.config.AutoSearchEnabled && m.deps.EmbeddingSearch != nil {
+		m.queryAnalyzer = core.NewQueryAnalyzer(m.deps.Logger, m.deps.Metrics)
+
+		autoSearchConfig := m.config.GetAutoSearchConfig()
+		m.autoSearchExecutor = core.NewAutoSearchExecutor(
+			m.deps.EmbeddingSearch,
+			autoSearchConfig,
+			m.deps.Logger,
+			m.deps.Metrics,
+		)
+
+		m.contextBuilder = core.NewContextBuilder(m.deps.Logger)
+
+		if m.deps.Logger != nil {
+			m.deps.Logger.Info(ctx, "Auto-search components initialized",
+				"max_results", autoSearchConfig.MaxResults,
+				"min_confidence", autoSearchConfig.MinConfidence,
+				"max_context_size", autoSearchConfig.MaxContextSize)
 		}
 	}
 
@@ -778,7 +847,7 @@ func (m *Module) initializeProviders(ctx context.Context) error {
 		}
 
 		if m.deps.Logger != nil {
-			m.deps.Logger.Info("OpenAI provider initialized")
+			m.deps.Logger.Info(ctx, "OpenAI provider initialized")
 		}
 	}
 
@@ -849,7 +918,7 @@ func (m *Module) publishEvent(ctx context.Context, event *models.Event) {
 	if m.deps.EventBus != nil {
 		if err := m.deps.EventBus.PublishAsync(ctx, event); err != nil {
 			if m.deps.Logger != nil {
-				m.deps.Logger.Error("Failed to publish event", "event_type", event.Type, "error", err)
+				m.deps.Logger.Error(ctx, "Failed to publish event", "event_type", event.Type, "error", err)
 			}
 		}
 	}
@@ -875,6 +944,63 @@ func (m *Module) publishEvent(ctx context.Context, event *models.Event) {
 			}
 		}
 	}
+}
+
+// shouldExecuteAutoSearch checks if auto-search components are initialized
+func (m *Module) shouldExecuteAutoSearch() bool {
+	return m.queryAnalyzer != nil &&
+		m.autoSearchExecutor != nil &&
+		m.contextBuilder != nil
+}
+
+// executeAutoSearch orchestrates the auto-search flow
+func (m *Module) executeAutoSearch(ctx context.Context, message string) (*core.EnrichedPrompt, error) {
+	startTime := time.Now()
+
+	// Step 1: Analyze query
+	analysis := m.queryAnalyzer.AnalyzeQuery(message)
+
+	// Record metrics
+	if m.deps.Metrics != nil {
+		m.deps.Metrics.RecordValue("auto_search.confidence", analysis.Confidence, nil)
+	}
+
+	// Step 2: Check if we should search
+	if !analysis.ShouldSearch {
+		if m.deps.Logger != nil {
+			m.deps.Logger.Debug(ctx, "Auto-search skipped",
+				"reason", analysis.Reason,
+				"confidence", analysis.Confidence)
+		}
+		if m.deps.Metrics != nil {
+			m.deps.Metrics.IncrementCounter("auto_search.skipped", map[string]string{
+				"reason": analysis.DetectedIntent,
+			})
+		}
+		return nil, nil
+	}
+
+	// Step 3: Execute search
+	searchContext, err := m.autoSearchExecutor.Execute(ctx, analysis)
+	if err != nil {
+		return nil, fmt.Errorf("auto-search execution failed: %w", err)
+	}
+
+	// Step 4: Build enriched prompt
+	enrichedPrompt := m.contextBuilder.BuildEnrichedPrompt(message, searchContext)
+
+	duration := time.Since(startTime).Milliseconds()
+
+	// Record metrics
+	if m.deps.Metrics != nil {
+		tags := map[string]string{
+			"results_found": fmt.Sprintf("%d", searchContext.ResultsFound),
+		}
+		m.deps.Metrics.RecordDuration("auto_search.total_duration", float64(duration), tags)
+		m.deps.Metrics.IncrementCounter("auto_search.executions", tags)
+	}
+
+	return enrichedPrompt, nil
 }
 
 func (m *Module) getConfigInfo() map[string]interface{} {

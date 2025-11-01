@@ -39,6 +39,14 @@ func (e *ExampleLogger) WithContext(ctx context.Context) interfaces.Logger {
 	return e
 }
 
+func (e *ExampleLogger) WithModule(module string) interfaces.Logger {
+	return e
+}
+
+func (e *ExampleLogger) WithComponent(component string) interfaces.Logger {
+	return e
+}
+
 // ExampleOfficeDocumentProcessing demonstrates processing Office documents with high confidence
 func ExampleOfficeDocumentProcessing() {
 	logger := &ExampleLogger{}
