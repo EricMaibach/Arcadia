@@ -326,13 +326,8 @@ func (se *SearchEngine) generateContextHighlights(chunks []*models.ChunkResult, 
 			break
 		}
 
-		// Truncate long chunks for highlights
-		content := chunk.Content
-		if len(content) > 200 {
-			content = content[:200] + "..."
-		}
-
-		highlights = append(highlights, content)
+		// Use full chunk content (no truncation)
+		highlights = append(highlights, chunk.Content)
 	}
 
 	return highlights

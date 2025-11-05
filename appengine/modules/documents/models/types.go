@@ -235,7 +235,7 @@ type IntegrityIssue struct {
 func DefaultSearchConfig() SearchConfig {
 	return SearchConfig{
 		MaxDocumentSize:    50 * 1024, // 50KB
-		MaxHighlights:      3,
-		IncludeFullContent: true,
+		MaxHighlights:      10,
+		IncludeFullContent: false,
 	}
 }

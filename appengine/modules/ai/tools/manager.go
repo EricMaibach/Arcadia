@@ -457,7 +457,7 @@ func (tm *Manager) LoadMCPTools(ctx context.Context) error {
 		},
 		{
 			Name:        "search_documents",
-			Description: "Search for documents with enhanced capabilities including complete document content, context highlights of the top 3 most relevant passages, content previews, and intelligent size management. Returns full documents with highlighted relevant passages for better AI understanding, eliminating fragmented chunk results.",
+			Description: "Search for documents and return the 10 most relevant passages from each document. Each passage is a text chunk of up to 512 characters from the original document, providing focused context without overwhelming token limits. Use get_document_content if you need the full document.",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -1000,32 +1000,17 @@ func (tm *Manager) executeSearchDocuments(ctx context.Context, input any) (strin
 		// Use context highlights from enhanced result
 		contextHighlights := result.ContextHighlights
 		if len(contextHighlights) == 0 {
-			// Fallback to content preview if no highlights available
-			contentPreview := result.Document.Content
-			if len(contentPreview) > 200 {
-				contentPreview = contentPreview[:200]
-			}
-			contextHighlights = []string{contentPreview}
-			log.Printf("[DEBUG] no context highlights, using content preview (length: %d)", len(contentPreview))
+			// Fallback to empty array if no highlights available
+			contextHighlights = []string{}
+			log.Printf("[DEBUG] no context highlights available")
 		} else {
 			log.Printf("[DEBUG] using %d context highlights", len(contextHighlights))
-		}
-
-		// Create content preview
-		contentPreview := result.Document.Content
-		isTruncated := false
-		if len(contentPreview) > 500 {
-			contentPreview = contentPreview[:500]
-			isTruncated = true
 		}
 
 		formattedResult := map[string]any{
 			"document_id":        result.Document.ID,
 			"file_path":          result.Document.FilePath,
-			"full_content":       result.Document.Content,
 			"context_highlights": contextHighlights,
-			"content_preview":    contentPreview,
-			"is_truncated":       isTruncated,
 			"relevance_score":    result.BestScore,
 			"relevance_rank":     result.RelevanceRank,
 			"metadata":           result.Document.Metadata,
@@ -1039,7 +1024,7 @@ func (tm *Manager) executeSearchDocuments(ctx context.Context, input any) (strin
 		"query":           searchReq.Query,
 		"documents":       formattedResults,
 		"total_documents": len(formattedResults),
-		"usage_note":      "Documents include full content with highlighted relevant passages for better AI understanding.",
+		"usage_note":      "Each document includes 10 context highlights (passages) from the most relevant sections. If you need the full document content, use the get_document_content tool with the document_id.",
 	}
 
 	log.Printf("[DEBUG] final response has %d documents", len(formattedResults))

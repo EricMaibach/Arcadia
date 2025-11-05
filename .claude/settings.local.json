@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /workspace/appengine/pkg/logging)",
+      "Bash(mkdir -p /workspace/appengine/logs)",
+      "Bash(sed:*)",
+      "Bash(go test:*)",
+      "Bash(go build:*)",
+      "Bash(openai.go)",
+      "Bash(for file in /workspace/appengine/services/{database,filewatcher,registry,scheduler,wasm_runtime,queue_repository,schedule_repository}.go)",
+      "Bash(done)",
+      "Bash(filewatcher.go)",
+      "Read(///**)",
+      "Bash(cat:*)",
+      "Bash(go run:*)",
+      "Read(//tmp/**)",
+      "Bash(python3 -c \"\nimport json, sys\ndata = json.load(sys.stdin)\npayload = json.loads(data[''''payload''''])\n\n# Look for tool calls in the messages\nfor msg in payload.get(''''messages'''', []):\n    if msg.get(''''role'''') == ''''tool'''' and msg.get(''''name'''') == ''''search_documents'''':\n        print(''''=== SEARCH RESULTS ==='''')\n        content = msg.get(''''content'''', '''''''')\n        try:\n            result = json.loads(content)\n            print(f\"\"Query: {result.get(''''query'''', ''''N/A'''')}\"\")\n            print(f\"\"Total documents: {result.get(''''total_documents'''', 0)}\"\")\n            if ''''documents'''' in result:\n                for i, doc in enumerate(result[''''documents''''][:2]):\n                    print(f\"\"\\n--- Document {i+1} ---\"\")\n                    print(f\"\"File: {doc.get(''''file_path'''', ''''N/A'''')}\"\")\n                    print(f\"\"Score: {doc.get(''''relevance_score'''', ''''N/A'''')}\"\")\n                    highlights = doc.get(''''context_highlights'''', [])\n                    if highlights:\n                        print(f\"\"First highlight: {highlights[0][:200]}...\"\")\n        except:\n            print(content[:500])\n\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
