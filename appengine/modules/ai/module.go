@@ -105,10 +105,10 @@ func NewModule(ctx context.Context, config *Config, deps *interfaces.Dependencie
 	// Initialize API payload logger if enabled
 	if config.EnableAPILogging {
 		apiLoggerConfig := logging.Config{
-			Level:       logging.LevelInfo,  // Always log at INFO
+			Level:       logging.LevelInfo, // Always log at INFO
 			Format:      logging.FormatJSON,
 			OutputPaths: []string{config.APILogPath},
-			AddSource:   false,  // Don't need source location for payloads
+			AddSource:   false, // Don't need source location for payloads
 			ModuleName:  "ai_api",
 		}
 

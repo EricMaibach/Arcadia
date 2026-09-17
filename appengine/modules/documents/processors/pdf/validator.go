@@ -81,7 +81,7 @@ func (v *PDFValidator) validateBasicFile(filePath string) error {
 	// Check file size
 	if info.Size() > v.config.MaxFileSize {
 		return &PDFError{
-			Code:    ErrPDFTooBig,
+			Code: ErrPDFTooBig,
 			Message: fmt.Sprintf("PDF file too large: %d bytes (max: %d bytes)",
 				info.Size(), v.config.MaxFileSize),
 			Context: map[string]interface{}{
@@ -254,8 +254,8 @@ func (v *PDFValidator) checkPasswordProtected(filePath string) error {
 	for scanner.Scan() && lineCount < 100 { // Only check first 100 lines
 		line := scanner.Text()
 		if strings.Contains(line, "/Encrypt") ||
-		   strings.Contains(line, "/Filter/Standard") ||
-		   strings.Contains(line, "UserPassword") {
+			strings.Contains(line, "/Filter/Standard") ||
+			strings.Contains(line, "UserPassword") {
 			if !v.config.AllowPasswordProtected {
 				return &PDFError{
 					Code:    ErrPDFPasswordProtected,
@@ -331,7 +331,7 @@ func (v *PDFValidator) validatePageCount(ctx context.Context, filePath string) e
 	// This is a rough estimate, so be conservative
 	if pageCount > v.config.MaxPages {
 		return &PDFError{
-			Code:    ErrPDFTooManyPages,
+			Code: ErrPDFTooManyPages,
 			Message: fmt.Sprintf("PDF has too many pages: estimated %d (max: %d)",
 				pageCount, v.config.MaxPages),
 			Context: map[string]interface{}{
@@ -360,13 +360,13 @@ func (v *PDFValidator) GetFileInfo(filePath string) (map[string]interface{}, err
 	}
 
 	result := map[string]interface{}{
-		"size":           info.Size(),
-		"mod_time":       info.ModTime(),
-		"extension":      filepath.Ext(filePath),
-		"base_name":      filepath.Base(filePath),
-		"is_regular":     info.Mode().IsRegular(),
-		"max_file_size":  v.config.MaxFileSize,
-		"size_valid":     info.Size() <= v.config.MaxFileSize,
+		"size":          info.Size(),
+		"mod_time":      info.ModTime(),
+		"extension":     filepath.Ext(filePath),
+		"base_name":     filepath.Base(filePath),
+		"is_regular":    info.Mode().IsRegular(),
+		"max_file_size": v.config.MaxFileSize,
+		"size_valid":    info.Size() <= v.config.MaxFileSize,
 	}
 
 	// Add tool availability

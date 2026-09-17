@@ -53,52 +53,52 @@ func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
 	crateMap := map[string]string{
 		// Date and time - NOTE: chrono is problematic in server-side WASM due to wasm-bindgen dependencies
 		// Consider using std::time or atomic counters for server-side WASM instead
-		"time":   `"0.3"`,
+		"time": `"0.3"`,
 
 		// Text processing
-		"regex":    `"1.9"`,
+		"regex":       `"1.9"`,
 		"lazy_static": `"1.4"`,
 		"once_cell":   `"1.19"`,
 
 		// Random and cryptography (server-side WASM compatible)
-		"rand":     `{ version = "0.8", default-features = false, features = ["small_rng"] }`,
+		"rand": `{ version = "0.8", default-features = false, features = ["small_rng"] }`,
 		// Note: uuid with v4 requires randomness that may not work in server-side WASM
 		// Consider using timestamp-based IDs instead
-		"sha2":     `"0.10"`,
-		"sha3":     `"0.10"`,
-		"md5":      `"0.7"`,
-		"hex":      `"0.4"`,
-		"base64":   `"0.21"`,
-		"bcrypt":   `"0.15"`,
-		"argon2":   `"0.5"`,
+		"sha2":   `"0.10"`,
+		"sha3":   `"0.10"`,
+		"md5":    `"0.7"`,
+		"hex":    `"0.4"`,
+		"base64": `"0.21"`,
+		"bcrypt": `"0.15"`,
+		"argon2": `"0.5"`,
 
 		// Async runtime (note: tokio might be too heavy for WASM)
-		"tokio":    `{ version = "1.35", features = ["rt", "macros"] }`,
+		"tokio":     `{ version = "1.35", features = ["rt", "macros"] }`,
 		"async_std": `"1.12"`,
 		"futures":   `"0.3"`,
 
 		// HTTP and networking (may not work in WASM context)
-		"reqwest":  `{ version = "0.11", features = ["json"] }`,
-		"hyper":    `"0.14"`,
-		"url":      `"2.5"`,
+		"reqwest": `{ version = "0.11", features = ["json"] }`,
+		"hyper":   `"0.14"`,
+		"url":     `"2.5"`,
 
 		// Serialization
-		"bincode":  `"1.3"`,
-		"toml":     `"0.8"`,
-		"csv":      `"1.3"`,
-		"ron":      `"0.8"`,
+		"bincode": `"1.3"`,
+		"toml":    `"0.8"`,
+		"csv":     `"1.3"`,
+		"ron":     `"0.8"`,
 
 		// Error handling
-		"anyhow":   `"1.0"`,
+		"anyhow":    `"1.0"`,
 		"thiserror": `"1.0"`,
 
 		// Logging
-		"log":      `"0.4"`,
+		"log":        `"0.4"`,
 		"env_logger": `"0.11"`,
-		"tracing":   `"0.1"`,
+		"tracing":    `"0.1"`,
 
 		// Data structures
-		"indexmap": `"2.1"`,
+		"indexmap":  `"2.1"`,
 		"hashbrown": `"0.14"`,
 		"petgraph":  `"0.6"`,
 
@@ -108,7 +108,7 @@ func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
 		"ndarray":  `"0.15"`,
 
 		// WebAssembly specific (server-side WASM, no browser dependencies)
-		"getrandom":    `{ version = "0.2", default-features = false }`,
+		"getrandom": `{ version = "0.2", default-features = false }`,
 	}
 
 	// Parse use statements and extern crate declarations
@@ -121,24 +121,24 @@ func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
 			// Extract crate name (first part before ::)
 			useContent := strings.TrimPrefix(line, "use ")
 			useContent = strings.TrimSuffix(useContent, ";")
-			
+
 			// Handle various use patterns:
 			// use chrono::DateTime;
 			// use std::collections::HashMap;  (skip std)
 			// use self::module;  (skip self)
 			// use super::module;  (skip super)
 			// use crate::module;  (skip crate - internal)
-			
+
 			parts := strings.Split(useContent, "::")
 			if len(parts) > 0 {
 				crateName := strings.TrimSpace(parts[0])
-				
+
 				// Skip standard library and internal references
 				if crateName == "std" || crateName == "core" || crateName == "alloc" ||
 					crateName == "self" || crateName == "super" || crateName == "crate" {
 					continue
 				}
-				
+
 				// Check if it's a known external crate
 				if dep, exists := crateMap[crateName]; exists {
 					dependencies[crateName] = dep
@@ -151,7 +151,7 @@ func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
 			crateName := strings.TrimPrefix(line, "extern crate ")
 			crateName = strings.TrimSuffix(crateName, ";")
 			crateName = strings.TrimSpace(crateName)
-			
+
 			if dep, exists := crateMap[crateName]; exists {
 				dependencies[crateName] = dep
 			}
@@ -164,17 +164,17 @@ func (wc *WasmCompiler) extractDependencies(rustCode string) map[string]string {
 // formatDependencyVersion ensures a dependency version is properly formatted for Cargo.toml
 func (wc *WasmCompiler) formatDependencyVersion(version string) string {
 	version = strings.TrimSpace(version)
-	
+
 	// If it's already a complex dependency specification (starts with { or contains quotes), return as-is
 	if strings.HasPrefix(version, "{") || strings.Contains(version, "\"") {
 		return version
 	}
-	
+
 	// If it looks like a simple version number (digits, dots, and common version chars), quote it
 	if matched, _ := regexp.MatchString(`^[0-9]+(\.[0-9]+)*([a-zA-Z0-9\-\.]*)?$`, version); matched {
 		return fmt.Sprintf(`"%s"`, version)
 	}
-	
+
 	// Otherwise, return as-is (assume user knows what they're doing)
 	return version
 }

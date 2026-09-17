@@ -12,7 +12,7 @@ import (
 
 // Dependencies for schedule handlers
 var (
-	scheduleLogFunc        func(format string, args ...interface{})
+	scheduleLogFunc         func(format string, args ...interface{})
 	scheduleRegistryManager *services.RegistryManager
 )
 

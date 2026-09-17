@@ -36,11 +36,11 @@ func NewQueryAnalyzer(logger logging.Logger, metrics interfaces.Metrics) *QueryA
 // AnalyzeQuery analyzes a user prompt and determines if auto-search should be triggered
 func (qa *QueryAnalyzer) AnalyzeQuery(prompt string) *AnalysisResult {
 	result := &AnalysisResult{
-		ShouldSearch:  false,
-		SearchTerms:   make([]string, 0),
-		Confidence:    0.0,
-		Reason:        "",
-		QuotedPhrases: make([]string, 0),
+		ShouldSearch:   false,
+		SearchTerms:    make([]string, 0),
+		Confidence:     0.0,
+		Reason:         "",
+		QuotedPhrases:  make([]string, 0),
 		DetectedIntent: "unknown",
 	}
 

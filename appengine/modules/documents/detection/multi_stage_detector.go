@@ -11,10 +11,10 @@ import (
 
 // MultiStageDetectorImpl implements the MultiStageDetector interface
 type MultiStageDetectorImpl struct {
-	detectors         []DocumentDetector
-	mu                sync.RWMutex
+	detectors           []DocumentDetector
+	mu                  sync.RWMutex
 	confidenceThreshold float64
-	enableParallel    bool
+	enableParallel      bool
 }
 
 // DetectionResult holds the result from a single detector
@@ -27,9 +27,9 @@ type DetectionResult struct {
 // NewMultiStageDetector creates a new multi-stage detector with default detectors
 func NewMultiStageDetector() *MultiStageDetectorImpl {
 	detector := &MultiStageDetectorImpl{
-		detectors:         make([]DocumentDetector, 0),
-		confidenceThreshold: 0.5, // Minimum confidence to accept a result
-		enableParallel:    false,  // Sequential by default for deterministic results
+		detectors:           make([]DocumentDetector, 0),
+		confidenceThreshold: 0.5,   // Minimum confidence to accept a result
+		enableParallel:      false, // Sequential by default for deterministic results
 	}
 
 	// Register default detectors in priority order
@@ -44,9 +44,9 @@ func NewMultiStageDetector() *MultiStageDetectorImpl {
 // NewMultiStageDetectorWithConfig creates a detector with custom configuration
 func NewMultiStageDetectorWithConfig(config *DetectionConfig) *MultiStageDetectorImpl {
 	detector := &MultiStageDetectorImpl{
-		detectors:         make([]DocumentDetector, 0),
+		detectors:           make([]DocumentDetector, 0),
 		confidenceThreshold: config.ConfidenceThreshold,
-		enableParallel:    config.EnableParallel,
+		enableParallel:      config.EnableParallel,
 	}
 
 	// Register detectors based on configuration

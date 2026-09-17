@@ -73,18 +73,18 @@ func (e *TextExtractor) ExtractText(ctx context.Context, filePath string) (*Text
 	duration := time.Since(startTime)
 
 	result := &TextExtractionResult{
-		Text:         text,
-		Quality:      quality,
-		Method:       "pdftotext",
-		Duration:     duration,
-		ToolVersion:  e.getPDFToTextVersion(),
+		Text:        text,
+		Quality:     quality,
+		Method:      "pdftotext",
+		Duration:    duration,
+		ToolVersion: e.getPDFToTextVersion(),
 		Metadata: map[string]interface{}{
-			"extractor":      "pdftotext",
-			"file_path":      filePath,
+			"extractor":       "pdftotext",
+			"file_path":       filePath,
 			"extraction_time": duration.Milliseconds(),
-			"quality_score":  quality.Score,
-			"word_count":     quality.WordCount,
-			"char_count":     quality.CharCount,
+			"quality_score":   quality.Score,
+			"word_count":      quality.WordCount,
+			"char_count":      quality.CharCount,
 		},
 	}
 
@@ -109,9 +109,9 @@ func (e *TextExtractor) runPDFToText(ctx context.Context, inputPath, outputPath 
 
 	// Build pdftotext command
 	args := []string{
-		"-layout",      // Preserve layout
+		"-layout",       // Preserve layout
 		"-enc", "UTF-8", // UTF-8 encoding
-		"-eol", "unix",  // Unix line endings
+		"-eol", "unix", // Unix line endings
 		inputPath,
 		outputPath,
 	}
@@ -137,26 +137,26 @@ func (e *TextExtractor) runPDFToText(ctx context.Context, inputPath, outputPath 
 
 		// Check for specific error conditions
 		if strings.Contains(stderrStr, "Incorrect password") ||
-		   strings.Contains(stderrStr, "Couldn't open file") {
+			strings.Contains(stderrStr, "Couldn't open file") {
 			return "", &PDFError{
 				Code:    ErrPDFPasswordProtected,
 				Message: "PDF is password protected or corrupted",
 				Cause:   err,
 				Context: map[string]interface{}{
-					"stderr": stderrStr,
+					"stderr":    stderrStr,
 					"file_path": inputPath,
 				},
 			}
 		}
 
 		if strings.Contains(stderrStr, "Couldn't read xref table") ||
-		   strings.Contains(stderrStr, "PDF file is damaged") {
+			strings.Contains(stderrStr, "PDF file is damaged") {
 			return "", &PDFError{
 				Code:    ErrPDFCorrupted,
 				Message: "PDF file appears to be corrupted",
 				Cause:   err,
 				Context: map[string]interface{}{
-					"stderr": stderrStr,
+					"stderr":    stderrStr,
 					"file_path": inputPath,
 				},
 			}
@@ -167,7 +167,7 @@ func (e *TextExtractor) runPDFToText(ctx context.Context, inputPath, outputPath 
 			Message: "pdftotext execution failed",
 			Cause:   err,
 			Context: map[string]interface{}{
-				"stderr": stderrStr,
+				"stderr":  stderrStr,
 				"command": strings.Join(append([]string{e.config.PDFToTextPath}, args...), " "),
 			},
 		}
@@ -201,13 +201,13 @@ func (e *TextExtractor) createTempFile() (string, error) {
 func (e *TextExtractor) analyzeTextQuality(text string) *TextQuality {
 	if text == "" {
 		return &TextQuality{
-			Score:         0.0,
-			WordCount:     0,
-			CharCount:     0,
-			LineCount:     0,
-			IsGarbled:     true,
-			HasContent:    false,
-			Confidence:    0.0,
+			Score:      0.0,
+			WordCount:  0,
+			CharCount:  0,
+			LineCount:  0,
+			IsGarbled:  true,
+			HasContent: false,
+			Confidence: 0.0,
 		}
 	}
 
@@ -310,9 +310,9 @@ func (e *TextExtractor) hasRepeatedCharacters(text string, minLength int) bool {
 func (e *TextExtractor) detectGarbledText(text string) bool {
 	// Patterns that indicate garbled text
 	garbledPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`[^\w\s]{5,}`),        // Long sequences of non-word characters
-		regexp.MustCompile(`\w{20,}`),            // Very long words
-		regexp.MustCompile(`[0-9]{10,}`),         // Very long numbers
+		regexp.MustCompile(`[^\w\s]{5,}`), // Long sequences of non-word characters
+		regexp.MustCompile(`\w{20,}`),     // Very long words
+		regexp.MustCompile(`[0-9]{10,}`),  // Very long numbers
 	}
 
 	for _, pattern := range garbledPatterns {
@@ -433,15 +433,15 @@ type TextExtractionResult struct {
 
 // TextQuality holds quality metrics for extracted text
 type TextQuality struct {
-	Score         float64 `json:"score"`          // Overall quality score (0-1)
-	WordCount     int     `json:"word_count"`     // Total word count
-	ValidWords    int     `json:"valid_words"`    // Count of valid words
-	CharCount     int     `json:"char_count"`     // Total character count
-	LineCount     int     `json:"line_count"`     // Total line count
+	Score         float64 `json:"score"`           // Overall quality score (0-1)
+	WordCount     int     `json:"word_count"`      // Total word count
+	ValidWords    int     `json:"valid_words"`     // Count of valid words
+	CharCount     int     `json:"char_count"`      // Total character count
+	LineCount     int     `json:"line_count"`      // Total line count
 	AvgWordLength float64 `json:"avg_word_length"` // Average word length
-	IsGarbled     bool    `json:"is_garbled"`     // Whether text appears garbled
-	HasContent    bool    `json:"has_content"`    // Whether text has meaningful content
-	Confidence    float64 `json:"confidence"`     // Confidence in the result (0-1)
+	IsGarbled     bool    `json:"is_garbled"`      // Whether text appears garbled
+	HasContent    bool    `json:"has_content"`     // Whether text has meaningful content
+	Confidence    float64 `json:"confidence"`      // Confidence in the result (0-1)
 }
 
 // IsGoodQuality returns true if the text quality meets the configured threshold

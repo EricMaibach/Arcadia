@@ -62,7 +62,7 @@ func HandleAIAPI(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		Message   string `json:"message"`
 		ContextID string `json:"context_id"`
-		SessionID string `json:"session_id"` // deprecated, for backward compatibility
+		SessionID string `json:"session_id"`         // deprecated, for backward compatibility
 		Provider  string `json:"provider,omitempty"` // Optional provider override
 	}
 
@@ -185,7 +185,7 @@ func HandleProviderSwitch(w http.ResponseWriter, r *http.Request) {
 	// through the module's SwitchProvider method
 	w.WriteHeader(http.StatusNotImplemented)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"error": "Provider switching not yet implemented in new architecture",
+		"error":   "Provider switching not yet implemented in new architecture",
 		"message": "This feature will be available in a future update",
 	})
 	return

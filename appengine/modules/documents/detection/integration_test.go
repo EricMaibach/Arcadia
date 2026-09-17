@@ -57,8 +57,8 @@ func TestMultiStageDetector_TikaConfigIntegration(t *testing.T) {
 	config.EnableTikaDetection = true
 	config.EnableTikaFallback = true
 	config.TikaOfficeConfidence = 0.85
-	config.TikaFallbackConfidence = 0.6  // Above the default threshold
-	config.ConfidenceThreshold = 0.5      // Ensure consistent threshold
+	config.TikaFallbackConfidence = 0.6 // Above the default threshold
+	config.ConfidenceThreshold = 0.5    // Ensure consistent threshold
 
 	detector := NewMultiStageDetectorWithConfig(config)
 

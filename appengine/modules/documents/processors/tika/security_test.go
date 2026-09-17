@@ -136,10 +136,10 @@ func TestPathTraversalAttacks(t *testing.T) {
 	client := NewTikaClient(config, logger)
 
 	tests := []struct {
-		name     string
-		filePath string
-		wantErr  bool
-		errMsg   string
+		name        string
+		filePath    string
+		wantErr     bool
+		errMsg      string
 		description string
 	}{
 		{
@@ -301,11 +301,11 @@ func TestFileTypeValidation(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name      string
-		ext       string
-		wantErr   bool
-		errMsg    string
-		allowed   bool
+		name    string
+		ext     string
+		wantErr bool
+		errMsg  string
+		allowed bool
 	}{
 		// Allowed file types
 		{"PDF file", ".pdf", false, "", true},
@@ -406,12 +406,12 @@ func TestSpecialCharacterPaths(t *testing.T) {
 	client := NewTikaClient(config, logger)
 
 	specialPaths := []string{
-		"../../../etc/passwd\\x00",     // Null byte
-		"../../../etc/passwd\\n",       // Newline
-		"../../../etc/passwd\\r",       // Carriage return
-		"../../../etc/passwd\\t",       // Tab
-		"../../../etc/passwd\\x7f",     // DEL character
-		"../../../etc/passwd\\x1b",     // ESC character
+		"../../../etc/passwd\\x00", // Null byte
+		"../../../etc/passwd\\n",   // Newline
+		"../../../etc/passwd\\r",   // Carriage return
+		"../../../etc/passwd\\t",   // Tab
+		"../../../etc/passwd\\x7f", // DEL character
+		"../../../etc/passwd\\x1b", // ESC character
 	}
 
 	for i, path := range specialPaths {

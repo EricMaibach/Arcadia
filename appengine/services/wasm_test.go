@@ -74,7 +74,7 @@ func TestNewWasmCompiler(t *testing.T) {
 
 func TestWasmCompiler_GenerateRustProjectFromTrait(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	// Create temporary build directory
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
@@ -151,7 +151,7 @@ func TestWasmCompiler_GenerateRustProjectFromTrait(t *testing.T) {
 
 func TestWasmCompiler_GenerateRustProjectFromTrait_MissingTemplate(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -176,7 +176,7 @@ func TestWasmCompiler_GenerateRustProjectFromTrait_MissingTemplate(t *testing.T)
 
 func TestWasmCompiler_BuildRustToWasm_NoCargo(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -195,7 +195,7 @@ func TestWasmCompiler_BuildRustToWasm_NoCargo(t *testing.T) {
 
 func TestWasmCompiler_CreateFilesFromSpec(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -238,7 +238,7 @@ func TestWasmCompiler_CreateFilesFromSpec(t *testing.T) {
 		}
 
 		if string(content) != file.Content {
-			t.Errorf("File %s content mismatch. Expected: %s, Got: %s", 
+			t.Errorf("File %s content mismatch. Expected: %s, Got: %s",
 				file.Name, file.Content, string(content))
 		}
 	}
@@ -246,7 +246,7 @@ func TestWasmCompiler_CreateFilesFromSpec(t *testing.T) {
 
 func TestWasmCompiler_CreateFilesFromSpec_PathTraversal(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -272,7 +272,7 @@ func TestWasmCompiler_CreateFilesFromSpec_PathTraversal(t *testing.T) {
 
 func TestWasmCompiler_getProjectNameFromCargo(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -280,7 +280,7 @@ func TestWasmCompiler_getProjectNameFromCargo(t *testing.T) {
 	defer os.RemoveAll(tempDir)
 
 	tests := []struct {
-		name        string
+		name         string
 		cargoContent string
 		expectedName string
 		expectError  bool
@@ -334,7 +334,7 @@ version = "1.0.0"`,
 			}
 
 			name, err := compiler.getProjectNameFromCargo(cargoPath)
-			
+
 			if (err != nil) != tt.expectError {
 				t.Errorf("getProjectNameFromCargo() error = %v, expectError %v", err, tt.expectError)
 				return
@@ -349,7 +349,7 @@ version = "1.0.0"`,
 
 func TestWasmCompiler_getProjectNameFromCargo_FileNotFound(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	_, err := compiler.getProjectNameFromCargo("/nonexistent/Cargo.toml")
 	if err == nil {
 		t.Error("Expected error for non-existent Cargo.toml")
@@ -358,7 +358,7 @@ func TestWasmCompiler_getProjectNameFromCargo_FileNotFound(t *testing.T) {
 
 func TestWasmCompiler_copyFile(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -392,7 +392,7 @@ func TestWasmCompiler_copyFile(t *testing.T) {
 
 func TestWasmCompiler_copyFile_SourceNotFound(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -410,7 +410,7 @@ func TestWasmCompiler_copyFile_SourceNotFound(t *testing.T) {
 
 func TestWasmCompiler_CompileTraitToWasm_MissingTemplate(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
@@ -488,7 +488,7 @@ func TestDefaultCompiler(t *testing.T) {
 		t.Error("defaultCompiler should be initialized")
 	}
 
-	// Test that it's a WasmCompiler instance by type checking  
+	// Test that it's a WasmCompiler instance by type checking
 	if _, ok := interface{}(defaultCompiler).(*WasmCompiler); !ok {
 		t.Error("defaultCompiler should be a WasmCompiler instance")
 	}
@@ -496,7 +496,7 @@ func TestDefaultCompiler(t *testing.T) {
 
 func TestWasmCompiler_BuildRustToWasm_ArtifactsDirectory(t *testing.T) {
 	compiler := NewWasmCompiler()
-	
+
 	// Create a temporary directory structure that mimics the expected build structure
 	tempDir, err := os.MkdirTemp("", "wasm_test")
 	if err != nil {
@@ -522,7 +522,7 @@ version = "1.0.0"`
 
 	// Test BuildRustToWasm (this will fail at cargo build, but we can test path logic)
 	_, err = compiler.BuildRustToWasm(buildDir)
-	
+
 	// We expect this to fail at the cargo build step, not at path validation
 	if err == nil {
 		t.Error("Expected cargo build to fail (cargo likely not available in test environment)")
@@ -535,15 +535,15 @@ version = "1.0.0"`
 	expectedArtifactsDir := filepath.Join("artifacts", "test-app")
 	// Note: We can't easily test the full build without cargo installed and template files
 	// But we can verify the path logic would work correctly
-	
+
 	if filepath.Base(appDir) != "test-app" {
 		t.Errorf("App ID extraction failed: got %s", filepath.Base(appDir))
 	}
-	
+
 	if filepath.Base(buildDir) != "1.0.0" {
 		t.Errorf("Version extraction failed: got %s", filepath.Base(buildDir))
 	}
-	
+
 	expectedWasmPath := filepath.Join(expectedArtifactsDir, "1.0.0.wasm")
 	if !strings.Contains(expectedWasmPath, "artifacts/test-app/1.0.0.wasm") {
 		t.Errorf("Expected WASM path construction failed: %s", expectedWasmPath)

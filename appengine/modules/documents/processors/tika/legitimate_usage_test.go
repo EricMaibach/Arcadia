@@ -107,7 +107,7 @@ func TestSecurePathNormalization(t *testing.T) {
 
 	// Test various legitimate path formats
 	legitimatePaths := []string{
-		testFile,                        // Direct path
+		testFile,                       // Direct path
 		tmpDir + "/./test.pdf",         // With current directory reference
 		tmpDir + "/subdir/../test.pdf", // With parent directory reference that resolves correctly
 	}
@@ -217,10 +217,10 @@ func TestFileSizeLimits(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	tests := []struct {
-		name     string
-		size     int64
-		wantErr  bool
-		errMsg   string
+		name    string
+		size    int64
+		wantErr bool
+		errMsg  string
 	}{
 		{
 			name:    "Small file within limit",

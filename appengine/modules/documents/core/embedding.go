@@ -15,9 +15,9 @@ import (
 
 // EmbeddingEngine handles embedding generation and similarity calculations
 type EmbeddingEngine struct {
-	ollama    *providers.OllamaProvider  // Generic Ollama provider
-	modelName string                      // Embedding model name
-	dimension int                         // Expected embedding dimension
+	ollama    *providers.OllamaProvider // Generic Ollama provider
+	modelName string                    // Embedding model name
+	dimension int                       // Expected embedding dimension
 	cache     interfaces.CacheService
 	logger    interfaces.Logger
 	config    EmbeddingConfig
@@ -32,14 +32,14 @@ type EmbeddingEngine struct {
 
 // EmbeddingConfig contains configuration for the embedding engine
 type EmbeddingConfig struct {
-	CacheEnabled    bool    `json:"cache_enabled"`
-	CacheTTL        int     `json:"cache_ttl_seconds"`
-	BatchSize       int     `json:"batch_size"`
-	MaxRetries      int     `json:"max_retries"`
-	RetryDelay      int     `json:"retry_delay_seconds"`
-	TimeoutSeconds  int     `json:"timeout_seconds"`
-	ModelName       string  `json:"model_name"`
-	Dimension       int     `json:"dimension"`
+	CacheEnabled        bool    `json:"cache_enabled"`
+	CacheTTL            int     `json:"cache_ttl_seconds"`
+	BatchSize           int     `json:"batch_size"`
+	MaxRetries          int     `json:"max_retries"`
+	RetryDelay          int     `json:"retry_delay_seconds"`
+	TimeoutSeconds      int     `json:"timeout_seconds"`
+	ModelName           string  `json:"model_name"`
+	Dimension           int     `json:"dimension"`
 	SimilarityThreshold float32 `json:"similarity_threshold"`
 }
 
@@ -440,14 +440,14 @@ func simpleHash(s string) uint32 {
 // DefaultEmbeddingConfig returns a default embedding configuration
 func DefaultEmbeddingConfig() EmbeddingConfig {
 	return EmbeddingConfig{
-		CacheEnabled:    true,
-		CacheTTL:        3600, // 1 hour
-		BatchSize:       10,
-		MaxRetries:      3,
-		RetryDelay:      5,
-		TimeoutSeconds:  30,
-		ModelName:       "default",
-		Dimension:       0, // Will be determined by provider
+		CacheEnabled:        true,
+		CacheTTL:            3600, // 1 hour
+		BatchSize:           10,
+		MaxRetries:          3,
+		RetryDelay:          5,
+		TimeoutSeconds:      30,
+		ModelName:           "default",
+		Dimension:           0, // Will be determined by provider
 		SimilarityThreshold: 0.7,
 	}
 }

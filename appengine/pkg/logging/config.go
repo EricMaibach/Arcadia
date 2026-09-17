@@ -47,16 +47,16 @@ type Config struct {
 // DefaultConfig returns sensible defaults for logging configuration
 func DefaultConfig() Config {
 	return Config{
-		Level:        LevelInfo,
-		OutputPaths:  []string{"stdout"},
-		Format:       FormatJSON,
-		AddSource:    true,
-		AddTimestamp: true,
-		ModuleName:   "",
+		Level:         LevelInfo,
+		OutputPaths:   []string{"stdout"},
+		Format:        FormatJSON,
+		AddSource:     true,
+		AddTimestamp:  true,
+		ModuleName:    "",
 		ComponentName: "",
-		MaxSize:      100,  // 100MB
-		MaxBackups:   3,
-		MaxAge:       7, // 7 days
+		MaxSize:       100, // 100MB
+		MaxBackups:    3,
+		MaxAge:        7, // 7 days
 	}
 }
 

@@ -66,10 +66,10 @@ func (md *MIMEDetector) DetectType(filePath string) (*base.DocumentType, error) 
 		Extension:  ext,
 		Confidence: 0.85, // Good confidence for MIME detection
 		Metadata: map[string]interface{}{
-			"detector":     "mime",
-			"detected_by":  "MIMEDetector",
+			"detector":      "mime",
+			"detected_by":   "MIMEDetector",
 			"original_path": filePath,
-			"mime_type":    mimeType,
+			"mime_type":     mimeType,
 		},
 	}, nil
 }
@@ -147,66 +147,66 @@ func (md *MIMEDetector) GetSupportedMIMETypes() []string {
 func getDefaultMIMEMapping() map[string]base.ProcessorType {
 	return map[string]base.ProcessorType{
 		// Text files
-		"text/plain":       base.ProcessorTypeText,
-		"text/csv":         base.ProcessorTypeText,
+		"text/plain":                base.ProcessorTypeText,
+		"text/csv":                  base.ProcessorTypeText,
 		"text/tab-separated-values": base.ProcessorTypeText,
-		"application/json": base.ProcessorTypeText,
-		"application/xml":  base.ProcessorTypeText,
-		"text/xml":         base.ProcessorTypeText,
-		"application/yaml": base.ProcessorTypeText,
-		"text/yaml":        base.ProcessorTypeText,
+		"application/json":          base.ProcessorTypeText,
+		"application/xml":           base.ProcessorTypeText,
+		"text/xml":                  base.ProcessorTypeText,
+		"application/yaml":          base.ProcessorTypeText,
+		"text/yaml":                 base.ProcessorTypeText,
 
 		// Markdown files
-		"text/markdown":       base.ProcessorTypeMarkdown,
-		"text/x-markdown":     base.ProcessorTypeMarkdown,
+		"text/markdown":        base.ProcessorTypeMarkdown,
+		"text/x-markdown":      base.ProcessorTypeMarkdown,
 		"application/markdown": base.ProcessorTypeMarkdown,
 
 		// PDF files
 		"application/pdf": base.ProcessorTypePDF,
 
 		// Web files (treated as text)
-		"text/html":       base.ProcessorTypeText,
+		"text/html":             base.ProcessorTypeText,
 		"application/xhtml+xml": base.ProcessorTypeText,
-		"text/css":        base.ProcessorTypeText,
+		"text/css":              base.ProcessorTypeText,
 
 		// Code files (treated as text)
-		"text/x-go":           base.ProcessorTypeText,
-		"application/x-go":    base.ProcessorTypeText,
-		"text/javascript":     base.ProcessorTypeText,
-		"application/javascript": base.ProcessorTypeText,
+		"text/x-go":                base.ProcessorTypeText,
+		"application/x-go":         base.ProcessorTypeText,
+		"text/javascript":          base.ProcessorTypeText,
+		"application/javascript":   base.ProcessorTypeText,
 		"application/x-javascript": base.ProcessorTypeText,
-		"text/x-python":       base.ProcessorTypeText,
-		"application/x-python": base.ProcessorTypeText,
-		"text/x-java-source":  base.ProcessorTypeText,
-		"text/x-c":           base.ProcessorTypeText,
-		"text/x-c++":         base.ProcessorTypeText,
-		"text/x-csharp":      base.ProcessorTypeText,
-		"text/x-php":         base.ProcessorTypeText,
-		"text/x-ruby":        base.ProcessorTypeText,
-		"text/x-rust":        base.ProcessorTypeText,
-		"text/x-swift":       base.ProcessorTypeText,
-		"text/x-shellscript": base.ProcessorTypeText,
-		"application/x-sh":   base.ProcessorTypeText,
+		"text/x-python":            base.ProcessorTypeText,
+		"application/x-python":     base.ProcessorTypeText,
+		"text/x-java-source":       base.ProcessorTypeText,
+		"text/x-c":                 base.ProcessorTypeText,
+		"text/x-c++":               base.ProcessorTypeText,
+		"text/x-csharp":            base.ProcessorTypeText,
+		"text/x-php":               base.ProcessorTypeText,
+		"text/x-ruby":              base.ProcessorTypeText,
+		"text/x-rust":              base.ProcessorTypeText,
+		"text/x-swift":             base.ProcessorTypeText,
+		"text/x-shellscript":       base.ProcessorTypeText,
+		"application/x-sh":         base.ProcessorTypeText,
 
 		// Configuration files (treated as text)
-		"application/toml":    base.ProcessorTypeText,
-		"text/x-properties":  base.ProcessorTypeText,
+		"application/toml":                 base.ProcessorTypeText,
+		"text/x-properties":                base.ProcessorTypeText,
 		"application/x-wine-extension-ini": base.ProcessorTypeText,
 
 		// Generic fallbacks
 		"application/octet-stream": base.ProcessorTypeText, // Binary files default to text processor
 
 		// Audio MIME types
-		"audio/mpeg":      base.ProcessorTypeAudio, // MP3
-		"audio/wav":       base.ProcessorTypeAudio, // WAV
-		"audio/x-wav":     base.ProcessorTypeAudio, // WAV (alternate)
-		"audio/wave":      base.ProcessorTypeAudio, // WAV (alternate)
-		"audio/mp4":       base.ProcessorTypeAudio, // M4A
-		"audio/x-m4a":     base.ProcessorTypeAudio, // M4A (alternate)
-		"audio/flac":      base.ProcessorTypeAudio, // FLAC
-		"audio/x-flac":    base.ProcessorTypeAudio, // FLAC (alternate)
-		"audio/ogg":       base.ProcessorTypeAudio, // OGG
-		"audio/aac":       base.ProcessorTypeAudio, // AAC
-		"audio/aacp":      base.ProcessorTypeAudio, // AAC+ (alternate)
+		"audio/mpeg":   base.ProcessorTypeAudio, // MP3
+		"audio/wav":    base.ProcessorTypeAudio, // WAV
+		"audio/x-wav":  base.ProcessorTypeAudio, // WAV (alternate)
+		"audio/wave":   base.ProcessorTypeAudio, // WAV (alternate)
+		"audio/mp4":    base.ProcessorTypeAudio, // M4A
+		"audio/x-m4a":  base.ProcessorTypeAudio, // M4A (alternate)
+		"audio/flac":   base.ProcessorTypeAudio, // FLAC
+		"audio/x-flac": base.ProcessorTypeAudio, // FLAC (alternate)
+		"audio/ogg":    base.ProcessorTypeAudio, // OGG
+		"audio/aac":    base.ProcessorTypeAudio, // AAC
+		"audio/aacp":   base.ProcessorTypeAudio, // AAC+ (alternate)
 	}
 }

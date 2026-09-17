@@ -360,4 +360,3 @@ func extractChunkMetadata(metadata string) (int, int, int) {
 
 	return metaData.ChunkIndex, metaData.StartPos, metaData.EndPos
 }
-

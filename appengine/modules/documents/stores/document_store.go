@@ -15,7 +15,7 @@ import (
 
 // DocumentStoreConfig contains configuration for document stores
 type DocumentStoreConfig struct {
-	Type         string                 `json:"type"`          // "sql", "memory"
+	Type         string                 `json:"type"` // "sql", "memory"
 	TableName    string                 `json:"table_name"`
 	BatchSize    int                    `json:"batch_size"`
 	Timeout      int                    `json:"timeout_seconds"`

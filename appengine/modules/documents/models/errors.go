@@ -15,36 +15,36 @@ const (
 	ErrInvalidInput         ErrorCode = "INVALID_INPUT"
 
 	// File-related errors
-	ErrUnsupportedFormat    ErrorCode = "UNSUPPORTED_FORMAT"
-	ErrFileNotFound         ErrorCode = "FILE_NOT_FOUND"
-	ErrFileReadError        ErrorCode = "FILE_READ_ERROR"
-	ErrFileHashError        ErrorCode = "FILE_HASH_ERROR"
+	ErrUnsupportedFormat ErrorCode = "UNSUPPORTED_FORMAT"
+	ErrFileNotFound      ErrorCode = "FILE_NOT_FOUND"
+	ErrFileReadError     ErrorCode = "FILE_READ_ERROR"
+	ErrFileHashError     ErrorCode = "FILE_HASH_ERROR"
 
 	// Processing errors
-	ErrChunkingFailed       ErrorCode = "CHUNKING_FAILED"
-	ErrEmbeddingFailed      ErrorCode = "EMBEDDING_FAILED"
-	ErrProcessingFailed     ErrorCode = "PROCESSING_FAILED"
-	ErrProcessingTimeout    ErrorCode = "PROCESSING_TIMEOUT"
+	ErrChunkingFailed    ErrorCode = "CHUNKING_FAILED"
+	ErrEmbeddingFailed   ErrorCode = "EMBEDDING_FAILED"
+	ErrProcessingFailed  ErrorCode = "PROCESSING_FAILED"
+	ErrProcessingTimeout ErrorCode = "PROCESSING_TIMEOUT"
 
 	// Storage errors
-	ErrStorageFailed        ErrorCode = "STORAGE_FAILED"
-	ErrVectorStoreFailed    ErrorCode = "VECTOR_STORE_FAILED"
-	ErrDocumentStoreFailed  ErrorCode = "DOCUMENT_STORE_FAILED"
-	ErrDatabaseError        ErrorCode = "DATABASE_ERROR"
+	ErrStorageFailed       ErrorCode = "STORAGE_FAILED"
+	ErrVectorStoreFailed   ErrorCode = "VECTOR_STORE_FAILED"
+	ErrDocumentStoreFailed ErrorCode = "DOCUMENT_STORE_FAILED"
+	ErrDatabaseError       ErrorCode = "DATABASE_ERROR"
 
 	// Resource errors
-	ErrQuotaExceeded        ErrorCode = "QUOTA_EXCEEDED"
-	ErrRateLimitExceeded    ErrorCode = "RATE_LIMIT_EXCEEDED"
-	ErrResourceUnavailable  ErrorCode = "RESOURCE_UNAVAILABLE"
+	ErrQuotaExceeded       ErrorCode = "QUOTA_EXCEEDED"
+	ErrRateLimitExceeded   ErrorCode = "RATE_LIMIT_EXCEEDED"
+	ErrResourceUnavailable ErrorCode = "RESOURCE_UNAVAILABLE"
 
 	// Configuration errors
-	ErrInvalidConfig        ErrorCode = "INVALID_CONFIG"
-	ErrMissingConfig        ErrorCode = "MISSING_CONFIG"
+	ErrInvalidConfig ErrorCode = "INVALID_CONFIG"
+	ErrMissingConfig ErrorCode = "MISSING_CONFIG"
 
 	// Search errors
-	ErrSearchFailed         ErrorCode = "SEARCH_FAILED"
-	ErrQueryInvalid         ErrorCode = "QUERY_INVALID"
-	ErrSearchTimeout        ErrorCode = "SEARCH_TIMEOUT"
+	ErrSearchFailed  ErrorCode = "SEARCH_FAILED"
+	ErrQueryInvalid  ErrorCode = "QUERY_INVALID"
+	ErrSearchTimeout ErrorCode = "SEARCH_TIMEOUT"
 
 	// Module errors
 	ErrModuleNotInitialized ErrorCode = "MODULE_NOT_INITIALIZED"
@@ -147,8 +147,8 @@ func IsTemporary(err error) bool {
 	if docErr, ok := err.(*DocumentError); ok {
 		switch docErr.Code {
 		case ErrStorageFailed, ErrVectorStoreFailed, ErrDocumentStoreFailed,
-			 ErrDatabaseError, ErrResourceUnavailable, ErrRateLimitExceeded,
-			 ErrProcessingTimeout, ErrSearchTimeout:
+			ErrDatabaseError, ErrResourceUnavailable, ErrRateLimitExceeded,
+			ErrProcessingTimeout, ErrSearchTimeout:
 			return true
 		default:
 			return false
@@ -162,8 +162,8 @@ func IsPermanent(err error) bool {
 	if docErr, ok := err.(*DocumentError); ok {
 		switch docErr.Code {
 		case ErrDocumentNotFound, ErrUnsupportedFormat, ErrFileNotFound,
-			 ErrDocumentInvalid, ErrDocumentTooBig, ErrInvalidConfig,
-			 ErrMissingConfig, ErrQueryInvalid, ErrQuotaExceeded:
+			ErrDocumentInvalid, ErrDocumentTooBig, ErrInvalidConfig,
+			ErrMissingConfig, ErrQueryInvalid, ErrQuotaExceeded:
 			return true
 		default:
 			return false

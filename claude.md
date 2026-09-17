@@ -1,10 +1,5 @@
 Stop being overly agreeable and saying everything is a good idea. 
-
-# ⚠️ CRITICAL WARNING: AGENT DELEGATION IS MANDATORY ⚠️
-
-**DIRECT CODE EDITING IS STRICTLY FORBIDDEN**
 **ALL CODE CHANGES MUST GO THROUGH PROPER AGENT DELEGATION**
-**NO EXCEPTIONS - THIS IS A HARD REQUIREMENT**
 
 # 🚨 PRE-FLIGHT CHECKLIST - MANDATORY BEFORE ANY TASK 🚨
 
@@ -29,15 +24,6 @@ When you see ANY of these words in a request, you MUST delegate:
 - "API", "endpoint", "service", "component", "function"
 - "database", "query", "schema", "migration"
 - "UI", "interface", "frontend", "backend"
-
-# ❌ CONSEQUENCES OF NOT FOLLOWING DELEGATION RULES ❌
-
-If you directly edit code instead of delegating:
-- You violate the core architecture principles
-- You bypass quality assurance processes
-- You risk introducing untested, broken code
-- You undermine the specialized agent system
-- You fail in your role as architect/project manager
 
 # ✅ CORRECT vs ❌ WRONG BEHAVIOR EXAMPLES
 

@@ -5,10 +5,21 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"arcadia/pkg/logging"
 )
 
+func newTestLogger(tb testing.TB) logging.Logger {
+	tb.Helper()
+	l, err := logging.NewLogger(logging.DefaultConfig())
+	if err != nil {
+		tb.Fatalf("failed to create test logger: %v", err)
+	}
+	return l
+}
+
 func TestDatabaseManager_Initialize(t *testing.T) {
-	dm := NewDatabaseManager()
+	dm := NewDatabaseManager(newTestLogger(t))
 
 	// This test verifies the DatabaseManager structure
 	// In real usage, Initialize() would be called, but we're testing with mocks
@@ -236,7 +247,7 @@ func TestMockSystemDB_UpdateScheduledRun(t *testing.T) {
 
 func TestSQLiteDatabase_Exec(t *testing.T) {
 	// Use in-memory SQLite database for testing
-	db, err := NewSQLiteDatabase(":memory:")
+	db, err := NewSQLiteDatabase(":memory:", newTestLogger(t))
 	if err != nil {
 		t.Fatalf("Failed to create in-memory database: %v", err)
 	}
@@ -274,7 +285,7 @@ func TestSQLiteDatabase_Exec(t *testing.T) {
 
 func TestSQLiteDatabase_ExecError(t *testing.T) {
 	// Use in-memory SQLite database for testing
-	db, err := NewSQLiteDatabase(":memory:")
+	db, err := NewSQLiteDatabase(":memory:", newTestLogger(t))
 	if err != nil {
 		t.Fatalf("Failed to create in-memory database: %v", err)
 	}
@@ -335,7 +346,7 @@ func TestDatabaseManagerIntegration(t *testing.T) {
 
 func TestSQLiteDatabase_Query(t *testing.T) {
 	// Use in-memory SQLite database for testing
-	db, err := NewSQLiteDatabase(":memory:")
+	db, err := NewSQLiteDatabase(":memory:", newTestLogger(t))
 	if err != nil {
 		t.Fatalf("Failed to create in-memory database: %v", err)
 	}
@@ -481,7 +492,7 @@ func TestComplexScheduleOperations(t *testing.T) {
 
 func TestScheduleRepository_Methods(t *testing.T) {
 	// Test that schedule repository methods return errors when database is nil
-	repo := NewScheduleRepository(nil)
+	repo := NewScheduleRepository(nil, newTestLogger(t))
 
 	t.Run("SaveSchedule without db", func(t *testing.T) {
 		schedule := &AppSchedule{ID: "test"}
@@ -531,7 +542,7 @@ func TestScheduleRepository_Methods(t *testing.T) {
 }
 
 func TestDatabaseManager_Methods(t *testing.T) {
-	dm := NewDatabaseManager()
+	dm := NewDatabaseManager(newTestLogger(t))
 
 	t.Run("GetAppDB without init", func(t *testing.T) {
 		db := dm.GetAppDB()
@@ -550,7 +561,7 @@ func TestDatabaseManager_Methods(t *testing.T) {
 	t.Run("Database interface test", func(t *testing.T) {
 		// Test that we can create a temporary SQLite database
 		// This validates our Database interface works
-		tempDB, err := NewSQLiteDatabase(":memory:")
+		tempDB, err := NewSQLiteDatabase(":memory:", newTestLogger(t))
 		if err != nil {
 			t.Fatalf("Failed to create in-memory SQLite database: %v", err)
 		}

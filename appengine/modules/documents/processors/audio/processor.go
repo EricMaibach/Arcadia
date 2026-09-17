@@ -187,21 +187,21 @@ func (ap *AudioProcessor) createSuccessResult(filePath string, fileInfo *AudioFi
 
 	// Convert to map for ProcessingResult
 	metadataMap := map[string]interface{}{
-		"original_format":         metadata.OriginalFormat,
-		"original_size":           metadata.OriginalSize,
-		"file_name":               metadata.FileName,
-		"file_path":               metadata.FilePath,
-		"transcription_language":  metadata.TranscriptionLanguage,
-		"transcription_duration":  metadata.TranscriptionDuration,
-		"word_count":              metadata.WordCount,
-		"processed_at":            metadata.ProcessedAt,
-		"processor_version":       metadata.ProcessorVersion,
-		"whisper_url":             metadata.WhisperURL,
-		"whisper_model":           metadata.WhisperModel,
-		"language_confidence":     metadata.LanguageConfidence,
-		"audio_duration":          transcription.Duration,
-		"transcribed_at":          transcription.TranscribedAt,
-		"processor_type":          "audio",
+		"original_format":        metadata.OriginalFormat,
+		"original_size":          metadata.OriginalSize,
+		"file_name":              metadata.FileName,
+		"file_path":              metadata.FilePath,
+		"transcription_language": metadata.TranscriptionLanguage,
+		"transcription_duration": metadata.TranscriptionDuration,
+		"word_count":             metadata.WordCount,
+		"processed_at":           metadata.ProcessedAt,
+		"processor_version":      metadata.ProcessorVersion,
+		"whisper_url":            metadata.WhisperURL,
+		"whisper_model":          metadata.WhisperModel,
+		"language_confidence":    metadata.LanguageConfidence,
+		"audio_duration":         transcription.Duration,
+		"transcribed_at":         transcription.TranscribedAt,
+		"processor_type":         "audio",
 	}
 
 	// Create processing result
@@ -224,16 +224,16 @@ func (ap *AudioProcessor) createFallbackResult(filePath string, fileInfo *AudioF
 
 	// Create basic metadata without transcription
 	metadata := map[string]interface{}{
-		"original_format":      fileInfo.Extension,
-		"original_size":        fileInfo.Size,
-		"file_name":            filepath.Base(filePath),
-		"file_path":            filePath,
-		"processed_at":         time.Now(),
-		"processor_version":    "1.0.0",
-		"processor_type":       "audio",
-		"transcription_error":  transcribeErr.Error(),
-		"fallback_mode":        true,
-		"language":             ap.config.FallbackLanguage,
+		"original_format":     fileInfo.Extension,
+		"original_size":       fileInfo.Size,
+		"file_name":           filepath.Base(filePath),
+		"file_path":           filePath,
+		"processed_at":        time.Now(),
+		"processor_version":   "1.0.0",
+		"processor_type":      "audio",
+		"transcription_error": transcribeErr.Error(),
+		"fallback_mode":       true,
+		"language":            ap.config.FallbackLanguage,
 	}
 
 	// Create a basic content description

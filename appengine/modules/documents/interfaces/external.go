@@ -44,31 +44,31 @@ type QueueService interface {
 
 // QueueJob represents a job that can be queued
 type QueueJob struct {
-	ID       string                 `json:"id"`
-	Type     string                 `json:"type"`
-	Payload  map[string]interface{} `json:"payload"`
-	Priority int                    `json:"priority"`
-	Retries  int                    `json:"retries"`
-	MaxRetries int                  `json:"max_retries"`
+	ID         string                 `json:"id"`
+	Type       string                 `json:"type"`
+	Payload    map[string]interface{} `json:"payload"`
+	Priority   int                    `json:"priority"`
+	Retries    int                    `json:"retries"`
+	MaxRetries int                    `json:"max_retries"`
 }
 
 // QueueConfig defines configuration for a queue
 type QueueConfig struct {
-	MaxRetries      int   `json:"max_retries"`
-	RetryDelay      int   `json:"retry_delay_seconds"`
+	MaxRetries        int `json:"max_retries"`
+	RetryDelay        int `json:"retry_delay_seconds"`
 	VisibilityTimeout int `json:"visibility_timeout_seconds"`
-	MaxConcurrency  int   `json:"max_concurrency"`
+	MaxConcurrency    int `json:"max_concurrency"`
 }
 
 // QueueStats contains statistics about a queue
 type QueueStats struct {
-	QueueName        string `json:"queue_name"`
-	PendingJobs      int64  `json:"pending_jobs"`
-	ActiveJobs       int64  `json:"active_jobs"`
-	CompletedJobs    int64  `json:"completed_jobs"`
-	FailedJobs       int64  `json:"failed_jobs"`
-	TotalJobs        int64  `json:"total_jobs"`
-	AverageLatency   float64 `json:"average_latency_ms"`
+	QueueName      string  `json:"queue_name"`
+	PendingJobs    int64   `json:"pending_jobs"`
+	ActiveJobs     int64   `json:"active_jobs"`
+	CompletedJobs  int64   `json:"completed_jobs"`
+	FailedJobs     int64   `json:"failed_jobs"`
+	TotalJobs      int64   `json:"total_jobs"`
+	AverageLatency float64 `json:"average_latency_ms"`
 }
 
 // Logger type alias for backward compatibility - use pkg/logging.Logger
@@ -96,7 +96,7 @@ type MetricsCollector interface {
 
 // Timer represents a timing measurement
 type Timer interface {
-	Stop() float64  // Returns duration in milliseconds
+	Stop() float64 // Returns duration in milliseconds
 	Cancel()
 }
 
@@ -117,19 +117,19 @@ type RateLimiter interface {
 
 // RateLimit defines rate limiting configuration
 type RateLimit struct {
-	Requests  int   `json:"requests"`   // Number of requests
-	Duration  int   `json:"duration"`   // Time window in seconds
-	BurstSize int   `json:"burst_size"` // Burst allowance
+	Requests  int `json:"requests"`   // Number of requests
+	Duration  int `json:"duration"`   // Time window in seconds
+	BurstSize int `json:"burst_size"` // Burst allowance
 }
 
 // RateLimitUsage contains rate limit usage statistics
 type RateLimitUsage struct {
-	Key           string  `json:"key"`
-	Current       int     `json:"current"`       // Current usage
-	Limit         int     `json:"limit"`         // Rate limit
-	Remaining     int     `json:"remaining"`     // Remaining allowance
-	ResetTime     int64   `json:"reset_time"`    // When the limit resets
-	BurstUsed     int     `json:"burst_used"`    // Burst allowance used
+	Key            string `json:"key"`
+	Current        int    `json:"current"`         // Current usage
+	Limit          int    `json:"limit"`           // Rate limit
+	Remaining      int    `json:"remaining"`       // Remaining allowance
+	ResetTime      int64  `json:"reset_time"`      // When the limit resets
+	BurstUsed      int    `json:"burst_used"`      // Burst allowance used
 	BurstRemaining int    `json:"burst_remaining"` // Burst allowance remaining
 }
 
@@ -158,13 +158,13 @@ type CacheService interface {
 
 // CacheStats contains cache statistics
 type CacheStats struct {
-	Hits        int64   `json:"hits"`
-	Misses      int64   `json:"misses"`
-	HitRate     float64 `json:"hit_rate"`
-	Keys        int64   `json:"keys"`
-	Memory      int64   `json:"memory_bytes"`
-	Expired     int64   `json:"expired"`
-	Evicted     int64   `json:"evicted"`
+	Hits    int64   `json:"hits"`
+	Misses  int64   `json:"misses"`
+	HitRate float64 `json:"hit_rate"`
+	Keys    int64   `json:"keys"`
+	Memory  int64   `json:"memory_bytes"`
+	Expired int64   `json:"expired"`
+	Evicted int64   `json:"evicted"`
 }
 
 // ConfigProvider defines the interface for configuration management

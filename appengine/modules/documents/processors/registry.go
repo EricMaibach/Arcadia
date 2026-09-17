@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"sync"
 
-	"arcadia/modules/documents/processors/base"
-	"arcadia/modules/documents/processors/audio"
-	"arcadia/modules/documents/processors/text"
-	"arcadia/modules/documents/processors/pdf"
-	"arcadia/modules/documents/processors/tika"
 	"arcadia/modules/documents/detection"
 	"arcadia/modules/documents/interfaces"
+	"arcadia/modules/documents/processors/audio"
+	"arcadia/modules/documents/processors/base"
+	"arcadia/modules/documents/processors/pdf"
+	"arcadia/modules/documents/processors/text"
+	"arcadia/modules/documents/processors/tika"
 )
 
 // Registry manages document processors and handles document processing
@@ -149,7 +149,7 @@ func (r *Registry) ProcessDocument(ctx context.Context, filePath string) (*base.
 		}
 		if r.metrics != nil {
 			r.metrics.IncrementCounter("document_processing_errors", map[string]string{
-				"error_type": "processor_not_found",
+				"error_type":     "processor_not_found",
 				"processor_type": docType.Type.String(),
 			})
 		}
@@ -165,7 +165,7 @@ func (r *Registry) ProcessDocument(ctx context.Context, filePath string) (*base.
 		}
 		if r.metrics != nil {
 			r.metrics.IncrementCounter("document_processing_errors", map[string]string{
-				"error_type": "processor_cannot_handle",
+				"error_type":     "processor_cannot_handle",
 				"processor_type": docType.Type.String(),
 			})
 		}
@@ -190,7 +190,7 @@ func (r *Registry) ProcessDocument(ctx context.Context, filePath string) (*base.
 		}
 		if r.metrics != nil {
 			r.metrics.IncrementCounter("document_processing_errors", map[string]string{
-				"error_type": "processing_failed",
+				"error_type":     "processing_failed",
 				"processor_type": docType.Type.String(),
 			})
 		}

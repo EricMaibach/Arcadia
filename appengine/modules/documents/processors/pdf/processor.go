@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/interfaces"
+	"arcadia/modules/documents/processors/base"
 )
 
 // PDFProcessor handles processing of PDF documents
@@ -117,7 +117,7 @@ func (p *PDFProcessor) Process(ctx context.Context, filePath string) (*base.Proc
 
 	// Check if text extraction was successful and quality is good
 	if textErr == nil && textResult != nil &&
-	   textResult.Quality.IsGoodQuality(p.config.TextQualityThreshold) {
+		textResult.Quality.IsGoodQuality(p.config.TextQualityThreshold) {
 
 		// Use direct text extraction
 		finalText = textResult.Text
@@ -379,14 +379,14 @@ func (p *PDFProcessor) GetProcessorMetadata() map[string]interface{} {
 			"multi_method_extraction",
 		},
 		"supported_extensions": p.GetSupportedExtensions(),
-		"max_file_size":       p.config.MaxFileSize,
-		"processing_timeout":  p.config.ProcessingTimeout.Milliseconds(),
+		"max_file_size":        p.config.MaxFileSize,
+		"processing_timeout":   p.config.ProcessingTimeout.Milliseconds(),
 		"features": map[string]bool{
 			"pdftotext_extraction": true,
-			"ocr_fallback":        p.config.EnableOCRFallback,
-			"quality_assessment":  true,
-			"security_validation": true,
-			"metadata_extraction": true,
+			"ocr_fallback":         p.config.EnableOCRFallback,
+			"quality_assessment":   true,
+			"security_validation":  true,
+			"metadata_extraction":  true,
 		},
 		"tools": map[string]interface{}{
 			"pdftotext": map[string]interface{}{
@@ -394,10 +394,10 @@ func (p *PDFProcessor) GetProcessorMetadata() map[string]interface{} {
 				"available": p.config.GetToolsStatus()["pdftotext"],
 			},
 			"ocrmypdf": map[string]interface{}{
-				"path":       p.config.OCRMyPDFPath,
-				"available":  p.config.GetToolsStatus()["ocrmypdf"],
-				"languages":  p.config.OCRLanguages,
-				"quality":    p.config.OCRQualityLevel,
+				"path":      p.config.OCRMyPDFPath,
+				"available": p.config.GetToolsStatus()["ocrmypdf"],
+				"languages": p.config.OCRLanguages,
+				"quality":   p.config.OCRQualityLevel,
 			},
 		},
 		"configuration": map[string]interface{}{

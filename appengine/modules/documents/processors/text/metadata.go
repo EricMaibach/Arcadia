@@ -202,18 +202,18 @@ func (me *MetadataExtractor) getFileCategory(ext string) string {
 
 func (me *MetadataExtractor) getDocumentationType(ext string) string {
 	docTypes := map[string]string{
-		".md": "markdown",
-		".txt": "plain_text",
-		".rst": "restructured_text",
+		".md":       "markdown",
+		".txt":      "plain_text",
+		".rst":      "restructured_text",
 		".asciidoc": "asciidoc",
-		".adoc": "asciidoc",
-		".org": "org_mode",
-		".wiki": "wiki",
-		".tex": "latex",
-		".ltx": "latex",
-		".html": "html",
-		".htm": "html",
-		".rtf": "rich_text",
+		".adoc":     "asciidoc",
+		".org":      "org_mode",
+		".wiki":     "wiki",
+		".tex":      "latex",
+		".ltx":      "latex",
+		".html":     "html",
+		".htm":      "html",
+		".rtf":      "rich_text",
 	}
 
 	if docType, exists := docTypes[ext]; exists {
@@ -224,17 +224,17 @@ func (me *MetadataExtractor) getDocumentationType(ext string) string {
 
 func (me *MetadataExtractor) getConfigurationType(ext string) string {
 	configTypes := map[string]string{
-		".ini": "ini",
-		".conf": "generic_config",
-		".config": "generic_config",
+		".ini":        "ini",
+		".conf":       "generic_config",
+		".config":     "generic_config",
 		".properties": "properties",
-		".toml": "toml",
-		".yaml": "yaml",
-		".yml": "yaml",
-		".json": "json",
-		".xml": "xml",
-		".cfg": "generic_config",
-		".env": "environment",
+		".toml":       "toml",
+		".yaml":       "yaml",
+		".yml":        "yaml",
+		".json":       "json",
+		".xml":        "xml",
+		".cfg":        "generic_config",
+		".env":        "environment",
 	}
 
 	if configType, exists := configTypes[ext]; exists {
@@ -249,15 +249,15 @@ func (me *MetadataExtractor) getCodeType(ext string) string {
 
 func (me *MetadataExtractor) getDataType(ext string) string {
 	dataTypes := map[string]string{
-		".csv": "csv",
-		".tsv": "tsv",
-		".sql": "sql",
-		".db": "database",
+		".csv":    "csv",
+		".tsv":    "tsv",
+		".sql":    "sql",
+		".db":     "database",
 		".sqlite": "sqlite",
-		".json": "json",
-		".xml": "xml",
-		".yaml": "yaml",
-		".yml": "yaml",
+		".json":   "json",
+		".xml":    "xml",
+		".yaml":   "yaml",
+		".yml":    "yaml",
 	}
 
 	if dataType, exists := dataTypes[ext]; exists {

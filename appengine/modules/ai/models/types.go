@@ -322,57 +322,57 @@ func (c *ConversationContext) UpdateTokenCount(additionalTokens int) {
 
 // CircuitState represents the state of a circuit breaker
 type CircuitState struct {
-	State                string    `json:"state"`                  // "closed", "open", "half-open"
-	FailureCount         int       `json:"failure_count"`
-	SuccessCount         int       `json:"success_count"`
-	ConsecutiveFailures  int       `json:"consecutive_failures"`
-	LastFailure          time.Time `json:"last_failure,omitempty"`
-	LastSuccess          time.Time `json:"last_success,omitempty"`
-	NextRetryTime        time.Time `json:"next_retry_time,omitempty"`
-	FailureThreshold     int       `json:"failure_threshold"`
-	RecoveryTimeout      int       `json:"recovery_timeout_seconds"`
-	StateChangeTime      time.Time `json:"state_change_time"`
+	State               string    `json:"state"` // "closed", "open", "half-open"
+	FailureCount        int       `json:"failure_count"`
+	SuccessCount        int       `json:"success_count"`
+	ConsecutiveFailures int       `json:"consecutive_failures"`
+	LastFailure         time.Time `json:"last_failure,omitempty"`
+	LastSuccess         time.Time `json:"last_success,omitempty"`
+	NextRetryTime       time.Time `json:"next_retry_time,omitempty"`
+	FailureThreshold    int       `json:"failure_threshold"`
+	RecoveryTimeout     int       `json:"recovery_timeout_seconds"`
+	StateChangeTime     time.Time `json:"state_change_time"`
 }
 
 // CircuitStats represents statistics for a circuit breaker
 type CircuitStats struct {
-	TotalRequests      int64     `json:"total_requests"`
-	SuccessfulRequests int64     `json:"successful_requests"`
-	FailedRequests     int64     `json:"failed_requests"`
-	AverageResponseTime float64  `json:"average_response_time_ms"`
-	LastRequestTime    time.Time `json:"last_request_time"`
-	Uptime             float64   `json:"uptime_percentage"`
-	State              string    `json:"current_state"`
+	TotalRequests       int64     `json:"total_requests"`
+	SuccessfulRequests  int64     `json:"successful_requests"`
+	FailedRequests      int64     `json:"failed_requests"`
+	AverageResponseTime float64   `json:"average_response_time_ms"`
+	LastRequestTime     time.Time `json:"last_request_time"`
+	Uptime              float64   `json:"uptime_percentage"`
+	State               string    `json:"current_state"`
 }
 
 // FallbackStats represents statistics for fallback provider usage
 type FallbackStats struct {
-	TotalFallbacks     int64     `json:"total_fallbacks"`
-	SuccessfulFallbacks int64    `json:"successful_fallbacks"`
-	FailedFallbacks    int64     `json:"failed_fallbacks"`
-	LastFallbackTime   time.Time `json:"last_fallback_time"`
-	AverageFallbackDuration float64 `json:"average_fallback_duration_ms"`
-	FallbackRate       float64   `json:"fallback_rate_percentage"`
+	TotalFallbacks          int64     `json:"total_fallbacks"`
+	SuccessfulFallbacks     int64     `json:"successful_fallbacks"`
+	FailedFallbacks         int64     `json:"failed_fallbacks"`
+	LastFallbackTime        time.Time `json:"last_fallback_time"`
+	AverageFallbackDuration float64   `json:"average_fallback_duration_ms"`
+	FallbackRate            float64   `json:"fallback_rate_percentage"`
 }
 
 // PoolStats represents statistics for a provider pool
 type PoolStats struct {
-	TotalProviders   int       `json:"total_providers"`
-	ActiveProviders  int       `json:"active_providers"`
-	IdleProviders    int       `json:"idle_providers"`
-	FailedProviders  int       `json:"failed_providers"`
-	LastPoolUpdate   time.Time `json:"last_pool_update"`
-	AverageLoadTime  float64   `json:"average_load_time_ms"`
-	TotalRequests    int64     `json:"total_requests"`
-	QueuedRequests   int       `json:"queued_requests"`
+	TotalProviders  int       `json:"total_providers"`
+	ActiveProviders int       `json:"active_providers"`
+	IdleProviders   int       `json:"idle_providers"`
+	FailedProviders int       `json:"failed_providers"`
+	LastPoolUpdate  time.Time `json:"last_pool_update"`
+	AverageLoadTime float64   `json:"average_load_time_ms"`
+	TotalRequests   int64     `json:"total_requests"`
+	QueuedRequests  int       `json:"queued_requests"`
 }
 
 // PoolHealth represents the health status of a provider pool
 type PoolHealth struct {
-	OverallHealth   string                    `json:"overall_health"`
-	ProviderHealth  map[string]string         `json:"provider_health"`
-	LastHealthCheck time.Time                 `json:"last_health_check"`
-	HealthScore     float64                   `json:"health_score"`
-	Issues          []string                  `json:"issues,omitempty"`
-	Metadata        map[string]interface{}    `json:"metadata,omitempty"`
+	OverallHealth   string                 `json:"overall_health"`
+	ProviderHealth  map[string]string      `json:"provider_health"`
+	LastHealthCheck time.Time              `json:"last_health_check"`
+	HealthScore     float64                `json:"health_score"`
+	Issues          []string               `json:"issues,omitempty"`
+	Metadata        map[string]interface{} `json:"metadata,omitempty"`
 }

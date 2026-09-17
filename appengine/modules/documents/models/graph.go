@@ -60,11 +60,11 @@ type GraphStats struct {
 
 // EntityGraphData represents entity data ready for graph storage
 type EntityGraphData struct {
-	DocumentID string   `json:"document_id"`
-	EntityID   int      `json:"entity_id"`
-	Type       string   `json:"type"`
-	Text       string   `json:"text"`
-	Quads      []Quad   `json:"quads"`
+	DocumentID string `json:"document_id"`
+	EntityID   int    `json:"entity_id"`
+	Type       string `json:"type"`
+	Text       string `json:"text"`
+	Quads      []Quad `json:"quads"`
 }
 
 // RelationshipGraphData represents relationship data ready for graph storage

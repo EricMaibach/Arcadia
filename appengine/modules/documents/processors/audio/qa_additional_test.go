@@ -336,7 +336,7 @@ func TestRetryBehaviorEdgeCases(t *testing.T) {
 		config := DefaultAudioConfig()
 		config.WhisperURL = server.URL
 		config.MaxRetries = 5
-		config.RetryDelay = 0 // No delay for faster test
+		config.RetryDelay = 0                      // No delay for faster test
 		config.CircuitBreakerFailureThreshold = 10 // Higher than max retries
 		client := NewWhisperClient(&config)
 
@@ -452,9 +452,9 @@ func TestHealthCheckRobustness(t *testing.T) {
 // TestIsRetryableLogic tests the retry decision logic
 func TestIsRetryableLogic(t *testing.T) {
 	testCases := []struct {
-		name       string
-		err        error
-		retryable  bool
+		name      string
+		err       error
+		retryable bool
 	}{
 		{"Nil error", nil, false},
 		{"Whisper unavailable", ErrWhisperUnavailable, true},

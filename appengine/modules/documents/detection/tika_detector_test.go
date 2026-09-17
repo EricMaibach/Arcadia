@@ -10,12 +10,12 @@ func TestTikaDetector_DetectType(t *testing.T) {
 	detector := NewTikaDetector()
 
 	tests := []struct {
-		name           string
-		filePath       string
-		expectedType   base.ProcessorType
+		name            string
+		filePath        string
+		expectedType    base.ProcessorType
 		hasExpectedType bool
-		expectedConf   float64
-		expectError    bool
+		expectedConf    float64
+		expectError     bool
 	}{
 		{
 			name:            "Word document",

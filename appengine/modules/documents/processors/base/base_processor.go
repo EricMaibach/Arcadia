@@ -23,11 +23,11 @@ type BaseProcessor struct {
 // NewBaseProcessor creates a new base processor with the given configuration
 func NewBaseProcessor(processorType ProcessorType, extensions []string, logger interfaces.Logger) *BaseProcessor {
 	return &BaseProcessor{
-		logger:       logger,
+		logger:        logger,
 		processorType: processorType,
-		extensions:   extensions,
-		maxFileSize:  100 * 1024 * 1024, // 100MB default
-		timeout:      5 * time.Minute,    // 5 minutes default
+		extensions:    extensions,
+		maxFileSize:   100 * 1024 * 1024, // 100MB default
+		timeout:       5 * time.Minute,   // 5 minutes default
 	}
 }
 
@@ -137,11 +137,11 @@ func (bp *BaseProcessor) GetFileInfo(filePath string) (map[string]interface{}, e
 	}
 
 	return map[string]interface{}{
-		"size":         info.Size(),
-		"mod_time":     info.ModTime(),
-		"mode":         info.Mode().String(),
-		"extension":    filepath.Ext(filePath),
-		"base_name":    filepath.Base(filePath),
-		"processor":    bp.processorType,
+		"size":      info.Size(),
+		"mod_time":  info.ModTime(),
+		"mode":      info.Mode().String(),
+		"extension": filepath.Ext(filePath),
+		"base_name": filepath.Base(filePath),
+		"processor": bp.processorType,
 	}, nil
 }

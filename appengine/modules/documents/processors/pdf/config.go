@@ -13,7 +13,7 @@ type PDFConfig struct {
 	OCRMyPDFPath  string `json:"ocrmypdf_path" yaml:"ocrmypdf_path"`
 
 	// Processing limits
-	MaxFileSize      int64         `json:"max_file_size" yaml:"max_file_size"`           // Maximum file size in bytes
+	MaxFileSize       int64         `json:"max_file_size" yaml:"max_file_size"`           // Maximum file size in bytes
 	ProcessingTimeout time.Duration `json:"processing_timeout" yaml:"processing_timeout"` // Processing timeout
 
 	// Text extraction settings
@@ -21,8 +21,8 @@ type PDFConfig struct {
 	MinWordsPerPage      int     `json:"min_words_per_page" yaml:"min_words_per_page"`         // Minimum words per page for quality check
 
 	// OCR settings
-	OCRLanguages      []string `json:"ocr_languages" yaml:"ocr_languages"`           // OCR languages (e.g., "eng", "fra", "spa")
-	OCRQualityLevel   int      `json:"ocr_quality_level" yaml:"ocr_quality_level"`   // OCR quality level (1-3)
+	OCRLanguages      []string `json:"ocr_languages" yaml:"ocr_languages"`             // OCR languages (e.g., "eng", "fra", "spa")
+	OCRQualityLevel   int      `json:"ocr_quality_level" yaml:"ocr_quality_level"`     // OCR quality level (1-3)
 	EnableOCRFallback bool     `json:"enable_ocr_fallback" yaml:"enable_ocr_fallback"` // Enable OCR fallback for poor text extraction
 
 	// Tool validation
@@ -36,14 +36,14 @@ type PDFConfig struct {
 // DefaultPDFConfig returns a default PDF configuration
 func DefaultPDFConfig() *PDFConfig {
 	return &PDFConfig{
-		PDFToTextPath:          "pdftotext", // Assume in PATH
-		OCRMyPDFPath:           "ocrmypdf",  // Assume in PATH
+		PDFToTextPath:          "pdftotext",       // Assume in PATH
+		OCRMyPDFPath:           "ocrmypdf",        // Assume in PATH
 		MaxFileSize:            100 * 1024 * 1024, // 100MB
 		ProcessingTimeout:      5 * time.Minute,
-		TextQualityThreshold:   0.3,  // 30% quality threshold
-		MinWordsPerPage:        10,   // Minimum 10 words per page
+		TextQualityThreshold:   0.3,             // 30% quality threshold
+		MinWordsPerPage:        10,              // Minimum 10 words per page
 		OCRLanguages:           []string{"eng"}, // English by default
-		OCRQualityLevel:        2,    // Medium quality
+		OCRQualityLevel:        2,               // Medium quality
 		EnableOCRFallback:      true,
 		RequireTools:           false, // Don't require tools by default
 		AllowPasswordProtected: false,
@@ -156,23 +156,23 @@ func (c *PDFConfig) GetToolsStatus() map[string]bool {
 type PDFErrorCode string
 
 const (
-	ErrConfigInvalid     PDFErrorCode = "PDF_CONFIG_INVALID"
-	ErrToolNotFound      PDFErrorCode = "PDF_TOOL_NOT_FOUND"
-	ErrToolExecution     PDFErrorCode = "PDF_TOOL_EXECUTION_FAILED"
-	ErrPDFCorrupted      PDFErrorCode = "PDF_CORRUPTED"
+	ErrConfigInvalid        PDFErrorCode = "PDF_CONFIG_INVALID"
+	ErrToolNotFound         PDFErrorCode = "PDF_TOOL_NOT_FOUND"
+	ErrToolExecution        PDFErrorCode = "PDF_TOOL_EXECUTION_FAILED"
+	ErrPDFCorrupted         PDFErrorCode = "PDF_CORRUPTED"
 	ErrPDFPasswordProtected PDFErrorCode = "PDF_PASSWORD_PROTECTED"
-	ErrPDFTooBig         PDFErrorCode = "PDF_TOO_BIG"
-	ErrPDFTooManyPages   PDFErrorCode = "PDF_TOO_MANY_PAGES"
+	ErrPDFTooBig            PDFErrorCode = "PDF_TOO_BIG"
+	ErrPDFTooManyPages      PDFErrorCode = "PDF_TOO_MANY_PAGES"
 	ErrTextExtractionFailed PDFErrorCode = "PDF_TEXT_EXTRACTION_FAILED"
-	ErrOCRFailed         PDFErrorCode = "PDF_OCR_FAILED"
-	ErrQualityTooLow     PDFErrorCode = "PDF_QUALITY_TOO_LOW"
+	ErrOCRFailed            PDFErrorCode = "PDF_OCR_FAILED"
+	ErrQualityTooLow        PDFErrorCode = "PDF_QUALITY_TOO_LOW"
 )
 
 // PDFError represents a PDF processing error
 type PDFError struct {
-	Code    PDFErrorCode    `json:"code"`
-	Message string          `json:"message"`
-	Cause   error           `json:"cause,omitempty"`
+	Code    PDFErrorCode           `json:"code"`
+	Message string                 `json:"message"`
+	Cause   error                  `json:"cause,omitempty"`
 	Context map[string]interface{} `json:"context,omitempty"`
 }
 

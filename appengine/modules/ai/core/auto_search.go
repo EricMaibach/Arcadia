@@ -175,9 +175,9 @@ func (ase *AutoSearchExecutor) formatResults(query string, results []*models.Enh
 		}
 
 		summary := DocumentSummary{
-			ID:       result.Document.ID,
-			FilePath: result.Document.FilePath,
-			Score:    float64(result.BestScore),
+			ID:         result.Document.ID,
+			FilePath:   result.Document.FilePath,
+			Score:      float64(result.BestScore),
 			Highlights: result.ContextHighlights,
 		}
 

@@ -159,7 +159,7 @@ func (av *AudioValidator) validateAudioFormat(filePath string) error {
 	case ".mp3":
 		// MP3 files can start with ID3 tag (0x49 0x44 0x33) or MPEG frame sync (0xFF 0xFB or 0xFF 0xFA)
 		if (n >= 3 && header[0] == 0x49 && header[1] == 0x44 && header[2] == 0x33) ||
-		   (n >= 2 && header[0] == 0xFF && (header[1] == 0xFB || header[1] == 0xFA || header[1] == 0xF3 || header[1] == 0xF2)) {
+			(n >= 2 && header[0] == 0xFF && (header[1] == 0xFB || header[1] == 0xFA || header[1] == 0xF3 || header[1] == 0xF2)) {
 			return nil
 		}
 		return fmt.Errorf("file does not appear to be a valid MP3 (invalid magic bytes)")

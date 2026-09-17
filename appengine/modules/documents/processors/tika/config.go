@@ -82,8 +82,8 @@ func DefaultTikaConfig() *TikaConfig {
 		// Processor-specific defaults
 		AcceptAllFormats:   false, // Start with Office-only mode
 		OfficeExtensions:   []string{"doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp"},
-		FallbackConfidence: 0.3,   // Low confidence for unknown formats
-		OfficeConfidence:   0.9,   // High confidence for known Office formats
+		FallbackConfidence: 0.3, // Low confidence for unknown formats
+		OfficeConfidence:   0.9, // High confidence for known Office formats
 	}
 }
 

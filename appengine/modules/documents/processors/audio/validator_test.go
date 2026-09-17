@@ -1031,7 +1031,7 @@ func TestValidateCompleteFlow(t *testing.T) {
 
 	// Create valid MP3 file
 	filePath := filepath.Join(tmpDir, "valid.mp3")
-	mp3Data := []byte{0xFF, 0xFB, 0x90, 0x44} // Valid MP3 header
+	mp3Data := []byte{0xFF, 0xFB, 0x90, 0x44}        // Valid MP3 header
 	mp3Data = append(mp3Data, make([]byte, 1000)...) // Add some data
 	if err := os.WriteFile(filePath, mp3Data, 0644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)

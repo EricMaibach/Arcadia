@@ -85,14 +85,14 @@ func (o *OCRHandler) ProcessWithOCR(ctx context.Context, filePath string) (*OCRR
 		QualityLevel: o.config.OCRQualityLevel,
 		ToolVersion:  o.getOCRMyPDFVersion(),
 		Metadata: map[string]interface{}{
-			"processor":      "ocrmypdf",
-			"file_path":      filePath,
+			"processor":       "ocrmypdf",
+			"file_path":       filePath,
 			"processing_time": duration.Milliseconds(),
-			"languages":      o.config.OCRLanguages,
-			"quality_level":  o.config.OCRQualityLevel,
-			"quality_score":  quality.Score,
-			"word_count":     quality.WordCount,
-			"char_count":     quality.CharCount,
+			"languages":       o.config.OCRLanguages,
+			"quality_level":   o.config.OCRQualityLevel,
+			"quality_score":   quality.Score,
+			"word_count":      quality.WordCount,
+			"char_count":      quality.CharCount,
 		},
 	}
 
@@ -117,14 +117,14 @@ func (o *OCRHandler) runOCRMyPDF(ctx context.Context, inputPath, outputPath stri
 
 	// Build ocrmypdf command
 	args := []string{
-		"--force-ocr",                              // Force OCR even if text exists
+		"--force-ocr",                                             // Force OCR even if text exists
 		"--optimize", fmt.Sprintf("%d", o.config.OCRQualityLevel), // Optimization level
-		"--output-type", "pdf",                     // Output PDF
-		"--pdf-renderer", "hocr",                   // Use hOCR renderer
-		"--clean",                                  // Clean up temporary files
-		"--rotate-pages",                           // Auto-rotate pages
-		"--deskew",                                 // Deskew pages
-		"--remove-background",                      // Remove background
+		"--output-type", "pdf", // Output PDF
+		"--pdf-renderer", "hocr", // Use hOCR renderer
+		"--clean",             // Clean up temporary files
+		"--rotate-pages",      // Auto-rotate pages
+		"--deskew",            // Deskew pages
+		"--remove-background", // Remove background
 	}
 
 	// Add language specification
@@ -157,34 +157,34 @@ func (o *OCRHandler) runOCRMyPDF(ctx context.Context, inputPath, outputPath stri
 
 		// Check for specific error conditions
 		if strings.Contains(stderrStr, "encrypted") ||
-		   strings.Contains(stderrStr, "password") {
+			strings.Contains(stderrStr, "password") {
 			return &PDFError{
 				Code:    ErrPDFPasswordProtected,
 				Message: "PDF is password protected",
 				Cause:   err,
 				Context: map[string]interface{}{
-					"stderr": stderrStr,
+					"stderr":    stderrStr,
 					"file_path": inputPath,
 				},
 			}
 		}
 
 		if strings.Contains(stderrStr, "Invalid PDF") ||
-		   strings.Contains(stderrStr, "corrupted") ||
-		   strings.Contains(stderrStr, "damaged") {
+			strings.Contains(stderrStr, "corrupted") ||
+			strings.Contains(stderrStr, "damaged") {
 			return &PDFError{
 				Code:    ErrPDFCorrupted,
 				Message: "PDF file appears to be corrupted",
 				Cause:   err,
 				Context: map[string]interface{}{
-					"stderr": stderrStr,
+					"stderr":    stderrStr,
 					"file_path": inputPath,
 				},
 			}
 		}
 
 		if strings.Contains(stderrStr, "No images found") ||
-		   strings.Contains(stderrStr, "already has text") {
+			strings.Contains(stderrStr, "already has text") {
 			return &PDFError{
 				Code:    ErrOCRFailed,
 				Message: "OCR processing not needed or failed",
@@ -201,7 +201,7 @@ func (o *OCRHandler) runOCRMyPDF(ctx context.Context, inputPath, outputPath stri
 			Message: "ocrmypdf execution failed",
 			Cause:   err,
 			Context: map[string]interface{}{
-				"stderr": stderrStr,
+				"stderr":  stderrStr,
 				"command": strings.Join(append([]string{o.config.OCRMyPDFPath}, args...), " "),
 			},
 		}
@@ -255,13 +255,13 @@ func (o *OCRHandler) createTempFile(originalPath string) (string, error) {
 func (o *OCRHandler) analyzeOCRQuality(text string) *OCRQuality {
 	if text == "" {
 		return &OCRQuality{
-			Score:         0.0,
-			WordCount:     0,
-			CharCount:     0,
-			LineCount:     0,
-			HasContent:    false,
-			Confidence:    0.0,
-			Languages:     o.config.OCRLanguages,
+			Score:      0.0,
+			WordCount:  0,
+			CharCount:  0,
+			LineCount:  0,
+			HasContent: false,
+			Confidence: 0.0,
+			Languages:  o.config.OCRLanguages,
 		}
 	}
 
@@ -379,10 +379,10 @@ func (o *OCRHandler) hasGoodOCRPatterns(text string) bool {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if len(line) > 10 &&
-		   len(line) < 200 &&
-		   strings.HasSuffix(line, ".") &&
-		   len(line) > 0 &&
-		   (line[0] >= 'A' && line[0] <= 'Z') {
+			len(line) < 200 &&
+			strings.HasSuffix(line, ".") &&
+			len(line) > 0 &&
+			(line[0] >= 'A' && line[0] <= 'Z') {
 			completeLines++
 		}
 	}
@@ -444,15 +444,15 @@ type OCRResult struct {
 
 // OCRQuality holds quality metrics for OCR text
 type OCRQuality struct {
-	Score         float64  `json:"score"`          // Overall quality score (0-1)
-	WordCount     int      `json:"word_count"`     // Total word count
-	ValidWords    int      `json:"valid_words"`    // Count of valid words
-	CharCount     int      `json:"char_count"`     // Total character count
-	LineCount     int      `json:"line_count"`     // Total line count
+	Score         float64  `json:"score"`           // Overall quality score (0-1)
+	WordCount     int      `json:"word_count"`      // Total word count
+	ValidWords    int      `json:"valid_words"`     // Count of valid words
+	CharCount     int      `json:"char_count"`      // Total character count
+	LineCount     int      `json:"line_count"`      // Total line count
 	AvgWordLength float64  `json:"avg_word_length"` // Average word length
-	HasContent    bool     `json:"has_content"`    // Whether text has meaningful content
-	Confidence    float64  `json:"confidence"`     // Confidence in OCR result (0-1)
-	Languages     []string `json:"languages"`      // OCR languages used
+	HasContent    bool     `json:"has_content"`     // Whether text has meaningful content
+	Confidence    float64  `json:"confidence"`      // Confidence in OCR result (0-1)
+	Languages     []string `json:"languages"`       // OCR languages used
 }
 
 // IsGoodQuality returns true if the OCR quality is acceptable
@@ -482,7 +482,7 @@ func (oq *OCRQuality) IsBetterThan(other *TextQuality) bool {
 
 	// Compare scores, but give slight preference to OCR if original quality was poor
 	if other.Score < 0.3 {
-		return oq.Score > other.Score * 0.8 // Lower threshold for OCR
+		return oq.Score > other.Score*0.8 // Lower threshold for OCR
 	}
 
 	return oq.Score > other.Score

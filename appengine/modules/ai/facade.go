@@ -1,8 +1,8 @@
 package ai
 
 import (
-	"context"
 	"arcadia/modules/ai/models"
+	"context"
 )
 
 // AIModule defines the public API interface for the AI module
@@ -54,16 +54,16 @@ type AIModule interface {
 
 // ModuleInfo contains information about the AI module
 type ModuleInfo struct {
-	Version     string                 `json:"version"`
-	BuildTime   string                 `json:"build_time"`
-	GitCommit   string                 `json:"git_commit"`
-	Features    []string               `json:"features"`
-	Config      map[string]interface{} `json:"config"`
-	Status      string                 `json:"status"`
-	StartedAt   string                 `json:"started_at"`
-	Uptime      string                 `json:"uptime"`
-	Providers   []string               `json:"providers"`
-	ActiveProvider string              `json:"active_provider"`
+	Version        string                 `json:"version"`
+	BuildTime      string                 `json:"build_time"`
+	GitCommit      string                 `json:"git_commit"`
+	Features       []string               `json:"features"`
+	Config         map[string]interface{} `json:"config"`
+	Status         string                 `json:"status"`
+	StartedAt      string                 `json:"started_at"`
+	Uptime         string                 `json:"uptime"`
+	Providers      []string               `json:"providers"`
+	ActiveProvider string                 `json:"active_provider"`
 }
 
 // EventListener defines the interface for listening to module events
@@ -79,8 +79,8 @@ type EventListener interface {
 
 // Constants for the module
 const (
-	ModuleVersion        = "1.0.0"
-	ModuleName           = "ai"
-	DefaultMaxTokens     = 4096
-	DefaultTimeout       = 120 // seconds
+	ModuleVersion    = "1.0.0"
+	ModuleName       = "ai"
+	DefaultMaxTokens = 4096
+	DefaultTimeout   = 120 // seconds
 )

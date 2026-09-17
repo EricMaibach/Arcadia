@@ -39,12 +39,12 @@ type Config struct {
 	LogLevel string `json:"log_level" yaml:"log_level"`
 
 	// Auto-search settings
-	AutoSearchEnabled      bool    `json:"auto_search_enabled" yaml:"auto_search_enabled"`
-	AutoSearchMaxResults   int     `json:"auto_search_max_results" yaml:"auto_search_max_results"`
-	AutoSearchMinConfidence float64 `json:"auto_search_min_confidence" yaml:"auto_search_min_confidence"`
-	AutoSearchMaxContextSize int    `json:"auto_search_max_context_size" yaml:"auto_search_max_context_size"`
-	AutoSearchIncludeMetadata bool  `json:"auto_search_include_metadata" yaml:"auto_search_include_metadata"`
-	AutoSearchTimeout      int     `json:"auto_search_timeout" yaml:"auto_search_timeout"`
+	AutoSearchEnabled         bool    `json:"auto_search_enabled" yaml:"auto_search_enabled"`
+	AutoSearchMaxResults      int     `json:"auto_search_max_results" yaml:"auto_search_max_results"`
+	AutoSearchMinConfidence   float64 `json:"auto_search_min_confidence" yaml:"auto_search_min_confidence"`
+	AutoSearchMaxContextSize  int     `json:"auto_search_max_context_size" yaml:"auto_search_max_context_size"`
+	AutoSearchIncludeMetadata bool    `json:"auto_search_include_metadata" yaml:"auto_search_include_metadata"`
+	AutoSearchTimeout         int     `json:"auto_search_timeout" yaml:"auto_search_timeout"`
 
 	// API logging settings
 	EnableAPILogging bool   `json:"enable_api_logging" yaml:"enable_api_logging"`
@@ -85,14 +85,14 @@ func DefaultConfig() *Config {
 		// Auto-search defaults
 		AutoSearchEnabled:         true,
 		AutoSearchMaxResults:      3,
-		AutoSearchMinConfidence:   0.5,  // Lower threshold to be more permissive
+		AutoSearchMinConfidence:   0.5, // Lower threshold to be more permissive
 		AutoSearchMaxContextSize:  4000,
 		AutoSearchIncludeMetadata: true,
 		AutoSearchTimeout:         5,
 		// API logging defaults
-		EnableAPILogging:          true,
-		APILogPath:                "logs/ai_api_payloads.log",
-		APILogMaxSizeMB:           100,
+		EnableAPILogging: true,
+		APILogPath:       "logs/ai_api_payloads.log",
+		APILogMaxSizeMB:  100,
 	}
 }
 

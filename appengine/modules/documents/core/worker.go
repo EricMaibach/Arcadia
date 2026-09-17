@@ -219,9 +219,9 @@ func (e *WorkerPoolError) Error() string {
 
 // ProcessingJob implements interfaces.Job for document processing
 type ProcessingJob struct {
-	id       string
-	priority int
-	filePath string
+	id        string
+	priority  int
+	filePath  string
 	processor interfaces.DocumentProcessor
 }
 

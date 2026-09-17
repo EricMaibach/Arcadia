@@ -37,15 +37,15 @@ type DocumentProcessor struct {
 
 // ProcessorConfig contains configuration for document processing
 type ProcessorConfig struct {
-	MaxFileSize       int64    `json:"max_file_size"`        // Maximum file size in bytes
-	SupportedFormats  []string `json:"supported_formats"`    // Supported file extensions
+	MaxFileSize       int64                 `json:"max_file_size"`     // Maximum file size in bytes
+	SupportedFormats  []string              `json:"supported_formats"` // Supported file extensions
 	ChunkingConfig    models.ChunkingConfig `json:"chunking_config"`
-	ValidateContent   bool     `json:"validate_content"`     // Validate UTF-8 content
-	ExtractMetadata   bool     `json:"extract_metadata"`     // Extract file metadata
-	SkipDuplicates    bool     `json:"skip_duplicates"`      // Skip files with same hash
-	ProcessingTimeout int      `json:"processing_timeout"`   // Timeout in seconds
-	RetryAttempts     int      `json:"retry_attempts"`       // Number of retry attempts
-	RetryDelay        int      `json:"retry_delay"`          // Delay between retries in seconds
+	ValidateContent   bool                  `json:"validate_content"`   // Validate UTF-8 content
+	ExtractMetadata   bool                  `json:"extract_metadata"`   // Extract file metadata
+	SkipDuplicates    bool                  `json:"skip_duplicates"`    // Skip files with same hash
+	ProcessingTimeout int                   `json:"processing_timeout"` // Timeout in seconds
+	RetryAttempts     int                   `json:"retry_attempts"`     // Number of retry attempts
+	RetryDelay        int                   `json:"retry_delay"`        // Delay between retries in seconds
 }
 
 // NewDocumentProcessor creates a new document processor

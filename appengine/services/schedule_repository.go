@@ -332,15 +332,15 @@ func GetScheduleRepository() *ScheduleRepository {
 
 // Mock implementations for testing
 type MockScheduleRepository struct {
-	Schedules        map[string]*AppSchedule
-	ScheduledRuns    map[string]*ScheduledRun
-	ShouldError      bool
-	SaveError        error
-	LoadError        error
-	SaveRunError     error
-	UpdateError      error
-	UpdateRunError   error
-	DeactivateError  error
+	Schedules       map[string]*AppSchedule
+	ScheduledRuns   map[string]*ScheduledRun
+	ShouldError     bool
+	SaveError       error
+	LoadError       error
+	SaveRunError    error
+	UpdateError     error
+	UpdateRunError  error
+	DeactivateError error
 }
 
 func NewMockScheduleRepository() *MockScheduleRepository {

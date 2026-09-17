@@ -22,10 +22,10 @@ const (
 )
 
 type RecurrenceRule struct {
-	Interval    int       `json:"interval"`
-	Unit        string    `json:"unit"` // "minutes", "hours", "days", "weeks", "months"
-	DaysOfWeek  []int     `json:"daysOfWeek,omitempty"`
-	EndDate     *time.Time `json:"endDate,omitempty"`
+	Interval   int        `json:"interval"`
+	Unit       string     `json:"unit"` // "minutes", "hours", "days", "weeks", "months"
+	DaysOfWeek []int      `json:"daysOfWeek,omitempty"`
+	EndDate    *time.Time `json:"endDate,omitempty"`
 }
 
 type AppSchedule struct {
@@ -687,4 +687,3 @@ func UpdateSchedule(scheduleID string, updateReq UpdateScheduleRequest) (*AppSch
 	}
 	return defaultScheduler.UpdateSchedule(scheduleID, updateReq)
 }
-

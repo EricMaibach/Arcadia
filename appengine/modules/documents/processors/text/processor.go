@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/interfaces"
+	"arcadia/modules/documents/processors/base"
 )
 
 // TextProcessor handles processing of plain text files
@@ -187,7 +187,7 @@ func (tp *TextProcessor) GetProcessorMetadata() map[string]interface{} {
 			"content_validation",
 		},
 		"supported_extensions": tp.GetSupportedExtensions(),
-		"max_file_size":       100 * 1024 * 1024, // 100MB
+		"max_file_size":        100 * 1024 * 1024, // 100MB
 		"features": map[string]bool{
 			"utf8_validation":     true,
 			"language_detection":  true,

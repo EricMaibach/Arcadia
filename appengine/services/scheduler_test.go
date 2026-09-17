@@ -30,7 +30,7 @@ func TestFlexibleTime_UnmarshalJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var ft FlexibleTime
 			err := ft.UnmarshalJSON([]byte(tt.input))
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("UnmarshalJSON() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -313,7 +313,7 @@ func TestCalculateNextRun(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := CalculateNextRun(tt.schedule)
-			
+
 			if tt.expected == nil && result != nil {
 				t.Errorf("Expected nil, got %v", result)
 			} else if tt.expected != nil && result == nil {
@@ -331,7 +331,7 @@ func TestCalculateNextRun(t *testing.T) {
 
 func TestScheduler_CreateSchedule(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	futureTime := time.Now().Add(time.Hour)
 
@@ -436,13 +436,13 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 			mockRepo.SaveError = nil
 			mockRepo.Schedules = make(map[string]*AppSchedule)
 			scheduler.schedules = make(map[string]*AppSchedule)
-			
+
 			if tt.setup != nil {
 				tt.setup()
 			}
 
 			schedule, err := scheduler.CreateSchedule(tt.req)
-			
+
 			if (err != nil) != tt.wantErr {
 				t.Errorf("CreateSchedule() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -486,7 +486,7 @@ func TestScheduler_CreateSchedule(t *testing.T) {
 
 func TestScheduler_GetAllSchedules(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Add test schedules to scheduler
 	schedule1 := &AppSchedule{
@@ -542,7 +542,7 @@ func TestScheduler_GetAllSchedules(t *testing.T) {
 
 func TestScheduler_GetSchedule(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -574,7 +574,7 @@ func TestScheduler_GetSchedule(t *testing.T) {
 
 func TestScheduler_DeleteSchedule(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -621,7 +621,7 @@ func TestScheduler_DeleteSchedule(t *testing.T) {
 
 func TestScheduler_UpdateSchedule(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Add test schedule
 	testSchedule := &AppSchedule{
@@ -748,7 +748,7 @@ func boolPtr(b bool) *bool {
 
 func TestScheduler_Start(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Add a test schedule to the mock database
 	testSchedule := &AppSchedule{
@@ -775,8 +775,8 @@ func TestScheduler_Start(t *testing.T) {
 
 	// Test start with database error
 	mockRepo.LoadError = fmt.Errorf("database error")
-	scheduler2 := NewScheduler(mockRepo)
-	
+	scheduler2 := NewScheduler(mockRepo, newTestLogger(t))
+
 	err = scheduler2.Start()
 	if err == nil {
 		t.Error("Expected error when database fails to load schedules")
@@ -785,7 +785,7 @@ func TestScheduler_Start(t *testing.T) {
 
 func TestScheduler_SetExecuteAppTool(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
 
 	// Test setting execute function
 	var executeCalled bool
@@ -839,7 +839,7 @@ func TestScheduler_SetExecuteAppTool(t *testing.T) {
 func TestBackwardCompatibilityFunctions(t *testing.T) {
 	// Initialize default scheduler
 	mockRepo := NewMockScheduleRepository()
-	InitDefaultScheduler(mockRepo)
+	InitDefaultScheduler(mockRepo, newTestLogger(t))
 
 	// Test StartScheduler
 	err := StartScheduler()
@@ -856,7 +856,7 @@ func TestBackwardCompatibilityFunctions(t *testing.T) {
 		ScheduleType:  ScheduleTypeOneTime,
 		ScheduledTime: FlexibleTime{Time: futureTime},
 	}
-	
+
 	schedule, err := CreateSchedule(req)
 	if err != nil {
 		t.Errorf("CreateSchedule() failed: %v", err)
@@ -902,7 +902,7 @@ func TestBackwardCompatibilityFunctions(t *testing.T) {
 		if err != nil {
 			t.Errorf("DeleteSchedule() failed: %v", err)
 		}
-		
+
 		_, exists := GetSchedule(schedule.ID)
 		if exists {
 			t.Error("Expected schedule to be deleted")
@@ -914,23 +914,23 @@ func TestBackwardCompatibilityFunctions(t *testing.T) {
 		return "test output", nil
 	}
 	SetExecuteAppTool(executeFunc)
-	
+
 	// Verify it was set in the default scheduler
 	if ExecuteAppTool == nil {
 		t.Error("ExecuteAppTool was not set")
 	}
-	
+
 	// Test CheckAndExecuteSchedules (global function)
 	CheckAndExecuteSchedules()
-	
+
 	// Test StopScheduler (global function)
 	StopScheduler()
 }
 
 func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
-	
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
+
 	// Set up execute function
 	var executedAppID, executedToolName string
 	scheduler.SetExecuteAppTool(func(appID, toolName string, input json.RawMessage) (string, error) {
@@ -938,7 +938,7 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 		executedToolName = toolName
 		return "test output", nil
 	})
-	
+
 	// Create a test schedule
 	schedule := &AppSchedule{
 		ID:            "test-schedule",
@@ -950,13 +950,13 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 		IsActive:      true,
 		RunCount:      0,
 	}
-	
+
 	// Add schedule to scheduler
 	scheduler.schedules[schedule.ID] = schedule
-	
+
 	// Execute the scheduled run
 	scheduler.ExecuteScheduledRun(schedule)
-	
+
 	// Verify the execution
 	if executedAppID != "test-app" {
 		t.Errorf("Expected AppID 'test-app', got '%s'", executedAppID)
@@ -964,12 +964,12 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	if executedToolName != "test-tool" {
 		t.Errorf("Expected ToolName 'test-tool', got '%s'", executedToolName)
 	}
-	
+
 	// Check that a run was saved
 	if len(mockRepo.ScheduledRuns) != 1 {
 		t.Errorf("Expected 1 scheduled run, got %d", len(mockRepo.ScheduledRuns))
 	}
-	
+
 	// Check that the schedule was updated
 	if schedule.RunCount != 1 {
 		t.Errorf("Expected RunCount 1, got %d", schedule.RunCount)
@@ -977,12 +977,12 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	if schedule.LastRun == nil {
 		t.Error("Expected LastRun to be set")
 	}
-	
+
 	// Test with execution error
 	scheduler.SetExecuteAppTool(func(appID, toolName string, input json.RawMessage) (string, error) {
 		return "", fmt.Errorf("execution failed")
 	})
-	
+
 	schedule2 := &AppSchedule{
 		ID:            "test-schedule-2",
 		AppID:         "test-app",
@@ -994,10 +994,10 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 		RunCount:      0,
 	}
 	scheduler.schedules[schedule2.ID] = schedule2
-	
+
 	// Execute with error
 	scheduler.ExecuteScheduledRun(schedule2)
-	
+
 	// Check that the run was marked as failed
 	// Find the run for schedule2
 	var failedRun *ScheduledRun
@@ -1012,7 +1012,7 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 	} else if failedRun.Status != "failed" {
 		t.Errorf("Expected status 'failed', got '%s'", failedRun.Status)
 	}
-	
+
 	// Test with nil executeAppTool
 	scheduler.executeAppTool = nil
 	schedule3 := &AppSchedule{
@@ -1026,10 +1026,10 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 		RunCount:      0,
 	}
 	scheduler.schedules[schedule3.ID] = schedule3
-	
+
 	// Execute with nil function
 	scheduler.ExecuteScheduledRun(schedule3)
-	
+
 	// Should still create a run but it will be failed
 	if len(mockRepo.ScheduledRuns) < 3 {
 		t.Error("Expected at least 3 scheduled runs")
@@ -1038,15 +1038,15 @@ func TestScheduler_ExecuteScheduledRun(t *testing.T) {
 
 func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
 	mockRepo := NewMockScheduleRepository()
-	scheduler := NewScheduler(mockRepo)
-	
+	scheduler := NewScheduler(mockRepo, newTestLogger(t))
+
 	// Set up execute function
 	executionCount := 0
 	scheduler.SetExecuteAppTool(func(appID, toolName string, input json.RawMessage) (string, error) {
 		executionCount++
 		return "test output", nil
 	})
-	
+
 	// Create schedules that should run
 	now := time.Now()
 	schedule1 := &AppSchedule{
@@ -1060,7 +1060,7 @@ func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
 		NextRun:       timePtr(now.Add(-time.Minute)),
 		RunCount:      0,
 	}
-	
+
 	// Create schedule that should not run yet
 	schedule2 := &AppSchedule{
 		ID:            "future-schedule",
@@ -1073,7 +1073,7 @@ func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
 		NextRun:       timePtr(now.Add(2 * time.Hour)),
 		RunCount:      0,
 	}
-	
+
 	// Create inactive schedule
 	schedule3 := &AppSchedule{
 		ID:            "inactive-schedule",
@@ -1086,19 +1086,19 @@ func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
 		NextRun:       timePtr(now.Add(-time.Minute)),
 		RunCount:      0,
 	}
-	
+
 	scheduler.schedules = map[string]*AppSchedule{
 		schedule1.ID: schedule1,
 		schedule2.ID: schedule2,
 		schedule3.ID: schedule3,
 	}
-	
+
 	// Check and execute schedules
 	scheduler.CheckAndExecuteSchedules()
-	
+
 	// Give goroutines time to execute
 	time.Sleep(100 * time.Millisecond)
-	
+
 	// Only schedule1 should have been executed
 	if executionCount != 1 {
 		t.Errorf("Expected 1 execution, got %d", executionCount)
@@ -1107,7 +1107,7 @@ func TestScheduler_CheckAndExecuteSchedules(t *testing.T) {
 
 func TestCalculateNextRunEdgeCases(t *testing.T) {
 	now := time.Now()
-	
+
 	tests := []struct {
 		name     string
 		schedule *AppSchedule
@@ -1150,11 +1150,11 @@ func TestCalculateNextRunEdgeCases(t *testing.T) {
 			expected: nil,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := CalculateNextRun(tt.schedule)
-			
+
 			if tt.name == "Weekly with specific days" {
 				// For weekly with specific days, just check it returns something
 				if result == nil {

@@ -78,7 +78,6 @@ func (m *Manager) GetConfig() Config {
 	return m.config
 }
 
-
 // GetServerPort returns the configured server port
 func (m *Manager) GetServerPort() string {
 	return m.config.Server.Port
@@ -88,4 +87,3 @@ func (m *Manager) GetServerPort() string {
 func (m *Manager) GetServerHost() string {
 	return m.config.Server.Host
 }
-

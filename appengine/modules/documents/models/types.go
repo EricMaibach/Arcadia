@@ -20,7 +20,7 @@ type Document struct {
 	ID         string                 `json:"id"`
 	FilePath   string                 `json:"file_path"`
 	FileHash   string                 `json:"file_hash"`
-	Content    string                 `json:"content"`               // Reconstructed from chunks
+	Content    string                 `json:"content"` // Reconstructed from chunks
 	Metadata   map[string]interface{} `json:"metadata,omitempty"`
 	ChunkCount int                    `json:"chunk_count"`
 	CreatedAt  time.Time              `json:"created_at"`
@@ -98,17 +98,17 @@ type ChunkingConfig struct {
 
 // ProcessResult represents the result of processing a file
 type ProcessResult struct {
-	DocumentID string     `json:"document_id"`
-	FilePath   string     `json:"file_path"`
-	Success    bool       `json:"success"`
-	Error      error      `json:"error,omitempty"`
-	Document   *Document  `json:"document,omitempty"`
+	DocumentID  string    `json:"document_id"`
+	FilePath    string    `json:"file_path"`
+	Success     bool      `json:"success"`
+	Error       error     `json:"error,omitempty"`
+	Document    *Document `json:"document,omitempty"`
 	ProcessedAt time.Time `json:"processed_at"`
 }
 
 // HealthStatus represents the health status of the module
 type HealthStatus struct {
-	Status     string                 `json:"status"`     // "healthy", "degraded", "unhealthy"
+	Status     string                 `json:"status"` // "healthy", "degraded", "unhealthy"
 	Timestamp  time.Time              `json:"timestamp"`
 	Components map[string]interface{} `json:"components"` // component-specific health info
 	Message    string                 `json:"message,omitempty"`
@@ -116,15 +116,15 @@ type HealthStatus struct {
 
 // ModuleMetrics contains metrics for the documents module
 type ModuleMetrics struct {
-	TotalDocuments     int64                  `json:"total_documents"`
-	TotalChunks        int64                  `json:"total_chunks"`
-	TotalVectors       int64                  `json:"total_vectors"`
-	ProcessingQueue    int                    `json:"processing_queue"`
-	LastProcessedAt    *time.Time             `json:"last_processed_at,omitempty"`
-	AverageChunkSize   float64                `json:"average_chunk_size"`
-	ProcessingLatency  map[string]float64     `json:"processing_latency"` // percentiles
-	ErrorRate          float64                `json:"error_rate"`
-	CustomMetrics      map[string]interface{} `json:"custom_metrics,omitempty"`
+	TotalDocuments    int64                  `json:"total_documents"`
+	TotalChunks       int64                  `json:"total_chunks"`
+	TotalVectors      int64                  `json:"total_vectors"`
+	ProcessingQueue   int                    `json:"processing_queue"`
+	LastProcessedAt   *time.Time             `json:"last_processed_at,omitempty"`
+	AverageChunkSize  float64                `json:"average_chunk_size"`
+	ProcessingLatency map[string]float64     `json:"processing_latency"` // percentiles
+	ErrorRate         float64                `json:"error_rate"`
+	CustomMetrics     map[string]interface{} `json:"custom_metrics,omitempty"`
 }
 
 // DefaultChunkingConfig returns default chunking configuration
@@ -138,26 +138,26 @@ func DefaultChunkingConfig() ChunkingConfig {
 
 // DocumentStats contains statistics about documents
 type DocumentStats struct {
-	TotalDocuments    int64                  `json:"total_documents"`
-	TotalChunks       int64                  `json:"total_chunks"`
-	TotalVectors      int64                  `json:"total_vectors"`
-	AverageChunkSize  float64                `json:"average_chunk_size"`
-	TotalSize         int64                  `json:"total_size_bytes"`
-	FileTypes         map[string]int64       `json:"file_types"`
-	ProcessingStats   map[string]interface{} `json:"processing_stats"`
+	TotalDocuments   int64                  `json:"total_documents"`
+	TotalChunks      int64                  `json:"total_chunks"`
+	TotalVectors     int64                  `json:"total_vectors"`
+	AverageChunkSize float64                `json:"average_chunk_size"`
+	TotalSize        int64                  `json:"total_size_bytes"`
+	FileTypes        map[string]int64       `json:"file_types"`
+	ProcessingStats  map[string]interface{} `json:"processing_stats"`
 }
 
 // FileAnalysis contains the result of analyzing a file
 type FileAnalysis struct {
-	FilePath     string                 `json:"file_path"`
-	Size         int64                  `json:"size"`
-	ContentType  string                 `json:"content_type"`
-	Language     string                 `json:"language,omitempty"`
-	Confidence   float64                `json:"confidence,omitempty"`
-	IsText       bool                   `json:"is_text"`
-	Encoding     string                 `json:"encoding,omitempty"`
-	Metadata     map[string]interface{} `json:"metadata,omitempty"`
-	Summary      string                 `json:"summary,omitempty"`
+	FilePath    string                 `json:"file_path"`
+	Size        int64                  `json:"size"`
+	ContentType string                 `json:"content_type"`
+	Language    string                 `json:"language,omitempty"`
+	Confidence  float64                `json:"confidence,omitempty"`
+	IsText      bool                   `json:"is_text"`
+	Encoding    string                 `json:"encoding,omitempty"`
+	Metadata    map[string]interface{} `json:"metadata,omitempty"`
+	Summary     string                 `json:"summary,omitempty"`
 }
 
 // ContentAnalysis contains the result of analyzing content
@@ -175,10 +175,10 @@ type ContentAnalysis struct {
 
 // SentimentAnalysis contains sentiment analysis results
 type SentimentAnalysis struct {
-	Score      float64 `json:"score"`       // -1.0 to 1.0
-	Magnitude  float64 `json:"magnitude"`   // 0.0 to 1.0
-	Label      string  `json:"label"`       // "positive", "negative", "neutral"
-	Confidence float64 `json:"confidence"`  // 0.0 to 1.0
+	Score      float64 `json:"score"`      // -1.0 to 1.0
+	Magnitude  float64 `json:"magnitude"`  // 0.0 to 1.0
+	Label      string  `json:"label"`      // "positive", "negative", "neutral"
+	Confidence float64 `json:"confidence"` // 0.0 to 1.0
 }
 
 // ProcessingRecord contains a record of document processing
@@ -197,27 +197,27 @@ type ProcessingRecord struct {
 
 // SearchRecord contains a record of search queries
 type SearchRecord struct {
-	ID           string    `json:"id"`
-	Query        string    `json:"query"`
-	ResultCount  int       `json:"result_count"`
-	Duration     float64   `json:"duration_ms"`
-	Timestamp    time.Time `json:"timestamp"`
-	UserID       string    `json:"user_id,omitempty"`
-	SessionID    string    `json:"session_id,omitempty"`
+	ID           string       `json:"id"`
+	Query        string       `json:"query"`
+	ResultCount  int          `json:"result_count"`
+	Duration     float64      `json:"duration_ms"`
+	Timestamp    time.Time    `json:"timestamp"`
+	UserID       string       `json:"user_id,omitempty"`
+	SessionID    string       `json:"session_id,omitempty"`
 	SearchConfig SearchConfig `json:"search_config"`
 }
 
 // IntegrityReport contains the result of data integrity validation
 type IntegrityReport struct {
-	TotalDocuments      int64                  `json:"total_documents"`
-	OrphanedChunks      int64                  `json:"orphaned_chunks"`
-	OrphanedVectors     int64                  `json:"orphaned_vectors"`
-	MissingVectors      int64                  `json:"missing_vectors"`
-	InconsistentHashes  int64                  `json:"inconsistent_hashes"`
-	CorruptedDocuments  []string               `json:"corrupted_documents,omitempty"`
-	Issues              []IntegrityIssue       `json:"issues,omitempty"`
-	RecommendedActions  []string               `json:"recommended_actions,omitempty"`
-	Metadata            map[string]interface{} `json:"metadata,omitempty"`
+	TotalDocuments     int64                  `json:"total_documents"`
+	OrphanedChunks     int64                  `json:"orphaned_chunks"`
+	OrphanedVectors    int64                  `json:"orphaned_vectors"`
+	MissingVectors     int64                  `json:"missing_vectors"`
+	InconsistentHashes int64                  `json:"inconsistent_hashes"`
+	CorruptedDocuments []string               `json:"corrupted_documents,omitempty"`
+	Issues             []IntegrityIssue       `json:"issues,omitempty"`
+	RecommendedActions []string               `json:"recommended_actions,omitempty"`
+	Metadata           map[string]interface{} `json:"metadata,omitempty"`
 }
 
 // IntegrityIssue represents a specific data integrity issue

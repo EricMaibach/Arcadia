@@ -7,16 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"arcadia/modules/documents/processors/base"
 	"arcadia/modules/documents/interfaces"
+	"arcadia/modules/documents/processors/base"
 )
 
 // TikaProcessor handles processing of documents using Apache Tika server
 type TikaProcessor struct {
 	base.BaseProcessor
 	client           *TikaClient
-	knownOfficeExts  map[string]bool  // High confidence formats
-	acceptAllFormats bool             // Fallback mode flag
+	knownOfficeExts  map[string]bool // High confidence formats
+	acceptAllFormats bool            // Fallback mode flag
 	config           *TikaConfig
 	logger           interfaces.Logger
 }
@@ -254,9 +254,9 @@ func (p *TikaProcessor) getProcessingMode() string {
 // getBasicMetadata returns basic metadata when full extraction fails
 func (p *TikaProcessor) getBasicMetadata(filePath string) map[string]interface{} {
 	metadata := map[string]interface{}{
-		"file_path":    filePath,
-		"file_name":    filepath.Base(filePath),
-		"processor":    "TikaProcessor",
+		"file_path": filePath,
+		"file_name": filepath.Base(filePath),
+		"processor": "TikaProcessor",
 	}
 
 	// Try to get basic file info
@@ -326,15 +326,15 @@ func (p *TikaProcessor) GetProcessorMetadata() map[string]interface{} {
 			"circuit_breaker_protection",
 		},
 		"supported_extensions": p.GetSupportedExtensions(),
-		"max_file_size":       p.config.MaxFileSize,
-		"processing_timeout":  p.config.Timeout.Milliseconds(),
+		"max_file_size":        p.config.MaxFileSize,
+		"processing_timeout":   p.config.Timeout.Milliseconds(),
 		"features": map[string]bool{
 			"office_mode":            !p.acceptAllFormats,
-			"fallback_mode":         p.acceptAllFormats,
-			"circuit_breaker":       true,
-			"metadata_extraction":   true,
+			"fallback_mode":          p.acceptAllFormats,
+			"circuit_breaker":        true,
+			"metadata_extraction":    true,
 			"content_type_detection": true,
-			"retry_mechanism":       true,
+			"retry_mechanism":        true,
 		},
 		"configuration": map[string]interface{}{
 			"server_url":          p.config.ServerURL,

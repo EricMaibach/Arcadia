@@ -28,9 +28,9 @@ type TrackedFile struct {
 	ID            int64  `json:"id"`
 	Path          string `json:"path"`
 	DirectoryRoot string `json:"directory_root"`
-	LastModified  int64  `json:"last_modified"`  // Unix timestamp
+	LastModified  int64  `json:"last_modified"` // Unix timestamp
 	FileSize      int64  `json:"file_size"`
-	LastChecked   int64  `json:"last_checked"`   // Unix timestamp
+	LastChecked   int64  `json:"last_checked"` // Unix timestamp
 }
 
 // FileWatcherEventHandler is a callback function for handling file events
@@ -40,43 +40,43 @@ type FileWatcherEventHandler func(event FileEvent)
 type FileWatcher interface {
 	// Start begins watching all configured directories
 	Start() error
-	
+
 	// Stop stops watching all directories
 	Stop() error
-	
+
 	// AddDirectory adds a directory to the watch list
 	AddDirectory(path string) error
-	
+
 	// RemoveDirectory removes a directory from the watch list
 	RemoveDirectory(path string) error
-	
+
 	// GetWatchedDirectories returns a list of all watched directories
 	GetWatchedDirectories() ([]string, error)
-	
+
 	// RegisterEventHandler registers a callback for file events
 	RegisterEventHandler(handler FileWatcherEventHandler)
-	
+
 	// UnregisterEventHandler removes a previously registered handler
 	UnregisterEventHandler(handler FileWatcherEventHandler)
-	
+
 	// IsRunning returns true if the watcher is currently running
 	IsRunning() bool
 }
 
 // FileWatcherService implements the FileWatcher interface
 type FileWatcherService struct {
-	watcher         *fsnotify.Watcher
-	db              Database
-	logger          logging.Logger
-	handlers        []FileWatcherEventHandler
-	mu              sync.RWMutex
-	running         bool
-	stopChan        chan struct{}
-	eventBuffer     chan FileEvent
-	bufferSize      int
-	debounceDelay   time.Duration
-	recentEvents    map[string]time.Time
-	eventsMu        sync.Mutex
+	watcher       *fsnotify.Watcher
+	db            Database
+	logger        logging.Logger
+	handlers      []FileWatcherEventHandler
+	mu            sync.RWMutex
+	running       bool
+	stopChan      chan struct{}
+	eventBuffer   chan FileEvent
+	bufferSize    int
+	debounceDelay time.Duration
+	recentEvents  map[string]time.Time
+	eventsMu      sync.Mutex
 }
 
 // FileWatcherConfig contains configuration for the file watcher service
@@ -153,12 +153,12 @@ func (f *FileWatcherService) initializeDatabase() error {
 	CREATE INDEX IF NOT EXISTS idx_tracked_files_path ON tracked_files(path);
 	CREATE INDEX IF NOT EXISTS idx_tracked_files_last_modified ON tracked_files(last_modified);
 	`
-	
+
 	_, err := f.db.Exec(query)
 	if err != nil {
 		return fmt.Errorf("failed to create database tables: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -175,22 +175,30 @@ func (f *FileWatcherService) loadWatchedDirectories() error {
 	for rows.Next() {
 		var path string
 		if err := rows.Scan(&path); err != nil {
-			if f.logger != nil { f.logger.Error(ctx, "Error scanning directory path", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Error(ctx, "Error scanning directory path", "error", err, "path", path)
+			}
 			continue
 		}
-		
+
 		// Add to fsnotify watcher recursively (without adding to DB again)
 		addedDirs, err := f.addDirectoryRecursive(path)
 		if err != nil {
-			if f.logger != nil { f.logger.Error(ctx, "Failed to add directory to watcher recursively", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Error(ctx, "Failed to add directory to watcher recursively", "error", err, "path", path)
+			}
 			// Continue loading other directories even if one fails
 		} else {
-			if f.logger != nil { f.logger.Info(ctx, "Loaded watched directory", "path", path, "subdirectories", len(addedDirs)-1) }
-			
+			if f.logger != nil {
+				f.logger.Info(ctx, "Loaded watched directory", "path", path, "subdirectories", len(addedDirs)-1)
+			}
+
 			// Scan for file changes that occurred while service was stopped
 			go func(dirPath string) {
 				if err := f.scanDirectoryForFiles(dirPath, true); err != nil {
-					if f.logger != nil { f.logger.Warn(ctx, "Failed to scan for file changes", "error", err, "path", dirPath) }
+					if f.logger != nil {
+						f.logger.Warn(ctx, "Failed to scan for file changes", "error", err, "path", dirPath)
+					}
 				}
 			}(path)
 		}
@@ -218,7 +226,9 @@ func (f *FileWatcherService) Start() error {
 	// Start the event distributor goroutine
 	go f.distributeEvents()
 
-	if f.logger != nil { f.logger.Info(ctx, "FileWatcher service started") }
+	if f.logger != nil {
+		f.logger.Info(ctx, "FileWatcher service started")
+	}
 	return nil
 }
 
@@ -234,11 +244,13 @@ func (f *FileWatcherService) Stop() error {
 
 	f.running = false
 	close(f.stopChan)
-	
+
 	// Give goroutines time to clean up
 	time.Sleep(100 * time.Millisecond)
-	
-	if f.logger != nil { f.logger.Info(ctx, "FileWatcher service stopped") }
+
+	if f.logger != nil {
+		f.logger.Info(ctx, "FileWatcher service stopped")
+	}
 	return nil
 }
 
@@ -285,11 +297,15 @@ func (f *FileWatcherService) AddDirectory(path string) error {
 	// Scan directory for existing files and emit discovery events
 	go func() {
 		if err := f.scanDirectoryForFiles(absPath, false); err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Failed to scan directory for files", "error", err, "path", absPath) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Failed to scan directory for files", "error", err, "path", absPath)
+			}
 		}
 	}()
 
-	if f.logger != nil { f.logger.Info(ctx, "Added directory to watch list", "path", absPath, "subdirectories", len(addedDirs)-1) }
+	if f.logger != nil {
+		f.logger.Info(ctx, "Added directory to watch list", "path", absPath, "subdirectories", len(addedDirs)-1)
+	}
 	return nil
 }
 
@@ -300,7 +316,9 @@ func (f *FileWatcherService) addDirectoryRecursive(rootPath string) ([]string, e
 
 	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Error accessing path", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Error accessing path", "error", err, "path", path)
+			}
 			return nil // Continue walking, don't fail the entire operation
 		}
 
@@ -316,7 +334,9 @@ func (f *FileWatcherService) addDirectoryRecursive(rootPath string) ([]string, e
 
 		// Add directory to fsnotify watcher
 		if err := f.watcher.Add(path); err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Failed to add subdirectory to watcher", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Failed to add subdirectory to watcher", "error", err, "path", path)
+			}
 			return nil // Continue walking, don't fail the entire operation
 		}
 
@@ -360,10 +380,14 @@ func (f *FileWatcherService) RemoveDirectory(path string) error {
 
 	// Remove tracked files for this directory
 	if err := f.removeTrackedFilesForDirectory(absPath); err != nil {
-		if f.logger != nil { f.logger.Warn(ctx, "Failed to remove tracked files for directory", "error", err, "path", absPath) }
+		if f.logger != nil {
+			f.logger.Warn(ctx, "Failed to remove tracked files for directory", "error", err, "path", absPath)
+		}
 	}
 
-	if f.logger != nil { f.logger.Info(ctx, "Removed directory from watch list", "path", absPath, "subdirectories", removedCount-1) }
+	if f.logger != nil {
+		f.logger.Info(ctx, "Removed directory from watch list", "path", absPath, "subdirectories", removedCount-1)
+	}
 	return nil
 }
 
@@ -386,7 +410,9 @@ func (f *FileWatcherService) removeDirectoryRecursive(rootPath string) int {
 
 			// Remove directory from fsnotify watcher
 			if err := f.watcher.Remove(path); err != nil {
-				if f.logger != nil { f.logger.Warn(ctx, "Failed to remove subdirectory from watcher", "error", err, "path", path) }
+				if f.logger != nil {
+					f.logger.Warn(ctx, "Failed to remove subdirectory from watcher", "error", err, "path", path)
+				}
 			} else {
 				removedCount++
 			}
@@ -396,7 +422,9 @@ func (f *FileWatcherService) removeDirectoryRecursive(rootPath string) int {
 	} else {
 		// Directory doesn't exist, just try to remove the root path
 		if err := f.watcher.Remove(rootPath); err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Failed to remove directory from watcher", "error", err, "path", rootPath) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Failed to remove directory from watcher", "error", err, "path", rootPath)
+			}
 		} else {
 			removedCount++
 		}
@@ -433,7 +461,9 @@ func (f *FileWatcherService) RegisterEventHandler(handler FileWatcherEventHandle
 	defer f.mu.Unlock()
 
 	f.handlers = append(f.handlers, handler)
-	if f.logger != nil { f.logger.Info(ctx, "Registered new event handler", "total_handlers", len(f.handlers)) }
+	if f.logger != nil {
+		f.logger.Info(ctx, "Registered new event handler", "total_handlers", len(f.handlers))
+	}
 }
 
 // UnregisterEventHandler removes a previously registered handler
@@ -451,7 +481,9 @@ func (f *FileWatcherService) UnregisterEventHandler(handler FileWatcherEventHand
 		}
 	}
 	f.handlers = newHandlers
-	if f.logger != nil { f.logger.Info(ctx, "Unregistered event handler", "remaining_handlers", len(f.handlers)) }
+	if f.logger != nil {
+		f.logger.Info(ctx, "Unregistered event handler", "remaining_handlers", len(f.handlers))
+	}
 }
 
 // IsRunning returns true if the watcher is currently running
@@ -468,30 +500,34 @@ func (f *FileWatcherService) processEvents() {
 		select {
 		case <-f.stopChan:
 			return
-			
+
 		case event, ok := <-f.watcher.Events:
 			if !ok {
 				return
 			}
-			
+
 			// Debounce rapid events for the same file
 			if f.shouldDebounce(event.Name) {
 				continue
 			}
-			
+
 			// Check if this is a new directory being created
 			isDir := f.isDirectory(event.Name)
 			operation := f.mapOperation(event.Op)
-			
+
 			// If a new directory was created, add it to the watcher
 			if operation == "create" && isDir && !strings.HasPrefix(filepath.Base(event.Name), ".") {
 				if err := f.watcher.Add(event.Name); err != nil {
-					if f.logger != nil { f.logger.Warn(ctx, "Failed to add new directory to watcher", "error", err, "path", event.Name) }
+					if f.logger != nil {
+						f.logger.Warn(ctx, "Failed to add new directory to watcher", "error", err, "path", event.Name)
+					}
 				} else {
-					if f.logger != nil { f.logger.Info(ctx, "Automatically added new directory to watcher", "path", event.Name) }
+					if f.logger != nil {
+						f.logger.Info(ctx, "Automatically added new directory to watcher", "path", event.Name)
+					}
 				}
 			}
-			
+
 			// Update tracked file database for file events (not directories)
 			if !isDir && (operation == "create" || operation == "write") {
 				go func(filePath string) {
@@ -503,12 +539,14 @@ func (f *FileWatcherService) processEvents() {
 							break
 						}
 					}
-					
+
 					if rootDir != "" {
 						if fileInfo, err := f.getFileInfo(filePath); err == nil && fileInfo != nil {
 							fileInfo.DirectoryRoot = rootDir
 							if err := f.upsertTrackedFile(fileInfo); err != nil {
-								if f.logger != nil { f.logger.Warn(ctx, "Failed to update tracked file", "error", err, "path", filePath) }
+								if f.logger != nil {
+									f.logger.Warn(ctx, "Failed to update tracked file", "error", err, "path", filePath)
+								}
 							}
 						}
 					}
@@ -521,20 +559,24 @@ func (f *FileWatcherService) processEvents() {
 				Timestamp: time.Now(),
 				IsDir:     isDir,
 			}
-			
+
 			// Try to send event to buffer, drop if buffer is full
 			select {
 			case f.eventBuffer <- fileEvent:
 				// Event sent successfully
 			default:
-				if f.logger != nil { f.logger.Warn(ctx, "Event buffer full, dropping event", "path", event.Name) }
+				if f.logger != nil {
+					f.logger.Warn(ctx, "Event buffer full, dropping event", "path", event.Name)
+				}
 			}
-			
+
 		case err, ok := <-f.watcher.Errors:
 			if !ok {
 				return
 			}
-			if f.logger != nil { f.logger.Error(ctx, "FileWatcher error", "error", err) }
+			if f.logger != nil {
+				f.logger.Error(ctx, "FileWatcher error", "error", err)
+			}
 		}
 	}
 }
@@ -546,24 +588,26 @@ func (f *FileWatcherService) distributeEvents() {
 		select {
 		case <-f.stopChan:
 			return
-			
+
 		case event, ok := <-f.eventBuffer:
 			if !ok {
 				return
 			}
-			
+
 			// Get current handlers
 			f.mu.RLock()
 			handlers := make([]FileWatcherEventHandler, len(f.handlers))
 			copy(handlers, f.handlers)
 			f.mu.RUnlock()
-			
+
 			// Call each handler in a separate goroutine to prevent blocking
 			for _, handler := range handlers {
 				go func(h FileWatcherEventHandler, e FileEvent) {
 					defer func() {
 						if r := recover(); r != nil {
-							if f.logger != nil { f.logger.Error(ctx, "Handler panic", "panic", r) }
+							if f.logger != nil {
+								f.logger.Error(ctx, "Handler panic", "panic", r)
+							}
 						}
 					}()
 					h(e)
@@ -577,10 +621,10 @@ func (f *FileWatcherService) distributeEvents() {
 func (f *FileWatcherService) shouldDebounce(path string) bool {
 	f.eventsMu.Lock()
 	defer f.eventsMu.Unlock()
-	
+
 	lastTime, exists := f.recentEvents[path]
 	now := time.Now()
-	
+
 	// Clean up old entries
 	if len(f.recentEvents) > 1000 {
 		for p, t := range f.recentEvents {
@@ -589,11 +633,11 @@ func (f *FileWatcherService) shouldDebounce(path string) bool {
 			}
 		}
 	}
-	
+
 	if exists && now.Sub(lastTime) < f.debounceDelay {
 		return true
 	}
-	
+
 	f.recentEvents[path] = now
 	return false
 }
@@ -657,7 +701,7 @@ func (f *FileWatcherService) upsertTrackedFile(trackedFile *TrackedFile) error {
 		file_size = excluded.file_size,
 		last_checked = excluded.last_checked
 	`
-	_, err := f.db.Exec(query, trackedFile.Path, trackedFile.DirectoryRoot, 
+	_, err := f.db.Exec(query, trackedFile.Path, trackedFile.DirectoryRoot,
 		trackedFile.LastModified, trackedFile.FileSize, trackedFile.LastChecked)
 	return err
 }
@@ -666,23 +710,23 @@ func (f *FileWatcherService) upsertTrackedFile(trackedFile *TrackedFile) error {
 func (f *FileWatcherService) getTrackedFile(filePath string) (*TrackedFile, error) {
 	query := `SELECT id, path, directory_root, last_modified, file_size, last_checked 
 			  FROM tracked_files WHERE path = ?`
-	
+
 	rows, err := f.db.Query(query, filePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query tracked file: %w", err)
 	}
 	defer rows.Close()
-	
+
 	var tracked TrackedFile
 	if rows.Next() {
-		err := rows.Scan(&tracked.ID, &tracked.Path, &tracked.DirectoryRoot, 
+		err := rows.Scan(&tracked.ID, &tracked.Path, &tracked.DirectoryRoot,
 			&tracked.LastModified, &tracked.FileSize, &tracked.LastChecked)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan tracked file: %w", err)
 		}
 		return &tracked, nil
 	}
-	
+
 	return nil, nil // File not tracked
 }
 
@@ -699,11 +743,15 @@ func (f *FileWatcherService) removeTrackedFilesForDirectory(directoryRoot string
 // scanDirectoryForFiles scans a directory and emits events for all existing files
 func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isInitialScan bool) error {
 	ctx := context.Background()
-	if f.logger != nil { f.logger.Debug(ctx, "Scanning directory for files", "path", directoryRoot) }
-	
+	if f.logger != nil {
+		f.logger.Debug(ctx, "Scanning directory for files", "path", directoryRoot)
+	}
+
 	err := filepath.Walk(directoryRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Error accessing path", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Error accessing path", "error", err, "path", path)
+			}
 			return nil // Continue walking
 		}
 
@@ -722,23 +770,27 @@ func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isIniti
 		}
 
 		var eventOperation string
-		
+
 		if isInitialScan {
 			// Check if file changed since last scan
 			trackedFile, err := f.getTrackedFile(path)
 			if err != nil {
-				if f.logger != nil { f.logger.Warn(ctx, "Failed to get tracked file", "error", err, "path", path) }
+				if f.logger != nil {
+					f.logger.Warn(ctx, "Failed to get tracked file", "error", err, "path", path)
+				}
 				eventOperation = "create" // Default to create if we can't check
 			} else if trackedFile == nil {
 				eventOperation = "create" // New file
-			} else if trackedFile.LastModified != currentFile.LastModified || 
-					  trackedFile.FileSize != currentFile.FileSize {
+			} else if trackedFile.LastModified != currentFile.LastModified ||
+				trackedFile.FileSize != currentFile.FileSize {
 				eventOperation = "modify" // File changed while we were away
 			} else {
 				// File unchanged, just update last_checked timestamp
 				currentFile.ID = trackedFile.ID
 				if err := f.upsertTrackedFile(currentFile); err != nil {
-					if f.logger != nil { f.logger.Warn(ctx, "Failed to update tracked file", "error", err, "path", path) }
+					if f.logger != nil {
+						f.logger.Warn(ctx, "Failed to update tracked file", "error", err, "path", path)
+					}
 				}
 				return nil // No event needed
 			}
@@ -748,7 +800,9 @@ func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isIniti
 
 		// Update database
 		if err := f.upsertTrackedFile(currentFile); err != nil {
-			if f.logger != nil { f.logger.Warn(ctx, "Failed to upsert tracked file", "error", err, "path", path) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Failed to upsert tracked file", "error", err, "path", path)
+			}
 		}
 
 		// Emit event
@@ -760,12 +814,14 @@ func (f *FileWatcherService) scanDirectoryForFiles(directoryRoot string, isIniti
 		}
 
 		// Send event to buffer
-	ctx := context.Background()
+		ctx := context.Background()
 		select {
 		case f.eventBuffer <- fileEvent:
 			// Event sent successfully
 		default:
-			if f.logger != nil { f.logger.Warn(ctx, "Event buffer full, dropping event", "operation", eventOperation, "path", path) }
+			if f.logger != nil {
+				f.logger.Warn(ctx, "Event buffer full, dropping event", "operation", eventOperation, "path", path)
+			}
 		}
 
 		return nil
@@ -784,7 +840,9 @@ func (f *FileWatcherService) getWatchedDirectoryRoots() []string {
 	query := "SELECT path FROM watched_directories ORDER BY length(path) DESC" // Longest paths first
 	rows, err := f.db.Query(query)
 	if err != nil {
-		if f.logger != nil { f.logger.Warn(ctx, "Failed to get watched directory roots", "error", err) }
+		if f.logger != nil {
+			f.logger.Warn(ctx, "Failed to get watched directory roots", "error", err)
+		}
 		return []string{}
 	}
 	defer rows.Close()
@@ -805,31 +863,31 @@ func (f *FileWatcherService) Close() error {
 	if f.IsRunning() {
 		f.Stop()
 	}
-	
+
 	if f.watcher != nil {
 		return f.watcher.Close()
 	}
-	
+
 	return nil
 }
 
 // GetFileWatcherStats returns statistics about the file watcher
 type FileWatcherStats struct {
-	IsRunning            bool      `json:"is_running"`
-	WatchedDirectories   int       `json:"watched_directories"`
-	RegisteredHandlers   int       `json:"registered_handlers"`
-	EventBufferSize      int       `json:"event_buffer_size"`
-	EventBufferCapacity  int       `json:"event_buffer_capacity"`
-	LastEventTime        time.Time `json:"last_event_time,omitempty"`
+	IsRunning           bool      `json:"is_running"`
+	WatchedDirectories  int       `json:"watched_directories"`
+	RegisteredHandlers  int       `json:"registered_handlers"`
+	EventBufferSize     int       `json:"event_buffer_size"`
+	EventBufferCapacity int       `json:"event_buffer_capacity"`
+	LastEventTime       time.Time `json:"last_event_time,omitempty"`
 }
 
 // GetStats returns current statistics about the file watcher
 func (f *FileWatcherService) GetStats() FileWatcherStats {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
+
 	dirs, _ := f.GetWatchedDirectories()
-	
+
 	return FileWatcherStats{
 		IsRunning:           f.running,
 		WatchedDirectories:  len(dirs),
@@ -892,25 +950,25 @@ func (r *FileWatcherRepository) GetWatchedDirectoryMetadata(path string) (map[st
 		return nil, fmt.Errorf("failed to query directory metadata: %w", err)
 	}
 	defer rows.Close()
-	
+
 	if !rows.Next() {
 		return nil, fmt.Errorf("directory not found: %s", path)
 	}
-	
+
 	var metadataJSON *string
 	if err := rows.Scan(&metadataJSON); err != nil {
 		return nil, fmt.Errorf("failed to scan metadata: %w", err)
 	}
-	
+
 	if metadataJSON == nil || *metadataJSON == "" {
 		return make(map[string]interface{}), nil
 	}
-	
+
 	var metadata map[string]interface{}
 	if err := json.Unmarshal([]byte(*metadataJSON), &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal metadata: %w", err)
 	}
-	
+
 	return metadata, nil
 }
 
@@ -920,17 +978,17 @@ func (r *FileWatcherRepository) UpdateWatchedDirectoryMetadata(path string, meta
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
-	
+
 	query := "UPDATE watched_directories SET metadata = ? WHERE path = ?"
 	result, err := r.db.Exec(query, string(metadataJSON), path)
 	if err != nil {
 		return fmt.Errorf("failed to update metadata: %w", err)
 	}
-	
+
 	rowsAffected, _ := result.RowsAffected()
 	if rowsAffected == 0 {
 		return fmt.Errorf("directory not found: %s", path)
 	}
-	
+
 	return nil
 }

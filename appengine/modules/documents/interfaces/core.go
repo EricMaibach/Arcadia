@@ -104,7 +104,6 @@ type ContentAnalyzer interface {
 	DetectLanguage(content string) (string, float64, error)
 }
 
-
 // WorkerPool defines the interface for managing background processing
 type WorkerPool interface {
 	Start(ctx context.Context) error

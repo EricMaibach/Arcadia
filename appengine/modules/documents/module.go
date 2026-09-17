@@ -106,12 +106,12 @@ type documentsModule struct {
 	deps      Dependencies
 
 	// Internal components
-	vectorStore    interfaces.VectorStoreInterface
-	documentStore  interfaces.DocumentStoreInterface
-	processor      interfaces.DocumentProcessor
-	searchEngine   interfaces.SearchEngine
-	chunker        interfaces.TextChunkerInterface
-	pluginRegistry *processors.Registry
+	vectorStore      interfaces.VectorStoreInterface
+	documentStore    interfaces.DocumentStoreInterface
+	processor        interfaces.DocumentProcessor
+	searchEngine     interfaces.SearchEngine
+	chunker          interfaces.TextChunkerInterface
+	pluginRegistry   *processors.Registry
 	workerPool       interfaces.WorkerPool
 	fileWatcher      interfaces.FileWatcher
 	ollamaProvider   *providers.OllamaProvider

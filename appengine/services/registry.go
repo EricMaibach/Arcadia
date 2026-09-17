@@ -113,7 +113,7 @@ func (r *Registry) RegisterApp(app *App) {
 func (r *Registry) GetAllApps() map[string]*App {
 	r.mutex.RLock()
 	defer r.mutex.RUnlock()
-	
+
 	// Return a copy to prevent external modifications
 	result := make(map[string]*App)
 	for k, v := range r.apps {
@@ -197,8 +197,8 @@ func (ar *appRunnerImpl) GetAppInfo(appID string) (interface{}, error) {
 
 // appCreatorImpl implements the interfaces.AppCreator interface
 type appCreatorImpl struct {
-	registryManager     *RegistryManager
-	appCreationService  AppCreationServiceInterface
+	registryManager    *RegistryManager
+	appCreationService AppCreationServiceInterface
 }
 
 // CreateApp creates a new app using the centralized app creation service
@@ -273,7 +273,7 @@ func (ac *appCreatorImpl) ValidateApp(appID, version, runtime string, tools []an
 
 // Manager manages the registry and provides dependency injection implementations
 type RegistryManager struct {
-	registry     *Registry
+	registry       *Registry
 	registryAccess interfaces.RegistryAccess
 	appRunner      interfaces.AppRunner
 	appCreator     interfaces.AppCreator

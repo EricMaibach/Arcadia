@@ -159,10 +159,10 @@ func (acs *AppCreationService) setupBuildDirectory(req AppCreationRequest, sessi
 // compileToWasm compiles the app source to WASM
 func (acs *AppCreationService) compileToWasm(req AppCreationRequest, buildDir, sessionID string) (string, error) {
 	acs.logFunc("[%s] Compiling to WASM", sessionID)
-	
+
 	startTime := time.Now()
 	wasmCompiler := NewWasmCompiler()
-	
+
 	// Convert to services.AppRequest format for compatibility with existing compiler
 	appRequest := AppRequest{
 		AppID:        req.AppID,
@@ -172,7 +172,7 @@ func (acs *AppCreationService) compileToWasm(req AppCreationRequest, buildDir, s
 		AppSrc:       req.AppSrc,
 		Dependencies: req.Dependencies,
 	}
-	
+
 	wasmPath, err := wasmCompiler.CompileTraitToWasm(appRequest, buildDir)
 	if err != nil {
 		acs.logFunc("[%s] ERROR: WASM compilation failed: %v", sessionID, err)
@@ -204,7 +204,6 @@ func (acs *AppCreationService) registerApp(req AppCreationRequest, wasmPath, ses
 	}
 
 	registry.RegisterApp(app)
-
 
 	// Save registry to file for persistence
 	if err := acs.registryManager.Save(); err != nil {

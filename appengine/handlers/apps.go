@@ -241,11 +241,11 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := appCreationService.CreateApp(creationReq, sessionID)
 	if err != nil {
 		logAppSubmission("[%s] ERROR: App creation failed: %v", sessionID, err)
-		
+
 		// Map specific errors to HTTP status codes
 		var statusCode int
 		errorMsg := err.Error()
-		
+
 		if strings.Contains(errorMsg, "is required") {
 			statusCode = http.StatusBadRequest
 		} else if strings.Contains(errorMsg, "already exists") {
@@ -253,7 +253,7 @@ func SubmitAppSrcHandler(w http.ResponseWriter, r *http.Request) {
 		} else {
 			statusCode = http.StatusInternalServerError
 		}
-		
+
 		http.Error(w, errorMsg, statusCode)
 		return
 	}

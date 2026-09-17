@@ -17,10 +17,10 @@ import (
 
 // TikaClient provides a robust HTTP client for Apache Tika server
 type TikaClient struct {
-	config           *TikaConfig
-	httpClient       *http.Client
-	circuitBreaker   *CircuitBreaker
-	logger           interfaces.Logger
+	config            *TikaConfig
+	httpClient        *http.Client
+	circuitBreaker    *CircuitBreaker
+	logger            interfaces.Logger
 	allowedExtensions map[string]bool // Map for fast extension lookup
 }
 
@@ -63,10 +63,10 @@ func NewTikaClient(config *TikaConfig, logger interfaces.Logger) *TikaClient {
 	}
 
 	client := &TikaClient{
-		config:           config,
-		httpClient:       httpClient,
-		circuitBreaker:   circuitBreaker,
-		logger:           logger,
+		config:            config,
+		httpClient:        httpClient,
+		circuitBreaker:    circuitBreaker,
+		logger:            logger,
 		allowedExtensions: allowedExtensions,
 	}
 

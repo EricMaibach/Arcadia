@@ -16,27 +16,27 @@ import (
 
 // Manager implements the tool management functionality
 type Manager struct {
-	config          *models.Config
-	logger          logging.Logger
-	metrics         interfaces.Metrics
-	eventBus        interfaces.EventBus
-	registryAccess  interfaces.RegistryAccess
-	appRunner       interfaces.AppRunner
-	appCreator      interfaces.AppCreator
-	embeddingSearch interfaces.EmbeddingSearch
+	config           *models.Config
+	logger           logging.Logger
+	metrics          interfaces.Metrics
+	eventBus         interfaces.EventBus
+	registryAccess   interfaces.RegistryAccess
+	appRunner        interfaces.AppRunner
+	appCreator       interfaces.AppCreator
+	embeddingSearch  interfaces.EmbeddingSearch
 	schedulerService interfaces.SchedulerService
-	tools           map[string]*models.Tool
-	toolStats       map[string]*models.ToolStats
-	mutex           sync.RWMutex
-	registry        *ToolRegistry
+	tools            map[string]*models.Tool
+	toolStats        map[string]*models.ToolStats
+	mutex            sync.RWMutex
+	registry         *ToolRegistry
 }
 
 // ToolRegistry manages tool registration and discovery
 type ToolRegistry struct {
-	tools    map[string]*models.Tool
-	mutex    sync.RWMutex
-	logger   logging.Logger
-	metrics  interfaces.Metrics
+	tools   map[string]*models.Tool
+	mutex   sync.RWMutex
+	logger  logging.Logger
+	metrics interfaces.Metrics
 }
 
 // NewManager creates a new tool manager
@@ -48,18 +48,18 @@ func NewManager(config *models.Config, deps *interfaces.Dependencies) *Manager {
 	}
 
 	tm := &Manager{
-		config:          config,
-		logger:          deps.Logger,
-		metrics:         deps.Metrics,
-		eventBus:        deps.EventBus,
-		registryAccess:  deps.RegistryAccess,
-		appRunner:       deps.AppRunner,
-		appCreator:      deps.AppCreator,
-		embeddingSearch: deps.EmbeddingSearch,
+		config:           config,
+		logger:           deps.Logger,
+		metrics:          deps.Metrics,
+		eventBus:         deps.EventBus,
+		registryAccess:   deps.RegistryAccess,
+		appRunner:        deps.AppRunner,
+		appCreator:       deps.AppCreator,
+		embeddingSearch:  deps.EmbeddingSearch,
 		schedulerService: deps.SchedulerService,
-		tools:           make(map[string]*models.Tool),
-		toolStats:       make(map[string]*models.ToolStats),
-		registry:        registry,
+		tools:            make(map[string]*models.Tool),
+		toolStats:        make(map[string]*models.ToolStats),
+		registry:         registry,
 	}
 
 	// Load initial tools
@@ -612,9 +612,9 @@ func (tm *Manager) GetToolUsageStats(ctx context.Context) (*models.ToolUsageStat
 	defer tm.mutex.RUnlock()
 
 	stats := &models.ToolUsageStats{
-		TotalTools:  len(tm.tools),
-		ActiveTools: 0,
-		TopTools:    make([]*models.ToolUsage, 0),
+		TotalTools:      len(tm.tools),
+		ActiveTools:     0,
+		TopTools:        make([]*models.ToolUsage, 0),
 		ToolsByCategory: make(map[string]*models.CategoryStats),
 	}
 

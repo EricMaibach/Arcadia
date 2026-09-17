@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 )
 
@@ -229,6 +230,20 @@ func (l *logger) log(ctx context.Context, level slog.Level, msg string, fields .
 	l.slogger.LogAttrs(ctx, level, msg, attrs...)
 }
 
+// isNilValue reports whether v holds a nil pointer, map, slice, chan, or
+// func. A fmt.Stringer implemented on a pointer receiver (e.g. *time.Time)
+// still satisfies the interface when the pointer is nil, so calling
+// String() on it panics unless callers guard against this case first.
+func isNilValue(v interface{}) bool {
+	rv := reflect.ValueOf(v)
+	switch rv.Kind() {
+	case reflect.Ptr, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func, reflect.Interface:
+		return rv.IsNil()
+	default:
+		return false
+	}
+}
+
 // parseFields converts variadic key-value pairs into slog.Attr slice
 func (l *logger) parseFields(fields []interface{}) []slog.Attr {
 	if len(fields) == 0 {
@@ -257,7 +272,11 @@ func (l *logger) parseFields(fields []interface{}) []slog.Attr {
 		case error:
 			attrs = append(attrs, slog.String(key, v.Error()))
 		case fmt.Stringer:
-			attrs = append(attrs, slog.String(key, v.String()))
+			if isNilValue(v) {
+				attrs = append(attrs, slog.Any(key, nil))
+			} else {
+				attrs = append(attrs, slog.String(key, v.String()))
+			}
 		default:
 			attrs = append(attrs, slog.Any(key, v))
 		}

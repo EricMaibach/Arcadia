@@ -423,14 +423,14 @@ func (wr *WasmRuntime) ExecuteAppTool(appID, toolName string, input json.RawMess
 	}
 
 	store := wasmtime.NewStore(wr.engine)
-	
+
 	module, err := wasmtime.NewModule(wr.engine, wasmBytes)
 	if err != nil {
 		return "", fmt.Errorf("failed to compile WASM module: %v", err)
 	}
 
 	linker := wasmtime.NewLinker(wr.engine)
-	
+
 	// Define memory with larger limits - 512 pages (32MB) instead of default ~24 pages (1.5MB)
 	memoryType := wasmtime.NewMemoryType(1, true, 512) // min=1 page, max=512 pages (32MB)
 	memory, err := wasmtime.NewMemory(store, memoryType)

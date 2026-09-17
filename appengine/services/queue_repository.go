@@ -78,7 +78,7 @@ func (r *QueueRepository) EnqueueItem(item *QueueItem) error {
 		(id, data, priority, created_at, status, attempts)
 		VALUES (?, ?, ?, ?, ?, ?)`
 
-	_, err := r.db.Exec(query, item.ID, item.Data, item.Priority, 
+	_, err := r.db.Exec(query, item.ID, item.Data, item.Priority,
 		item.CreatedAt, item.Status, item.Attempts)
 
 	if err != nil {
@@ -213,7 +213,7 @@ func (r *QueueRepository) UpdateItem(item *QueueItem) error {
 		SET data = ?, priority = ?, processed_at = ?, status = ?, attempts = ?, last_error = ?, updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?`
 
-	_, err := r.db.Exec(query, item.Data, item.Priority, item.ProcessedAt, 
+	_, err := r.db.Exec(query, item.Data, item.Priority, item.ProcessedAt,
 		item.Status, item.Attempts, item.LastError, item.ID)
 
 	if err != nil {
@@ -234,7 +234,7 @@ func (r *QueueRepository) DeleteItem(id string) error {
 
 	query := `DELETE FROM queue_items WHERE id = ?`
 	_, err := r.db.Exec(query, id)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to delete queue item: %v", err)
 	}
@@ -328,7 +328,7 @@ func (r *QueueRepository) ClearQueue() error {
 
 	query := `DELETE FROM queue_items`
 	_, err := r.db.Exec(query)
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to clear queue: %v", err)
 	}
@@ -346,7 +346,7 @@ func (r *QueueRepository) scanQueueItem(rows *sql.Rows) (*QueueItem, error) {
 
 	err := rows.Scan(&item.ID, &item.Data, &item.Priority, &item.CreatedAt,
 		&processedAt, &item.Status, &item.Attempts, &lastError)
-	
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan queue item: %v", err)
 	}

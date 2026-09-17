@@ -56,10 +56,10 @@ func ExampleCustomTikaConfig() {
 	// Create custom configuration
 	config := DefaultDetectionConfig()
 	config.EnableTikaDetection = true
-	config.EnableTikaFallback = true        // Enable fallback for unknown files
-	config.TikaOfficeConfidence = 0.85      // Custom office confidence
-	config.TikaFallbackConfidence = 0.4     // Custom fallback confidence
-	config.ConfidenceThreshold = 0.3        // Lower threshold to accept fallback
+	config.EnableTikaFallback = true    // Enable fallback for unknown files
+	config.TikaOfficeConfidence = 0.85  // Custom office confidence
+	config.TikaFallbackConfidence = 0.4 // Custom fallback confidence
+	config.ConfidenceThreshold = 0.3    // Lower threshold to accept fallback
 
 	// Create detector with custom config
 	detector := NewMultiStageDetectorWithConfig(config)
@@ -77,7 +77,7 @@ func ExampleCustomTikaConfig() {
 	unknownFiles := []string{
 		"data.xyz",
 		"file.unknown",
-		"document",        // No extension
+		"document", // No extension
 		"archive.weird",
 	}
 
@@ -117,8 +117,8 @@ func ExampleTikaOnlyDetector() {
 		"report.docx",
 		"data.xlsx",
 		"slides.pptx",
-		"text.txt",    // Not supported by Tika detector
-		"image.jpg",   // Not supported by Tika detector
+		"text.txt",  // Not supported by Tika detector
+		"image.jpg", // Not supported by Tika detector
 	}
 
 	for _, filePath := range testFiles {
@@ -187,10 +187,10 @@ func ExampleFallbackMode() {
 	fmt.Println()
 
 	testFiles := []string{
-		"known.docx",     // Known Office format
-		"unknown.xyz",    // Unknown format (fallback)
-		"noextension",    // No extension (fallback)
-		"data.custom",    // Custom format (fallback)
+		"known.docx",  // Known Office format
+		"unknown.xyz", // Unknown format (fallback)
+		"noextension", // No extension (fallback)
+		"data.custom", // Custom format (fallback)
 	}
 
 	for _, filePath := range testFiles {
@@ -233,21 +233,21 @@ func ExampleConfigValidation() {
 	// Invalid configuration examples
 	invalidConfigs := []*DetectionConfig{
 		{
-			EnableTikaDetection:   true,
-			TikaOfficeConfidence:  1.5, // Invalid: > 1.0
+			EnableTikaDetection:    true,
+			TikaOfficeConfidence:   1.5, // Invalid: > 1.0
 			TikaFallbackConfidence: 0.3,
 		},
 		{
-			EnableTikaDetection:     true,
-			TikaOfficeConfidence:    0.9,
-			TikaFallbackConfidence:  -0.1, // Invalid: < 0.0
+			EnableTikaDetection:    true,
+			TikaOfficeConfidence:   0.9,
+			TikaFallbackConfidence: -0.1, // Invalid: < 0.0
 		},
 		{
-			ConfidenceThreshold:     0.5,
+			ConfidenceThreshold:      0.5,
 			EnableExtensionDetection: false,
-			EnableMIMEDetection:     false,
-			EnableContentDetection:  false,
-			EnableTikaDetection:     false, // Invalid: No detectors enabled
+			EnableMIMEDetection:      false,
+			EnableContentDetection:   false,
+			EnableTikaDetection:      false, // Invalid: No detectors enabled
 		},
 	}
 

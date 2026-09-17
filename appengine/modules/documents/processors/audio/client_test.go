@@ -915,11 +915,11 @@ func TestConcurrentTranscriptions(t *testing.T) {
 
 // MockMetrics for testing
 type MockMetrics struct {
-	timerCount     int
-	successCount   int
-	failedCount    int
-	lastTimerTags  map[string]string
-	mu             sync.Mutex
+	timerCount    int
+	successCount  int
+	failedCount   int
+	lastTimerTags map[string]string
+	mu            sync.Mutex
 }
 
 func (mm *MockMetrics) IncrementCounter(name string, tags map[string]string) {
@@ -958,7 +958,8 @@ func (mm *MockMetrics) RecordTimer(name string, duration float64, tags map[strin
 	mm.lastTimerTags = tags
 }
 
-func (mm *MockMetrics) RecordCustomMetric(name string, value interface{}, metricType string, tags map[string]string) {}
+func (mm *MockMetrics) RecordCustomMetric(name string, value interface{}, metricType string, tags map[string]string) {
+}
 
 // BenchmarkTranscribeSuccess benchmarks successful transcription
 func BenchmarkTranscribeSuccess(b *testing.B) {

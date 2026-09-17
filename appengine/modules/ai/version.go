@@ -41,25 +41,25 @@ func Version() string {
 
 // VersionInfo contains detailed version information
 type VersionInfo struct {
-	Version      string    `json:"version"`
-	Major        int       `json:"major"`
-	Minor        int       `json:"minor"`
-	Patch        int       `json:"patch"`
-	Prerelease   string    `json:"prerelease,omitempty"`
-	Build        string    `json:"build,omitempty"`
-	BuildTime    string    `json:"build_time"`
-	GitCommit    string    `json:"git_commit"`
-	GitBranch    string    `json:"git_branch"`
-	GoVersion    string    `json:"go_version"`
-	Platform     string    `json:"platform"`
-	Architecture string    `json:"architecture"`
+	Version      string `json:"version"`
+	Major        int    `json:"major"`
+	Minor        int    `json:"minor"`
+	Patch        int    `json:"patch"`
+	Prerelease   string `json:"prerelease,omitempty"`
+	Build        string `json:"build,omitempty"`
+	BuildTime    string `json:"build_time"`
+	GitCommit    string `json:"git_commit"`
+	GitBranch    string `json:"git_branch"`
+	GoVersion    string `json:"go_version"`
+	Platform     string `json:"platform"`
+	Architecture string `json:"architecture"`
 }
 
 // Build-time variables (set by build system)
 var (
-	BuildTime  = "unknown"
-	GitCommit  = "unknown"
-	GitBranch  = "unknown"
+	BuildTime = "unknown"
+	GitCommit = "unknown"
+	GitBranch = "unknown"
 )
 
 // GetVersionInfo returns detailed version information
@@ -141,7 +141,7 @@ func GetModuleInfo() *ModuleInfo {
 
 // Constants for module identification
 const (
-	ModuleType        = "ai"
+	ModuleType = "ai"
 	// ModuleName is defined in facade.go to avoid duplication
 	ModuleDescription = "AI services module for Arcadia platform"
 	ModuleAuthor      = "Arcadia Team"

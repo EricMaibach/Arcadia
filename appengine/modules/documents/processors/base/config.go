@@ -122,8 +122,8 @@ func GetDefaultPDFConfig() PDFConfig {
 		ProcessorConfig: ProcessorConfig{
 			Enabled:     true,
 			MaxFileSize: 100 * 1024 * 1024, // 100MB
-			Timeout:     10 * time.Minute,   // PDFs may take longer
-			Concurrency: 2,                  // Lower concurrency for PDF processing
+			Timeout:     10 * time.Minute,  // PDFs may take longer
+			Concurrency: 2,                 // Lower concurrency for PDF processing
 			Extensions:  []string{"pdf"},
 			Priority:    200,
 			Metadata:    make(map[string]interface{}),

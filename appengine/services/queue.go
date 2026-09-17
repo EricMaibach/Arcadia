@@ -11,14 +11,14 @@ import (
 
 // QueueItem represents an item in the queue
 type QueueItem struct {
-	ID        string    `json:"id"`
-	Data      string    `json:"data"`
-	Priority  int       `json:"priority"`  // Higher number = higher priority
-	CreatedAt time.Time `json:"createdAt"`
+	ID          string     `json:"id"`
+	Data        string     `json:"data"`
+	Priority    int        `json:"priority"` // Higher number = higher priority
+	CreatedAt   time.Time  `json:"createdAt"`
 	ProcessedAt *time.Time `json:"processedAt,omitempty"`
-	Status    string    `json:"status"` // "pending", "processing", "completed", "failed"
-	Attempts  int       `json:"attempts"`
-	LastError string    `json:"lastError,omitempty"`
+	Status      string     `json:"status"` // "pending", "processing", "completed", "failed"
+	Attempts    int        `json:"attempts"`
+	LastError   string     `json:"lastError,omitempty"`
 }
 
 // QueueRepositoryInterface defines the interface for queue persistence
@@ -54,12 +54,12 @@ type QueueInterface interface {
 
 // QueueService implements the QueueInterface
 type QueueService struct {
-	repository   QueueRepositoryInterface
-	mutex        sync.RWMutex
-	ctx          context.Context
-	cancel       context.CancelFunc
-	isRunning    bool
-	processors   int // Number of concurrent processors (for future use)
+	repository QueueRepositoryInterface
+	mutex      sync.RWMutex
+	ctx        context.Context
+	cancel     context.CancelFunc
+	isRunning  bool
+	processors int // Number of concurrent processors (for future use)
 }
 
 // Global queue service instance for backward compatibility
@@ -68,7 +68,7 @@ var defaultQueue *QueueService
 // NewQueueService creates a new queue service
 func NewQueueService(repository QueueRepositoryInterface) *QueueService {
 	ctx, cancel := context.WithCancel(context.Background())
-	
+
 	return &QueueService{
 		repository: repository,
 		ctx:        ctx,

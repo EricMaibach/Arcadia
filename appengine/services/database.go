@@ -232,5 +232,3 @@ func InitDatabasesWithManager(logger logging.Logger) (*DatabaseManager, error) {
 
 	return dm, nil
 }
-
-

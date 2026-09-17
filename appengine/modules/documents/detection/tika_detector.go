@@ -70,12 +70,12 @@ func (d *TikaDetector) DetectType(filePath string) (*base.DocumentType, error) {
 			Extension:  ext,
 			Confidence: d.officeConfidence,
 			Metadata: map[string]interface{}{
-				"detector":        "tika",
-				"detected_by":     "TikaDetector",
-				"original_path":   filePath,
-				"file_extension":  ext,
-				"detection_type":  "office_format",
-				"fallback_mode":   false,
+				"detector":       "tika",
+				"detected_by":    "TikaDetector",
+				"original_path":  filePath,
+				"file_extension": ext,
+				"detection_type": "office_format",
+				"fallback_mode":  false,
 			},
 		}, nil
 	}
@@ -94,12 +94,12 @@ func (d *TikaDetector) DetectType(filePath string) (*base.DocumentType, error) {
 			Extension:  ext,
 			Confidence: d.fallbackConfidence,
 			Metadata: map[string]interface{}{
-				"detector":        "tika",
-				"detected_by":     "TikaDetector",
-				"original_path":   filePath,
-				"file_extension":  ext,
-				"detection_type":  "fallback",
-				"fallback_mode":   true,
+				"detector":       "tika",
+				"detected_by":    "TikaDetector",
+				"original_path":  filePath,
+				"file_extension": ext,
+				"detection_type": "fallback",
+				"fallback_mode":  true,
 			},
 		}, nil
 	}
