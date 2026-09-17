@@ -15,13 +15,13 @@ import (
 
 	"arcadia/config"
 	"arcadia/handlers"
-	"arcadia/modules/documents"
-	"arcadia/modules/documents/models"
-	"arcadia/services"
 	"arcadia/modules/ai"
 	aiInterfaces "arcadia/modules/ai/interfaces"
 	aiModels "arcadia/modules/ai/models"
+	"arcadia/modules/documents"
+	"arcadia/modules/documents/models"
 	"arcadia/pkg/logging"
+	"arcadia/services"
 )
 
 var (
@@ -314,7 +314,6 @@ func (qp *QueueProcessor) processFileForEmbedding(filePath string) error {
 	return nil
 }
 
-
 // EmbeddingSearchAdapter adapts documents module to ai.EmbeddingSearch
 type EmbeddingSearchAdapter struct {
 	documentsModule documents.DocumentsModule
@@ -347,7 +346,6 @@ func (esa *EmbeddingSearchAdapter) SearchDocuments(query string, topK int) ([]*a
 	// Convert documents module results to AI service format
 	return esa.convertDocumentSearchResults(docResults), nil
 }
-
 
 // convertDocumentSearchResults converts documents module results to AI service format
 func (esa *EmbeddingSearchAdapter) convertDocumentSearchResults(docResults []*models.DocumentSearchResult) []*aiModels.DocumentSearchResult {
@@ -555,8 +553,6 @@ func handleFileEvent(event services.FileEvent) {
 	}
 }
 
-
-
 // initializeDocumentsModule initializes the documents module with existing services
 func initializeDocumentsModule(dm *services.DatabaseManager, logger logging.Logger) error {
 	ctx := context.Background()
@@ -573,8 +569,8 @@ func initializeDocumentsModule(dm *services.DatabaseManager, logger logging.Logg
 
 	// Create documents config with defaults
 	documentsConfig := documents.DefaultDocumentsConfig()
-	documentsConfig.ChunkingConfig.MaxChunkSize = 500
-	documentsConfig.ChunkingConfig.ChunkOverlap = 50
+	documentsConfig.ChunkingConfig.MaxChunkSize = 2500
+	documentsConfig.ChunkingConfig.ChunkOverlap = 250
 	documentsConfig.SearchConfig.MaxDocumentSize = 10000
 
 	// Ollama configuration
@@ -600,9 +596,9 @@ func initializeDocumentsModule(dm *services.DatabaseManager, logger logging.Logg
 	documentsConfig.VectorStoreConfig = map[string]interface{}{
 		"type":       "qdrant", // Use QDrant for persistent vector storage
 		"host":       "qdrant",
-		"port":       6334, // Use gRPC port for QDrant Go client
+		"port":       6334,              // Use gRPC port for QDrant Go client
 		"collection": "arcadia_vectors", // Use existing collection
-		"dimension":  768, // Use same dimension as embedding model
+		"dimension":  768,               // Use same dimension as embedding model
 	}
 	documentsConfig.DocumentStoreConfig = map[string]interface{}{
 		"type":       "sql",
@@ -632,8 +628,6 @@ func initializeDocumentsModule(dm *services.DatabaseManager, logger logging.Logg
 	logger.Info(ctx, "Documents module created successfully")
 	return nil
 }
-
-
 
 // setupAIRoutes sets up the new AI API routes
 func setupAIRoutes(aiMod ai.AIModule, logger logging.Logger) {
@@ -832,6 +826,7 @@ func main() {
 	handlers.SetAppDependencies(registryManager, wasmRuntime.GetEngine(), appLogFunc, executeAppTool)
 	handlers.SetScheduleDependencies(appLogFunc, registryManager)
 	handlers.SetFileWatcherDependencies(fileWatcher)
+	handlers.SetDocumentsDependencies(documentsModule, handlersLogger.WithComponent("documents_api"))
 
 	// Use CORS middleware from handlers package
 
@@ -853,9 +848,12 @@ func main() {
 	http.HandleFunc("/update_schedule", handlers.CorsHandler(handlers.UpdateScheduleHandler))
 	http.HandleFunc("/list_scheduled_runs", handlers.CorsHandler(handlers.ListScheduledRunsHandler))
 
+	// Document search endpoints
+	http.HandleFunc("/api/documents/v1/search", handlers.CorsHandler(handlers.HandleSearchDocuments))
+	http.HandleFunc("/api/documents/v1/search/enhanced", handlers.CorsHandler(handlers.HandleSearchDocumentsEnhanced))
+
 	// AI Integration endpoints - use new system
 	setupAIRoutes(aiModule, mainLogger)
-
 
 	// Set up graceful shutdown
 	server := &http.Server{
@@ -901,7 +899,6 @@ func main() {
 	// Graceful shutdown with timeout
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
 
 	// Stop documents module
 	if documentsModule != nil {
@@ -954,4 +951,3 @@ func main() {
 
 	mainLogger.Info(ctx, "Server gracefully stopped")
 }
-

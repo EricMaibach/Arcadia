@@ -210,4 +210,88 @@ export const fileWatcherApi = {
   },
 };
 
+// Document Search Types
+export interface DocumentMetadata {
+  [key: string]: any;
+}
+
+export interface Document {
+  id: string;
+  file_path: string;
+  file_hash: string;
+  chunk_count: number;
+  metadata: DocumentMetadata;
+  created_at: string;
+  updated_at: string;
+  content?: string;
+}
+
+export interface ChunkResult {
+  content: string;
+  score: number;
+  chunk_index: number;
+}
+
+export interface DocumentSearchResult {
+  document: Document;
+  chunks: ChunkResult[];
+  best_score: number;
+  total_chunks: number;
+  relevance_rank: number;
+}
+
+export interface EnhancedDocumentSearchResult {
+  document: Document;
+  best_score: number;
+  relevance_rank: number;
+  context_highlights: string[];
+  content_preview: string;
+  is_truncated: boolean;
+}
+
+export interface SearchConfig {
+  max_document_size?: number;
+  max_highlights?: number;
+  include_full_content?: boolean;
+}
+
+export interface BasicSearchRequest {
+  query: string;
+  top_k?: number;
+}
+
+export interface EnhancedSearchRequest {
+  query: string;
+  top_k?: number;
+  config?: SearchConfig;
+}
+
+export interface BasicSearchResponse {
+  query: string;
+  results: DocumentSearchResult[];
+  total_documents: number;
+  search_time_ms: number;
+}
+
+export interface EnhancedSearchResponse {
+  query: string;
+  results: EnhancedDocumentSearchResult[];
+  total_documents: number;
+  search_time_ms: number;
+  search_config: SearchConfig;
+}
+
+// Document Search API
+export const documentApi = {
+  searchDocuments: async (request: BasicSearchRequest): Promise<BasicSearchResponse> => {
+    const response = await api.post<BasicSearchResponse>('/api/documents/v1/search', request);
+    return response.data;
+  },
+
+  searchDocumentsEnhanced: async (request: EnhancedSearchRequest): Promise<EnhancedSearchResponse> => {
+    const response = await api.post<EnhancedSearchResponse>('/api/documents/v1/search/enhanced', request);
+    return response.data;
+  },
+};
+
 export default api;

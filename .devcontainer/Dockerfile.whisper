@@ -16,8 +16,6 @@ RUN apt-get -y install cuda-toolkit-12-8
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib
 
 # Python libraries
-RUN pip install nvidia-pyindex --break-system-packages
-RUN pip install nvidia-cudnn --break-system-packages
 RUN pip3 install torch torchvision torchaudio --break-system-packages
 RUN pip install fastapi uvicorn[standard] python-multipart --break-system-packages
 RUN pip install faster-whisper --break-system-packages

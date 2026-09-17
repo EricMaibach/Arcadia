@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -220,6 +221,33 @@ func (c *SimpleTextChunker) chunkByParagraph(content string, config models.Chunk
 			continue
 		}
 
+		if len(paragraph) > config.MaxChunkSize {
+			if currentChunk.Len() > 0 {
+				chunkContent := strings.TrimSpace((currentChunk.String()))
+				if chunkContent != "" {
+					chunk := models.TextChunk{
+						ID:         generateChunkID(),
+						Content:    chunkContent,
+						StartPos:   currentStart,
+						EndPos:     currentStart + currentChunk.Len(),
+						ChunkIndex: chunkIndex,
+						CreatedAt:  time.Now(),
+					}
+					chunks = append(chunks, chunk)
+					chunkIndex++
+				}
+				currentChunk.Reset()
+			}
+
+			subChunks := c.chunkOversizedParagraph(paragraph, config, paragraphStart, &chunkIndex)
+			chunks = append(chunks, subChunks...)
+
+			// Update position tracking
+			paragraphStart += len(paragraph) + 2
+			currentStart = paragraphStart
+			continue
+		}
+
 		// Check if adding this paragraph would exceed max chunk size
 		if currentChunk.Len()+len(paragraph)+2 > config.MaxChunkSize && currentChunk.Len() > 0 {
 			// Save current chunk
@@ -269,19 +297,61 @@ func (c *SimpleTextChunker) chunkByParagraph(content string, config models.Chunk
 	if currentChunk.Len() > 0 {
 		chunkContent := strings.TrimSpace(currentChunk.String())
 		if chunkContent != "" {
-			chunk := models.TextChunk{
-				ID:         generateChunkID(),
-				Content:    chunkContent,
-				StartPos:   currentStart,
-				EndPos:     currentStart + currentChunk.Len(),
-				ChunkIndex: chunkIndex,
-				CreatedAt:  time.Now(),
+			minChunkSize := 100 // Minimum chunk size to avoid tiny final chunks
+
+			// If this would be a tiny final chunk and we have previous chunks, merge with last chunk
+			if len(chunkContent) < minChunkSize && len(chunks) > 0 {
+				// Merge with previous chunk to avoid tiny final chunk
+				lastChunk := &chunks[len(chunks)-1]
+				lastChunk.Content = lastChunk.Content + "\n\n" + chunkContent
+				lastChunk.EndPos = currentStart + currentChunk.Len()
+			} else {
+				// Create new chunk normally
+				chunk := models.TextChunk{
+					ID:         generateChunkID(),
+					Content:    chunkContent,
+					StartPos:   currentStart,
+					EndPos:     currentStart + currentChunk.Len(),
+					ChunkIndex: chunkIndex,
+					CreatedAt:  time.Now(),
+				}
+				chunks = append(chunks, chunk)
 			}
-			chunks = append(chunks, chunk)
 		}
 	}
 
 	return chunks
+}
+
+// chunkOversizedParagraph splits a single oversized paragraph using sentence boundaries
+func (c *SimpleTextChunker) chunkOversizedParagraph(
+	paragraph string,
+	config models.ChunkingConfig,
+	startPos int,
+	chunkIndex *int,
+) []models.TextChunk {
+	paragraphLen := len([]rune(paragraph))
+
+	// Calculate optimal chunk size to avoid tiny remainders
+	chunksNeeded := int(math.Ceil(float64(paragraphLen) / float64(config.MaxChunkSize)))
+	optimalChunkSize := paragraphLen / chunksNeeded
+
+	// Create a modified config with optimal chunk size
+	optimizedConfig := config
+	optimizedConfig.MaxChunkSize = optimalChunkSize
+	optimizedConfig.ChunkOverlap = min(config.ChunkOverlap, optimalChunkSize/10)
+
+	subChunks := c.chunkBySentence(paragraph, optimizedConfig)
+
+	// Adjust chunk indices and positions to be relative to document
+	for i := range subChunks {
+		subChunks[i].ChunkIndex = *chunkIndex
+		subChunks[i].StartPos += startPos
+		subChunks[i].EndPos += startPos
+		*chunkIndex++
+	}
+
+	return subChunks
 }
 
 // findWordBoundary finds the nearest word boundary before the given position
@@ -306,7 +376,7 @@ func (c *SimpleTextChunker) splitIntoSentences(content string) []string {
 		sentences[i] = strings.TrimSpace(sentences[i])
 		// Add period back if not the last sentence and doesn't end with punctuation
 		if i < len(sentences)-1 && !strings.HasSuffix(sentences[i], ".") &&
-		   !strings.HasSuffix(sentences[i], "!") && !strings.HasSuffix(sentences[i], "?") {
+			!strings.HasSuffix(sentences[i], "!") && !strings.HasSuffix(sentences[i], "?") {
 			sentences[i] += "."
 		}
 	}
@@ -366,7 +436,7 @@ func (c *SimpleTextChunker) getOverlapContent(sentences []string, chunkIndex, ov
 	// Work backwards from the end of previous sentences
 	for i := len(sentences) - 1; i >= 0 && currentSize < overlapSize; i-- {
 		sentence := sentences[i]
-		if currentSize + len(sentence) <= overlapSize {
+		if currentSize+len(sentence) <= overlapSize {
 			if overlap.Len() > 0 {
 				overlap.WriteString(" ")
 			}
@@ -401,7 +471,7 @@ func (c *SimpleTextChunker) getParagraphOverlapContent(paragraphs []string, chun
 
 	for i := len(paragraphs) - 1; i >= 0 && currentSize < overlapSize; i-- {
 		paragraph := paragraphs[i]
-		if currentSize + len(paragraph) <= overlapSize {
+		if currentSize+len(paragraph) <= overlapSize {
 			if overlap.Len() > 0 {
 				overlap.WriteString("\n\n")
 			}
@@ -490,12 +560,12 @@ func (ac *AdaptiveChunker) ValidateConfig(config models.ChunkingConfig) error {
 
 // ContentStructure represents the analyzed structure of content
 type ContentStructure struct {
-	Type           string  // "code", "structured", "narrative", "unknown"
-	Confidence     float64 // 0.0 to 1.0
-	HasHeaders     bool
-	HasLists       bool
-	HasCode        bool
-	LineBreakRatio float64
+	Type              string  // "code", "structured", "narrative", "unknown"
+	Confidence        float64 // 0.0 to 1.0
+	HasHeaders        bool
+	HasLists          bool
+	HasCode           bool
+	LineBreakRatio    float64
 	AverageLineLength float64
 }
 
@@ -531,14 +601,14 @@ func (ac *AdaptiveChunker) analyzeContentStructure(content string) *ContentStruc
 
 		// List detection
 		if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") ||
-		   strings.HasPrefix(line, "+ ") || strings.Contains(line, ". ") {
+			strings.HasPrefix(line, "+ ") || strings.Contains(line, ". ") {
 			listCount++
 		}
 
 		// Code indicators
 		if strings.Contains(line, "{") || strings.Contains(line, "}") ||
-		   strings.Contains(line, "function") || strings.Contains(line, "class") ||
-		   strings.Contains(line, "import") || strings.Contains(line, "def ") {
+			strings.Contains(line, "function") || strings.Contains(line, "class") ||
+			strings.Contains(line, "import") || strings.Contains(line, "def ") {
 			codeIndicators++
 		}
 	}

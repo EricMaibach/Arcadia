@@ -7,6 +7,7 @@ import ScheduleList from './ScheduleList';
 import ScheduleForm from './ScheduleForm';
 import ScheduledRunsList from './ScheduledRunsList';
 import FileWatcher from './FileWatcher';
+import DocumentSearch from './DocumentSearch';
 
 const Admin: React.FC = () => {
   return (
@@ -15,6 +16,7 @@ const Admin: React.FC = () => {
         <Link to="/admin" className="admin-nav-link">Apps</Link>
         <Link to="/admin/submit" className="admin-nav-link">Submit App</Link>
         <Link to="/admin/run-tool" className="admin-nav-link">Run Tool</Link>
+        <Link to="/admin/documents" className="admin-nav-link">Documents</Link>
         <Link to="/admin/schedules" className="admin-nav-link">Schedules</Link>
         <Link to="/admin/scheduled-runs" className="admin-nav-link">Scheduled Runs</Link>
         <Link to="/admin/file-watcher" className="admin-nav-link">File Watcher</Link>
@@ -25,6 +27,7 @@ const Admin: React.FC = () => {
           <Route index element={<AppList />} />
           <Route path="submit" element={<AppSubmit />} />
           <Route path="run-tool" element={<ToolRunner />} />
+          <Route path="documents" element={<DocumentSearch />} />
           <Route path="schedules" element={<ScheduleList />} />
           <Route path="schedule/new" element={<ScheduleForm />} />
           <Route path="schedule/edit/:id" element={<ScheduleForm />} />
